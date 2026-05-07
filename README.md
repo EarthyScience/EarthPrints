@@ -1,36 +1,115 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# FluxFingerPrints
+
+> **POC Research** — Browser-based exploration and insight generation for environmental fingerprints and Flux tower footprints.
+
+## Overview
+
+FluxFingerPrints brings together global climate datasets and eddy-covariance flux tower measurements into an interactive, browser-native geospatial tool. The core idea: click any pixel on a global map and instantly see that pixel's environmental "fingerprint" — a composite view of climate variables over time — alongside the spatial footprint of nearby flux towers.
+
+### Two pillars
+
+| Pillar | What it is | Data source |
+|---|---|---|
+| **Climate Fingerprints** | Per-pixel time-series of global variables (temperature, precipitation, NEE, …) rendered as heatmaps / charts | In-house Zarr archives, streamed via `zarrita.js` |
+| **Flux Tower Footprints** | Probabilistic source-area footprints from eddy-covariance towers, visualised as heatmaps overlaid on the map | Pre-computed outputs + optional on-the-fly computation via [Kljun FFP](https://footprint.kljun.net/) |
+
+---
+
+## Features
+
+- **Global map tiles** — GPU-accelerated rendering with [deck.gl](https://deck.gl)
+- **Climate variable overlays** — stream and slice multidimensional Zarr arrays in-browser with [zarrita.js](https://github.com/manzt/zarrita.js)
+- **Click-to-pick pixel selection** — point-and-click to select any grid cell
+- **On-demand data fetch** — lazy-load only the slices you need
+- **Array reshaping & computation** — TypeScript (and optionally WebGPU) for in-browser array math
+- **Popup heatmap / time-series** — interactive charts rendered per selected pixel
+- **Export** — download selected data slices or rendered visualisations
+
+---
+
+## Tech Stack
+
+| Layer | Choice |
+|---|---|
+| Framework | [Next.js 15](https://nextjs.org) (App Router) |
+| Language | TypeScript |
+| Styling | Tailwind CSS |
+| Map & GPU rendering | [deck.gl](https://deck.gl) |
+| Zarr streaming | [zarrita.js](https://github.com/manzt/zarrita.js) |
+| Array compute | TypeScript / WebGPU (TBD) |
+| Charting | TBD (e.g. Observable Plot, Recharts) |
+
+---
 
 ## Getting Started
 
-First, run the development server:
+### Prerequisites
+
+- **Node.js** ≥ 18
+- **npm** ≥ 9 (or pnpm / yarn / bun)
+
+### Install
+
+```bash
+git clone https://github.com/your-org/FluxFingerPrints.git
+cd FluxFingerPrints
+npm install
+```
+
+### Run dev server
 
 ```bash
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open [http://localhost:3000](http://localhost:3000) in your browser.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+### Other commands
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+```bash
+npm run build      # production build
+npm run start      # serve production build
+npm run lint       # ESLint
+```
 
-## Learn More
+---
 
-To learn more about Next.js, take a look at the following resources:
+## Data Sources
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+- **Flux tower footprint model** — Kljun et al. (2015), online calculator: https://footprint.kljun.net/
+- **FLUXNET / global flux tower dataset** — Zenodo archive: https://zenodo.org/records/816236
+- **Global climate variables** — in-house Zarr archives (temperature, precipitation, NEE, and more)
+- **Flux tower footprint paper** — https://www.nature.com/articles/s41597-024-03291-3
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+---
 
-## Deploy on Vercel
+## Roadmap
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+- [ ] Deck.gl base map with tile layer
+- [ ] Zarr overlay for at least one climate variable
+- [ ] Click-pick pixel interaction
+- [ ] Fingerprint heatmap popup
+- [ ] Flux tower footprint overlay
+- [ ] On-the-fly footprint computation (time permitting)
+- [ ] Spectral / math analysis (SpectraScope-style, time permitting)
+- [ ] Export (CSV / PNG)
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+---
+
+## Project Structure
+
+```
+src/
+├── app/               # Next.js App Router pages & layouts
+├── components/        # Reusable UI components
+├── lib/               # Data fetching, Zarr helpers, array compute
+└── types/             # Shared TypeScript types
+```
+
+---
+
+## References
+
+- Kljun, N. et al. (2015). A simple two-dimensional parameterisation for Flux Footprint Prediction (FFP). *Geoscientific Model Development*, 8, 3695–3713.
+- FLUXNET global dataset — https://zenodo.org/records/816236
+- Flux tower footprint dataset paper — https://www.nature.com/articles/s41597-024-03291-3
