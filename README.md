@@ -1,10 +1,8 @@
-# FluxFingerPrints
+# EarthPrints
 
 > **POC Research** — Browser-based exploration and insight generation for environmental fingerprints and Flux tower footprints.
 
-## Overview
-
-FluxFingerPrints brings together global climate datasets and eddy-covariance flux tower measurements into an interactive, browser-native geospatial tool. The core idea: click any pixel on a global map and instantly see that pixel's environmental "fingerprint" — a composite view of climate variables over time — alongside the spatial footprint of nearby flux towers.
+EarthPrints brings together global climate datasets and eddy-covariance flux tower measurements into an interactive, browser-native geospatial tool. The core idea: click any pixel on a global map and instantly see that pixel's environmental "fingerprint" — a composite view of climate variables over time — alongside the spatial footprint of nearby flux towers.
 
 ### Two pillars
 
@@ -31,7 +29,7 @@ FluxFingerPrints brings together global climate datasets and eddy-covariance flu
 
 | Layer | Choice |
 |---|---|
-| Framework | [Next.js 15](https://nextjs.org) (App Router) |
+| Framework | [Next.js 16](https://nextjs.org) (App Router) |
 | Language | TypeScript |
 | Styling | Tailwind CSS |
 | Map & GPU rendering | [deck.gl](https://deck.gl) |
@@ -51,8 +49,8 @@ FluxFingerPrints brings together global climate datasets and eddy-covariance flu
 ### Install
 
 ```bash
-git clone https://github.com/your-org/FluxFingerPrints.git
-cd FluxFingerPrints
+git clone https://github.com/EarthyScience/EarthPrints.git
+cd EarthPrints
 npm install
 ```
 
@@ -71,6 +69,49 @@ npm run build      # production build
 npm run start      # serve production build
 npm run lint       # ESLint
 ```
+
+---
+
+## CI/CD
+
+Pull requests targeting `main` must pass required checks before merge is allowed.
+
+| Workflow | Trigger | Purpose |
+|---|---|---|
+| **CI** | Pull request | Lint, build, and optional Vercel preview deploy |
+| **Deploy to Vercel** | Push to `main` | Production deploy after verify passes |
+| **Branch protection** | Push to `main` (when workflow changes) | Keeps `main` protected with required checks |
+| **Dependabot** | Weekly schedule | Opens dependency update PRs |
+
+### Required checks
+
+Merges to `main` are blocked unless this check passes:
+
+- **Lint and build** — ESLint + production build (`CI` workflow)
+
+Dependabot PRs follow the same rule: they cannot merge until **Lint and build** passes.
+
+Preview deployments are informational only and do not block merge.
+
+### Repository secrets
+
+Production and preview deploys require these GitHub Actions secrets:
+
+- `VERCEL_TOKEN`
+- `VERCEL_ORG_ID`
+- `VERCEL_PROJECT_ID`
+
+### Branch protection
+
+The `Branch protection` workflow applies a ruleset to the default branch that requires:
+
+- Pull requests before merging
+- Passing **Lint and build**
+- No direct pushes or force-pushes to `main`
+
+Run it manually from **Actions → Branch protection → Run workflow** if the ruleset is missing after the first merge to `main`.
+
+In **Settings → Actions → General**, allow workflows to write repository administration settings so branch protection can be managed automatically.
 
 ---
 

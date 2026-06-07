@@ -4,6 +4,8 @@ updates:
     directory: /
     schedule:
       interval: weekly
+    labels:
+      - dependencies
     groups:
       next-js:
         patterns:
@@ -18,3 +20,6 @@ updates:
     directory: /
     schedule:
       interval: weekly
+    labels:
+      - dependencies
+      - github-actions
