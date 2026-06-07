@@ -1,16 +1,16 @@
 import type { Metadata } from "next";
-import { Hero } from "@/components/hero/Hero";
+import { AboutContent } from "@/components/about/AboutContent";
 import { Nav } from "@/components/layout/Nav";
 
 export const metadata: Metadata = {
-  title: "Explore the planet, pixel by pixel",
+  title: "About",
 };
 
-export default function Home() {
+export default function AboutPage() {
   return (
     <>
       <Nav />
-      <Hero />
+      <AboutContent />
     </>
   );
 }
