@@ -1,10 +1,10 @@
-# FluxFingerPrints
+# EarthPrints
 
 > **POC Research** — Browser-based exploration and insight generation for environmental fingerprints and Flux tower footprints.
 
-## Overview
+**Live site:** [earth-prints.vercel.app](https://earth-prints.vercel.app)
 
-FluxFingerPrints brings together global climate datasets and eddy-covariance flux tower measurements into an interactive, browser-native geospatial tool. The core idea: click any pixel on a global map and instantly see that pixel's environmental "fingerprint" — a composite view of climate variables over time — alongside the spatial footprint of nearby flux towers.
+EarthPrints brings together global climate datasets and eddy-covariance flux tower measurements into an interactive, browser-native geospatial tool. The core idea: click any pixel on a global map and instantly see that pixel's environmental "fingerprint" — a composite view of climate variables over time — alongside the spatial footprint of nearby flux towers.
 
 ### Two pillars
 
@@ -31,7 +31,7 @@ FluxFingerPrints brings together global climate datasets and eddy-covariance flu
 
 | Layer | Choice |
 |---|---|
-| Framework | [Next.js 15](https://nextjs.org) (App Router) |
+| Framework | [Next.js 16](https://nextjs.org) (App Router) |
 | Language | TypeScript |
 | Styling | Tailwind CSS |
 | Map & GPU rendering | [deck.gl](https://deck.gl) |
@@ -51,8 +51,8 @@ FluxFingerPrints brings together global climate datasets and eddy-covariance flu
 ### Install
 
 ```bash
-git clone https://github.com/your-org/FluxFingerPrints.git
-cd FluxFingerPrints
+git clone https://github.com/EarthyScience/EarthPrints.git
+cd EarthPrints
 npm install
 ```
 
