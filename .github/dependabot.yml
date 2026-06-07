@@ -1,0 +1,20 @@
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      next-js:
+        patterns:
+          - "next"
+          - "eslint-config-next"
+          - "react"
+          - "react-dom"
+      dev-dependencies:
+        dependency-type: development
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly

@@ -34,3 +34,6 @@ echo
 echo "After secrets are set, merge to main to trigger production deployment."
 echo "Disable Vercel Git auto-deploy if you connected the repo in the Vercel dashboard:"
 echo "Project -> Settings -> Git -> set Production Branch behavior or disconnect Git."
+echo
+echo "Then protect main with:"
+echo "  ./scripts/configure-branch-protection.sh"
