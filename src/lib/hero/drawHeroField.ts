@@ -2,6 +2,7 @@ import {
   COLD_RGB,
   HERO_BASE_COLOR,
   HERO_SEED,
+  TEAL_ON_DARK_RGB,
   TEAL_RGB,
 } from "@/lib/constants/theme";
 import { fbm } from "@/lib/hero/noise";
@@ -28,6 +29,7 @@ export function drawHeroField(
   const cols = Math.ceil(w / step) + 1;
   const rows = Math.ceil(h / step) + 1;
   const cold = isLight ? COLD_RGB.light : COLD_RGB.dark;
+  const teal = isLight ? TEAL_RGB : TEAL_ON_DARK_RGB;
 
   for (let j = 0; j < rows; j++) {
     for (let i = 0; i < cols; i++) {
@@ -52,9 +54,9 @@ export function drawHeroField(
 
       const r = 0.9 + t * 2.6;
       const mix = Math.pow(t, 1.3);
-      const cr = Math.round(cold[0] + (TEAL_RGB[0] - cold[0]) * mix);
-      const cg = Math.round(cold[1] + (TEAL_RGB[1] - cold[1]) * mix);
-      const cb = Math.round(cold[2] + (TEAL_RGB[2] - cold[2]) * mix);
+      const cr = Math.round(cold[0] + (teal[0] - cold[0]) * mix);
+      const cg = Math.round(cold[1] + (teal[1] - cold[1]) * mix);
+      const cb = Math.round(cold[2] + (teal[2] - cold[2]) * mix);
       const a = (isLight ? 0.1 : 0.16) + t * (isLight ? 0.55 : 0.72);
       ctx.fillStyle = `rgba(${cr},${cg},${cb},${a})`;
       ctx.beginPath();
@@ -62,7 +64,9 @@ export function drawHeroField(
       ctx.fill();
 
       if (t > 0.8) {
-        ctx.fillStyle = `rgba(0,140,130,${(t - 0.8) * 0.5})`;
+        ctx.fillStyle = isLight
+          ? `rgba(0,140,130,${(t - 0.8) * 0.5})`
+          : `rgba(82,212,200,${(t - 0.8) * 0.45})`;
         ctx.beginPath();
         ctx.arc(x, y, r * 2.6, 0, 6.283);
         ctx.fill();

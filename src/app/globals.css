@@ -1,6 +1,6 @@
 /* ============================================================
    EarthPrints design system
-   black / white / single teal accent (#006C66)
+   black / white / teal accent (#006C66 light, #52D4C8 dark)
    ============================================================ */
 :root {
   --bg: #0a0a0a;
@@ -13,8 +13,11 @@
   --text-dim: rgba(255, 255, 255, 0.34);
   --border: rgba(255, 255, 255, 0.1);
   --border-strong: rgba(255, 255, 255, 0.18);
-  --accent: #006c66;
-  --accent-bright: #0a8a82;
+  /** Brand dark teal — icons on white chips, light-mode accent. */
+  --accent-solid: #006c66;
+  --accent: #52d4c8;
+  --accent-bright: #6eeadc;
+  --accent-on-dark: #52d4c8;
   --scrim: rgba(10, 10, 10, 0.92);
   --scrim-soft: rgba(10, 10, 10, 0.55);
   --grid-line: rgba(255, 255, 255, 0.05);
@@ -32,8 +35,10 @@
   --text-dim: rgba(10, 10, 10, 0.36);
   --border: rgba(10, 10, 10, 0.1);
   --border-strong: rgba(10, 10, 10, 0.16);
+  --accent-solid: #006c66;
   --accent: #006c66;
   --accent-bright: #00837b;
+  --accent-on-dark: #006c66;
   --scrim: rgba(255, 255, 255, 0.92);
   --scrim-soft: rgba(255, 255, 255, 0.55);
   --grid-line: rgba(10, 10, 10, 0.05);
@@ -308,7 +313,7 @@ button {
   height: 32px;
   border-radius: 50%;
   background: #fff;
-  color: var(--accent);
+  color: var(--accent-solid);
   display: grid;
   place-items: center;
   flex-shrink: 0;
@@ -376,7 +381,7 @@ button {
   height: 32px;
   border-radius: 50%;
   background: #fff;
-  color: var(--accent);
+  color: var(--accent-solid);
   display: grid;
   place-items: center;
   flex-shrink: 0;
@@ -524,6 +529,11 @@ button {
   animation: rise 1s cubic-bezier(0.16, 1, 0.3, 1) 0.25s forwards;
 }
 
+:root:not(.light) .btn-primary,
+:root:not(.light) .nav-dropdown-cta {
+  color: var(--bg-deep) !important;
+}
+
 .hero h1 .accent {
   color: var(--accent);
 }
@@ -634,30 +644,135 @@ button {
 }
 
 /* ============================================================
-   MAP STUB
+   MAP
    ============================================================ */
-.map-stub {
-  min-height: 100svh;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 16px;
-  padding: 24px;
+.map-shell {
+  position: relative;
+  height: 100svh;
   background: var(--bg-deep);
-  text-align: center;
 }
 
-.map-stub h1 {
-  font-size: clamp(28px, 5vw, 42px);
+.map-stage {
+  position: absolute;
+  inset: 0;
+}
+
+.map-stage .maplibregl-map,
+.map-stage canvas {
+  outline: none;
+}
+
+.map-loading {
+  height: 100svh;
+  display: grid;
+  place-items: center;
+  color: var(--text-muted);
+  background: var(--bg-deep);
+}
+
+.map-readout {
+  position: absolute;
+  top: 92px;
+  left: clamp(16px, 3vw, 28px);
+  z-index: 2;
+  width: min(360px, calc(100vw - 32px));
+  padding: 18px 18px 16px;
+  border: 1px solid var(--border-strong);
+  border-radius: 18px;
+  color: var(--text);
+  background: color-mix(in srgb, var(--surface) 92%, var(--bg-deep));
+  backdrop-filter: blur(16px);
+  box-shadow: var(--shadow);
+}
+
+.map-readout-kicker {
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--accent);
+  margin-bottom: 12px;
+  padding: 7px 12px;
+  border-radius: 100px;
+  border: 1px solid color-mix(in srgb, var(--accent) 40%, transparent);
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+}
+
+.map-readout-title {
+  font-size: 20px;
   font-weight: 600;
   letter-spacing: -0.03em;
+  margin-bottom: 8px;
+  color: var(--text);
 }
 
-.map-stub p {
+.map-readout-hint,
+.map-readout-empty {
   color: var(--text-muted);
-  max-width: 420px;
+  font-size: 13px;
   line-height: 1.55;
+}
+
+.map-readout-grid {
+  display: grid;
+  gap: 12px;
+  margin-top: 14px;
+}
+
+.map-readout-grid div {
+  display: grid;
+  gap: 4px;
+}
+
+.map-readout-grid dt {
+  font-size: 12px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+.map-readout-grid dd {
+  font-size: 14px;
+  line-height: 1.45;
+  color: var(--text);
+  font-weight: 500;
+}
+
+.map-readout-span {
+  padding-top: 8px;
+  border-top: 1px solid var(--border-strong);
+}
+
+.map-readout-span dd {
+  color: var(--text-muted);
+  font-weight: 400;
+}
+
+:root:not(.light) .map-readout {
+  background: rgba(18, 18, 18, 0.96);
+  border-color: rgba(255, 255, 255, 0.16);
+}
+
+:root:not(.light) .map-readout-title {
+  color: #ffffff;
+}
+
+:root:not(.light) .map-readout-hint,
+:root:not(.light) .map-readout-empty,
+:root:not(.light) .map-readout-span dd {
+  color: rgba(255, 255, 255, 0.72);
+}
+
+:root:not(.light) .map-readout-grid dt {
+  color: rgba(255, 255, 255, 0.62);
+}
+
+:root:not(.light) .map-readout-grid dd {
+  color: #ffffff;
 }
 
 /* ============================================================
