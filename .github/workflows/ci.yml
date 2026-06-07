@@ -24,7 +24,10 @@ jobs:
   preview:
     name: Preview deployment
     needs: verify
-    if: github.event_name == 'pull_request'
+    if: >-
+      github.event_name == 'pull_request' &&
+      github.actor != 'dependabot[bot]' &&
+      github.event.pull_request.head.repo.full_name == github.repository
     continue-on-error: true
     runs-on: ubuntu-latest
     steps:
