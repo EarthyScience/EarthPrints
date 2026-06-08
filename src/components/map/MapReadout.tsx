@@ -2,7 +2,7 @@
 
 import type { MapSelection } from "@/types/map";
 import { formatGeoPoint } from "@/lib/map/geogrid";
-import { ESDC_TEST_DATASET } from "@/lib/constants/esdc";
+import { ZARR_STORE } from "@/lib/constants/store";
 
 type MapReadoutProps = {
   selection: MapSelection | null;
@@ -21,11 +21,11 @@ export function MapReadout({
 }: MapReadoutProps) {
   return (
     <aside className="map-readout" aria-live="polite">
-      <p className="map-readout-kicker mono">{ESDC_TEST_DATASET.kicker}</p>
+      <p className="map-readout-kicker mono">{ZARR_STORE.kicker}</p>
       <h2 className="map-readout-title">Pixel location</h2>
       <p className="map-readout-hint">
-        Click the map to snap to the {ESDC_TEST_DATASET.spatialResolutionDeg}°
-        grid used by the Zarr archive.
+        Click the map to snap to the {ZARR_STORE.spatialResolutionDeg}°
+        grid used by the Zarr Store.
       </p>
 
       {selection ? (
@@ -46,7 +46,7 @@ export function MapReadout({
           </div>
           <div>
             <dt>Variable</dt>
-            <dd>{ESDC_TEST_DATASET.defaultVariable}</dd>
+            <dd>{ZARR_STORE.defaultVariable}</dd>
           </div>
           <div className="map-readout-span">
             <dt>Time series</dt>

@@ -6,10 +6,10 @@ import { ScatterplotLayer } from "@deck.gl/layers";
 import type { PickingInfo } from "@deck.gl/core";
 import Map from "react-map-gl/maplibre";
 import "maplibre-gl/dist/maplibre-gl.css";
-import { geoPointToEsdcGrid } from "@/lib/map/geogrid";
+import { geoPointToZarrGrid } from "@/lib/map/geogrid";
 import { TEAL_ON_DARK_RGB } from "@/lib/constants/theme";
 import { DEFAULT_MAP_VIEW, MAP_BASE_STYLES } from "@/lib/map/viewState";
-import { fetchEsdcTimeSeries, openEsdcStore } from "@/lib/zarr/esdc";
+import { fetchZarrTimeSeries, openZarrStore } from "@/lib/zarr/store";
 import type { MapSelection } from "@/types/map";
 import { useTheme } from "@/providers/ThemeProvider";
 import { MapReadout } from "@/components/map/MapReadout";
@@ -20,7 +20,7 @@ type EarthMapProps = {
 
 export function EarthMap({ className }: EarthMapProps) {
   const { isLight } = useTheme();
-  const esdcRef = useRef<Awaited<ReturnType<typeof openEsdcStore>> | null>(
+  const dsRef = useRef<Awaited<ReturnType<typeof openZarrStore>> | null>(
     null,
   );
   const requestIdRef = useRef(0);
@@ -39,12 +39,12 @@ export function EarthMap({ className }: EarthMapProps) {
     setSeriesUnits(null);
 
     try {
-      if (!esdcRef.current) {
-        esdcRef.current = await openEsdcStore();
+      if (!dsRef.current) {
+        dsRef.current = await openZarrStore();
       }
 
-      const { values, units } = await fetchEsdcTimeSeries(
-        esdcRef.current,
+      const { values, units } = await fetchZarrTimeSeries(
+        dsRef.current,
         nextSelection.grid,
       );
 
@@ -73,7 +73,7 @@ export function EarthMap({ className }: EarthMapProps) {
       const [lon, lat] = info.coordinate;
       const nextSelection: MapSelection = {
         click: { lon, lat },
-        grid: geoPointToEsdcGrid({ lon, lat }),
+        grid: geoPointToZarrGrid({ lon, lat }),
       };
 
       setSelection(nextSelection);

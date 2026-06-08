@@ -1,10 +1,10 @@
 import * as zarr from "zarrita";
-import { ESDC_TEST_DATASET } from "@/lib/constants/esdc";
+import { ZARR_STORE } from "@/lib/constants/store";
 import type { GridCell } from "@/types/map";
 
-export type EsdcStore = Awaited<ReturnType<typeof openEsdcStore>>;
+export type ZarrStore = Awaited<ReturnType<typeof openZarrStore>>;
 
-export async function openEsdcStore(url = ESDC_TEST_DATASET.url) {
+export async function openZarrStore(url = ZARR_STORE.url) {
   const raw = new zarr.FetchStore(url);
   const store = await zarr.withConsolidatedMetadata(raw);
   return {
@@ -13,13 +13,13 @@ export async function openEsdcStore(url = ESDC_TEST_DATASET.url) {
   };
 }
 
-export async function fetchEsdcTimeSeries(
-  esdc: EsdcStore,
+export async function fetchZarrTimeSeries(
+  ds: ZarrStore,
   grid: GridCell,
-  variable = ESDC_TEST_DATASET.defaultVariable,
+  variable = ZARR_STORE.defaultVariable,
 ): Promise<{ values: Float32Array; variable: string; units?: string }> {
-  const array = await zarr.open(esdc.root.resolve(variable), { kind: "array" });
-  const result = await zarr.get(array, [null, grid.latIndex, grid.lonIndex]);
+  const array = await zarr.open(ds.root.resolve(variable), { kind: "array" });
+  const result = await zarr.get(array, [null, null, grid.latIndex, grid.lonIndex]); /* days, hours, lat, lon */
   const units =
     typeof array.attrs.units === "string" ? array.attrs.units : undefined;
 
