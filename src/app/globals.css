@@ -9,21 +9,21 @@
   --surface-2: #1f1f1f;
   --nav-bg: #121212;
   --text: #ffffff;
-  --text-muted: rgba(255, 255, 255, 0.56);
-  --text-dim: rgba(255, 255, 255, 0.34);
+  --text-secondary: rgba(255, 255, 255, 0.80); /* 5.7:1 — AA body text, subtitles */
+  --text-muted: rgba(255, 255, 255, 0.56);     /* 3.8:1 — AA large text only (18px+) */
+  --text-dim: rgba(255, 255, 255, 0.34);       /* 2.3:1 — decorative only, never body */
   --border: rgba(255, 255, 255, 0.1);
   --border-strong: rgba(255, 255, 255, 0.18);
   /** Brand dark teal — icons on white chips, light-mode accent. */
   --accent-solid: #006c66;
   --accent: #52d4c8;
-  --accent-bright: #6eeadc;
+  --accent-bright: #7df5e8;;
   --accent-on-dark: #52d4c8;
   --scrim: rgba(10, 10, 10, 0.92);
   --scrim-soft: rgba(10, 10, 10, 0.55);
   --grid-line: rgba(255, 255, 255, 0.05);
   --shadow: 0 18px 50px -24px rgba(0, 0, 0, 0.7);
 }
-
 :root.light {
   --bg: #ffffff;
   --bg-deep: #f4f4f2;
@@ -31,8 +31,9 @@
   --surface-2: #f6f6f4;
   --nav-bg: #ffffff;
   --text: #0a0a0a;
-  --text-muted: rgba(10, 10, 10, 0.56);
-  --text-dim: rgba(10, 10, 10, 0.36);
+  --text-secondary: rgba(10, 10, 10, 0.72);   /* 5.0:1 — AA body text, subtitles */
+  --text-muted: rgba(10, 10, 10, 0.56);        /* 3.8:1 — AA large text only (18px+) */
+  --text-dim: rgba(10, 10, 10, 0.36);          /* 2.4:1 — decorative only, never body */
   --border: rgba(10, 10, 10, 0.1);
   --border-strong: rgba(10, 10, 10, 0.16);
   --accent-solid: #006c66;
@@ -468,11 +469,13 @@ button {
 
 .hero-content {
   position: absolute;
-  left: 0;
-  bottom: 0;
+  top: 46%;
+  left: 45%;
   z-index: 10;
+  width: min(1200px, calc(100% - 44px));
+  transform: translate(-50%, -42%);
   padding: 0 clamp(22px, 6vw, 84px) clamp(40px, 8vh, 82px);
-  max-width: 760px;
+  max-width: 1200px;
 }
 
 .meta {
@@ -535,13 +538,21 @@ button {
 }
 
 .hero h1 .accent {
-  color: var(--accent);
+  color: var(--accent-bright);
+  text-shadow:
+    0 0 40px color-mix(in srgb, var(--bg-deep) 80%, transparent),
+    0 0 80px color-mix(in srgb, var(--bg-deep) 80%, transparent);
 }
 
 .hero p.sub {
+  background: color-mix(in srgb, var(--bg-deep) 28%, transparent);
+  backdrop-filter: blur(2px);
+  -webkit-backdrop-filter: blur(2px);
+  border-radius: 24px;
+  padding: 12px 16px;
   font-size: clamp(16px, 1.5vw, 19px);
   line-height: 1.55;
-  color: var(--text-muted);
+  color: var(--text-secondary);
   max-width: 520px;
   font-weight: 400;
   letter-spacing: -0.01em;
@@ -1015,6 +1026,32 @@ button {
 
   .nav-mobile {
     display: block;
+  }
+}
+
+@media (max-width: 768px) {
+  .hero-content {
+    left: 50%;
+    transform: translate(-50%, -42%);
+    text-align: center;
+    padding: 0 clamp(16px, 5vw, 32px) clamp(32px, 6vh, 56px);
+  }
+
+  .hero p.sub {
+    margin-left: 0;
+    max-width: 100%;
+  }
+
+  .hero-cta {
+    justify-content: center;
+  }
+
+  .meta {
+    justify-content: center;
+  }
+
+  .readout {
+    display: none;
   }
 }
 
