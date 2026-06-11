@@ -64,14 +64,12 @@ export function MobileMenuDropdown({
               {link.label}
             </Link>
           ))}
-          {!isActive(pathname, "/map") && (
-            <Link href="/map" className="nav-dropdown-cta" onClick={onClose}>
-              Open Map
-              <span className="arrow">
-                <ArrowUpRight size={14} />
-              </span>
-            </Link>
-          )}
+          <Link href="/map" className="nav-dropdown-cta" onClick={onClose}>
+            Open Map
+            <span className="arrow">
+              <ArrowUpRight size={14} />
+            </span>
+          </Link>
         </nav>
       </div>
 
