@@ -59,15 +59,29 @@ function makeChunkData(shape: readonly [number, number, number, number]) {
 describe("ZarrChunkReader", () => {
   const mockGetChunk = vi.fn();
 
-  beforeEach(() => {
-    mockGetChunk.mockReset();
-    mockFetchPixelTimeSeries.mockReset();
-    mockOpen.mockResolvedValue({
+  function stubArray() {
+    return {
       shape: [4, 2, 40, 40],
       chunks: [2, 2, 40, 40],
       attrs: { units: "gC m-2 h-1" },
       getChunk: mockGetChunk,
-    } as never);
+    };
+  }
+
+  beforeEach(() => {
+    mockGetChunk.mockReset();
+    mockFetchPixelTimeSeries.mockReset();
+    mockOpen.mockReset();
+    mockOpen.mockImplementation(async () => stubArray() as never);
+    mockGetChunk.mockImplementation(async (coords: number[]) => {
+      const [timeChunkIdx] = coords;
+      const shape = [2, 2, 40, 40] as const;
+      const data = makeChunkData(shape);
+      for (let i = 0; i < data.length; i++) {
+        data[i] += timeChunkIdx * 10_000;
+      }
+      return { data, shape: [...shape] };
+    });
   });
 
   it("uses the fast pixel fetch on cache miss and prefetches native chunks", async () => {
@@ -115,7 +129,9 @@ describe("ZarrChunkReader", () => {
 
     const reader = new ZarrChunkReader(ds);
     await reader.getTimeSeries(makeGrid(50, 50));
-    await new Promise((resolve) => setTimeout(resolve, 0));
+    await vi.waitFor(() => {
+      expect(mockGetChunk).toHaveBeenCalledTimes(2);
+    });
 
     mockFetchPixelTimeSeries.mockClear();
     mockGetChunk.mockClear();
@@ -127,5 +143,37 @@ describe("ZarrChunkReader", () => {
     expect(Array.from(second.values)).toEqual([
       121, 221, 1121, 1221, 10_121, 10_221, 11_121, 11_221,
     ]);
+  });
+
+  it("opens each variable only once under concurrent requests", async () => {
+    mockFetchPixelTimeSeries.mockResolvedValue({
+      values: new Float32Array([1, 2, 3, 4]),
+      variable: "NEE",
+      units: "gC m-2 h-1",
+    });
+
+    const reader = new ZarrChunkReader(ds);
+    await Promise.all([
+      reader.getTimeSeries(makeGrid(50, 50)),
+      reader.getTimeSeries(makeGrid(80, 80)),
+    ]);
+
+    expect(mockOpen).toHaveBeenCalledTimes(1);
+  });
+
+  it("dedupes concurrent prefetch for the same spatial block", async () => {
+    mockFetchPixelTimeSeries.mockResolvedValue({
+      values: new Float32Array([1, 2, 3, 4]),
+      variable: "NEE",
+      units: "gC m-2 h-1",
+    });
+
+    const reader = new ZarrChunkReader(ds);
+    await Promise.all([
+      reader.getTimeSeries(makeGrid(50, 50)),
+      reader.getTimeSeries(makeGrid(51, 51)),
+    ]);
+
+    expect(mockGetChunk).toHaveBeenCalledTimes(2);
   });
 });

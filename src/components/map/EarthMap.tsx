@@ -21,10 +21,7 @@ type EarthMapProps = {
 
 export function EarthMap({ className }: EarthMapProps) {
   const { isLight } = useTheme();
-  const dsRef = useRef<Awaited<ReturnType<typeof openZarrStore>> | null>(
-    null,
-  );
-  const readerRef = useRef<ZarrChunkReader | null>(null);
+  const readerPromiseRef = useRef<Promise<ZarrChunkReader> | null>(null);
   const requestIdRef = useRef(0);
 
   const [selection, setSelection] = useState<MapSelection | null>(null);
@@ -43,14 +40,18 @@ export function EarthMap({ className }: EarthMapProps) {
     setSeriesUnits(null);
 
     try {
-      if (!dsRef.current) {
-        dsRef.current = await openZarrStore();
-      }
-      if (!readerRef.current) {
-        readerRef.current = new ZarrChunkReader(dsRef.current);
+      if (!readerPromiseRef.current) {
+        readerPromiseRef.current = openZarrStore()
+          .then((ds) => new ZarrChunkReader(ds))
+          .catch((error) => {
+            readerPromiseRef.current = null;
+            throw error;
+          });
       }
 
-      const { values, units } = await readerRef.current.getTimeSeries(
+      const reader = await readerPromiseRef.current;
+
+      const { values, units } = await reader.getTimeSeries(
         nextSelection.grid,
       );
 

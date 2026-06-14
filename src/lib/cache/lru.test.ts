@@ -41,4 +41,19 @@ describe("LRUCache", () => {
 
     expect(cache.get("A")).toBeUndefined();
   });
+
+  it("deletes a cached entry", () => {
+    const cache = new LRUCache<string, number>(2);
+    cache.set("A", 1);
+
+    expect(cache.delete("A")).toBe(true);
+    expect(cache.get("A")).toBeUndefined();
+  });
+
+  it("clamps maxSize to at least 1", () => {
+    const cache = new LRUCache<string, number>(0);
+    cache.set("A", 1);
+
+    expect(cache.get("A")).toBe(1);
+  });
 });

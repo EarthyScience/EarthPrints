@@ -1,10 +1,10 @@
-export class LRUCache <K, V> {
+export class LRUCache<K, V> {
   private cache: Map<K, V>;
   private maxSize: number;
 
   constructor(maxSize: number) {
     this.cache = new Map();
-    this.maxSize = maxSize;
+    this.maxSize = Math.max(1, maxSize);
   }
 
   isCacheFull(): boolean {
@@ -35,5 +35,9 @@ export class LRUCache <K, V> {
 
   has(key: K): boolean {
     return this.cache.has(key);
+  }
+
+  delete(key: K): boolean {
+    return this.cache.delete(key);
   }
 }

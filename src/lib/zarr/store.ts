@@ -4,6 +4,12 @@ import type { GridCell } from "@/types/map";
 
 export type ZarrStore = Awaited<ReturnType<typeof openZarrStore>>;
 
+export type ZarrArrayHandle = {
+  attrs: Record<string, unknown>;
+  shape: number[];
+  chunks: number[];
+};
+
 export async function openZarrStore(url = ZARR_STORE.url) {
   const raw = new zarr.FetchStore(url);
   const consolidated = await zarr.withConsolidatedMetadata(raw);
@@ -16,12 +22,11 @@ export async function openZarrStore(url = ZARR_STORE.url) {
 
 /** Fast path: one pixel, full time × hour, via zarrita's built-in slice assembly. */
 export async function fetchPixelTimeSeries(
-  ds: ZarrStore,
+  array: ZarrArrayHandle,
   grid: GridCell,
   variable = ZARR_STORE.defaultVariable,
 ): Promise<{ values: Float32Array; variable: string; units?: string }> {
-  const array = await zarr.open(ds.root.resolve(variable), { kind: "array" });
-  const result = await zarr.get(array, [
+  const result = await zarr.get(array as Parameters<typeof zarr.get>[0], [
     null,
     null,
     grid.latIndex,

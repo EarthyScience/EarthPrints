@@ -10,7 +10,11 @@ import {
   type LocalOffset,
   type PixelNativeChunkContext,
 } from "@/lib/zarr/chunks";
-import { fetchPixelTimeSeries, type ZarrStore } from "@/lib/zarr/store";
+import {
+  fetchPixelTimeSeries,
+  type ZarrArrayHandle,
+  type ZarrStore,
+} from "@/lib/zarr/store";
 import type { GridCell } from "@/types/map";
 
 type CachedNativeChunk = {
@@ -18,10 +22,7 @@ type CachedNativeChunk = {
   shape: readonly number[];
 };
 
-type ZarrArray = {
-  shape: number[];
-  chunks: number[];
-  attrs: Record<string, unknown>;
+type ZarrArray = ZarrArrayHandle & {
   getChunk(
     chunkCoords: number[],
   ): Promise<{ data: Float32Array; shape: number[] }>;
@@ -30,7 +31,8 @@ type ZarrArray = {
 export class ZarrChunkReader {
   private ds: ZarrStore;
   private cache: LRUCache<string, CachedNativeChunk>;
-  private arraysByVariable = new Map<string, ZarrArray>();
+  private arrayPromises = new Map<string, Promise<ZarrArray>>();
+  private chunkLoadsInFlight = new Map<string, Promise<CachedNativeChunk>>();
   private prefetchInFlight = new Map<string, Promise<void>>();
 
   /** Default holds ~8 pixels of full history (6 native chunks per pixel). */
@@ -39,15 +41,20 @@ export class ZarrChunkReader {
     this.cache = new LRUCache(maxCacheSize);
   }
 
-  private async getArray(variable: string): Promise<ZarrArray> {
-    const cached = this.arraysByVariable.get(variable);
-    if (cached) return cached;
+  private getArray(variable: string): Promise<ZarrArray> {
+    const existing = this.arrayPromises.get(variable);
+    if (existing) return existing;
 
-    const array = (await zarr.open(this.ds.root.resolve(variable), {
-      kind: "array",
-    })) as ZarrArray;
-    this.arraysByVariable.set(variable, array);
-    return array;
+    const promise = zarr
+      .open(this.ds.root.resolve(variable), { kind: "array" })
+      .then((array) => array as ZarrArray)
+      .catch((error) => {
+        this.arrayPromises.delete(variable);
+        throw error;
+      });
+
+    this.arrayPromises.set(variable, promise);
+    return promise;
   }
 
   private getChunkSizes(array: ZarrArray): ArrayChunkSizes {
@@ -78,7 +85,7 @@ export class ZarrChunkReader {
     );
   }
 
-  private async loadNativeChunk(
+  private loadNativeChunk(
     array: ZarrArray,
     variable: string,
     coords: {
@@ -90,21 +97,36 @@ export class ZarrChunkReader {
   ): Promise<CachedNativeChunk> {
     const key = nativeChunkKey(variable, coords);
     const cached = this.cache.get(key);
-    if (cached) return cached;
+    if (cached) return Promise.resolve(cached);
 
-    const chunk = await array.getChunk([
-      coords.timeChunkIdx,
-      coords.hourChunkIdx,
-      coords.latChunkIdx,
-      coords.lonChunkIdx,
-    ]);
+    const inFlight = this.chunkLoadsInFlight.get(key);
+    if (inFlight) return inFlight;
 
-    const entry: CachedNativeChunk = {
-      data: chunk.data as Float32Array,
-      shape: chunk.shape,
-    };
-    this.cache.set(key, entry);
-    return entry;
+    const promise = array
+      .getChunk([
+        coords.timeChunkIdx,
+        coords.hourChunkIdx,
+        coords.latChunkIdx,
+        coords.lonChunkIdx,
+      ])
+      .then((chunk: { data: Float32Array; shape: number[] }) => {
+        const entry: CachedNativeChunk = {
+          data: chunk.data as Float32Array,
+          shape: chunk.shape,
+        };
+        this.cache.set(key, entry);
+        return entry;
+      })
+      .catch((error: unknown) => {
+        this.chunkLoadsInFlight.delete(key);
+        throw error;
+      })
+      .finally(() => {
+        this.chunkLoadsInFlight.delete(key);
+      });
+
+    this.chunkLoadsInFlight.set(key, promise);
+    return promise;
   }
 
   private buildFromNativeCache(
@@ -149,13 +171,19 @@ export class ZarrChunkReader {
       (timeChunkIdx) =>
         !this.cache.has(
           nativeChunkKey(variable, this.nativeCoords(context, timeChunkIdx)),
+        ) && !this.chunkLoadsInFlight.has(
+          nativeChunkKey(variable, this.nativeCoords(context, timeChunkIdx)),
         ),
     );
     if (missing.length === 0) return;
 
     const promise = Promise.all(
       missing.map((timeChunkIdx) =>
-        this.loadNativeChunk(array, variable, this.nativeCoords(context, timeChunkIdx)),
+        this.loadNativeChunk(
+          array,
+          variable,
+          this.nativeCoords(context, timeChunkIdx),
+        ),
       ),
     )
       .then(() => undefined)
@@ -186,7 +214,7 @@ export class ZarrChunkReader {
       return this.buildFromNativeCache(variable, context, units);
     }
 
-    const pixel = await fetchPixelTimeSeries(this.ds, grid, variable);
+    const pixel = await fetchPixelTimeSeries(array, grid, variable);
     this.prefetchNativeChunks(array, variable, context);
     return pixel;
   }
