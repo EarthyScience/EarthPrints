@@ -1,6 +1,14 @@
 import * as zarr from "zarrita";
 import { ZARR_STORE } from "@/lib/constants/store";
-import type { GridCell } from "@/types/map";
+import {
+  pixelToChunkIndices,
+  pixelToChunkKey,
+  pixelToLocalOffset,
+  spatialChunkToSlices,
+  type LocalOffset,
+} from "@/lib/zarr/chunks";
+
+export { extractTimeSeries } from "@/lib/zarr/chunks";
 
 export type ZarrStore = Awaited<ReturnType<typeof openZarrStore>>;
 
@@ -13,18 +21,64 @@ export async function openZarrStore(url = ZARR_STORE.url) {
   };
 }
 
-export async function fetchZarrTimeSeries(
+export type FetchedSpatialChunk = {
+  data: Float32Array;
+  shape: readonly number[];
+  chunkKey: string;
+  localOffset: LocalOffset;
+  variable: string;
+  units?: string;
+};
+
+/** Download the full spatial Zarr chunk that contains `(latIndex, lonIndex)`. */
+export async function fetchChunk(
   ds: ZarrStore,
-  grid: GridCell,
+  latIndex: number,
+  lonIndex: number,
   variable = ZARR_STORE.defaultVariable,
-): Promise<{ values: Float32Array; variable: string; units?: string }> {
+): Promise<FetchedSpatialChunk> {
   const array = await zarr.open(ds.root.resolve(variable), { kind: "array" });
-  const result = await zarr.get(array, [null, null, grid.latIndex, grid.lonIndex]); /* days, hours, lat, lon */
+  const [, , latCount, lonCount] = array.shape;
+  const chunkLat = array.chunks[2];
+  const chunkLon = array.chunks[3];
+
+  const { chunkLatIdx, chunkLonIdx } = pixelToChunkIndices(
+    latIndex,
+    lonIndex,
+    chunkLat,
+    chunkLon,
+  );
+
+  const { latSlice, lonSlice } = spatialChunkToSlices(
+    chunkLatIdx,
+    chunkLonIdx,
+    chunkLat,
+    chunkLon,
+    latCount,
+    lonCount,
+  );
+
+  const result = await zarr.get(array, [
+    null,
+    null,
+    zarr.slice(...latSlice),
+    zarr.slice(...lonSlice),
+  ]);
+
   const units =
     typeof array.attrs.units === "string" ? array.attrs.units : undefined;
 
   return {
-    values: result.data as Float32Array,
+    data: result.data as Float32Array,
+    shape: result.shape,
+    chunkKey: pixelToChunkKey(
+      variable,
+      latIndex,
+      lonIndex,
+      chunkLat,
+      chunkLon,
+    ),
+    localOffset: pixelToLocalOffset(latIndex, lonIndex, chunkLat, chunkLon),
     variable,
     units,
   };

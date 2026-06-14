@@ -9,7 +9,8 @@ import "maplibre-gl/dist/maplibre-gl.css";
 import { geoPointToZarrGrid } from "@/lib/map/geogrid";
 import { TEAL_ON_DARK_RGB } from "@/lib/constants/theme";
 import { DEFAULT_MAP_VIEW, MAP_BASE_STYLES } from "@/lib/map/viewState";
-import { fetchZarrTimeSeries, openZarrStore } from "@/lib/zarr/store";
+import { openZarrStore } from "@/lib/zarr/store";
+import { ZarrChunkReader } from "@/lib/zarr/ZarrChunkReader";
 import type { MapSelection } from "@/types/map";
 import { useTheme } from "@/providers/ThemeProvider";
 import { MapReadout } from "@/components/map/MapReadout";
@@ -23,6 +24,7 @@ export function EarthMap({ className }: EarthMapProps) {
   const dsRef = useRef<Awaited<ReturnType<typeof openZarrStore>> | null>(
     null,
   );
+  const readerRef = useRef<ZarrChunkReader | null>(null);
   const requestIdRef = useRef(0);
 
   const [selection, setSelection] = useState<MapSelection | null>(null);
@@ -42,9 +44,11 @@ export function EarthMap({ className }: EarthMapProps) {
       if (!dsRef.current) {
         dsRef.current = await openZarrStore();
       }
+      if (!readerRef.current) {
+        readerRef.current = new ZarrChunkReader(dsRef.current);
+      }
 
-      const { values, units } = await fetchZarrTimeSeries(
-        dsRef.current,
+      const { values, units } = await readerRef.current.getTimeSeries(
         nextSelection.grid,
       );
 
