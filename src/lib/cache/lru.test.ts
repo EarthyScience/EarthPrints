@@ -30,4 +30,15 @@ describe("LRUCache", () => {
     expect(cache.get("A")).toBe(1);
     expect(cache.get("B")).toBe(99);
   });
+
+  it("checks key presence without promoting", () => {
+    const cache = new LRUCache<string, number>(2);
+    cache.set("A", 1);
+    cache.set("B", 2);
+
+    expect(cache.has("A")).toBe(true);
+    cache.set("C", 3);
+
+    expect(cache.get("A")).toBeUndefined();
+  });
 });

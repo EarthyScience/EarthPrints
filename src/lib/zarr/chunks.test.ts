@@ -1,19 +1,23 @@
 import { describe, expect, it } from "vitest";
 import {
   chunkIndexToSlice,
-  extractTimeSeries,
-  pixelToChunkKey,
+  extractPixelFromNativeChunk,
+  nativeChunkKey,
   pixelToLocalOffset,
-  spatialChunkToSlices,
+  pixelToNativeChunkContext,
+  stitchTimeSeries,
 } from "@/lib/zarr/chunks";
 
 describe("chunk helpers", () => {
-  it("maps pixels in the same spatial chunk to the same key", () => {
-    const keyA = pixelToChunkKey("NEE", 50, 50, 40, 40);
-    const keyB = pixelToChunkKey("NEE", 51, 51, 40, 40);
-
-    expect(keyA).toBe("NEE:1:1");
-    expect(keyB).toBe(keyA);
+  it("builds native chunk cache keys", () => {
+    expect(
+      nativeChunkKey("NEE", {
+        timeChunkIdx: 2,
+        hourChunkIdx: 0,
+        latChunkIdx: 1,
+        lonChunkIdx: 3,
+      }),
+    ).toBe("NEE:2:0:1:3");
   });
 
   it("computes local offsets inside a chunk", () => {
@@ -31,16 +35,26 @@ describe("chunk helpers", () => {
     expect(chunkIndexToSlice(89, 40, 3600)).toEqual([3560, 3600]);
   });
 
-  it("builds lat/lon slice ranges for a spatial chunk", () => {
-    expect(spatialChunkToSlices(1, 2, 40, 40, 3600, 7200)).toEqual({
-      latSlice: [40, 80],
-      lonSlice: [80, 120],
+  it("lists native time-chunk indices for a pixel", () => {
+    expect(
+      pixelToNativeChunkContext(50, 50, 7670, {
+        time: 1461,
+        hour: 24,
+        lat: 40,
+        lon: 40,
+      }),
+    ).toEqual({
+      chunkLatIdx: 1,
+      chunkLonIdx: 1,
+      localLat: 10,
+      localLon: 10,
+      timeChunkIndices: [0, 1, 2, 3, 4, 5],
     });
   });
 });
 
-describe("extractTimeSeries", () => {
-  it("pulls one pixel series out of a flattened 4D chunk", () => {
+describe("extractPixelFromNativeChunk", () => {
+  it("pulls one pixel series out of a flattened native chunk", () => {
     const shape = [2, 2, 4, 4] as const;
     const [timeCount, hourCount, latCount, lonCount] = shape;
     const data = new Float32Array(timeCount * hourCount * latCount * lonCount);
@@ -57,11 +71,24 @@ describe("extractTimeSeries", () => {
       }
     }
 
-    const series = extractTimeSeries(data, shape, {
+    const series = extractPixelFromNativeChunk(data, shape, {
       localLat: 1,
       localLon: 2,
     });
 
     expect(Array.from(series)).toEqual([12, 112, 1012, 1112]);
+  });
+});
+
+describe("stitchTimeSeries", () => {
+  it("concatenates native-chunk segments in order", () => {
+    expect(
+      Array.from(
+        stitchTimeSeries([
+          new Float32Array([1, 2]),
+          new Float32Array([3, 4]),
+        ]),
+      ),
+    ).toEqual([1, 2, 3, 4]);
   });
 });

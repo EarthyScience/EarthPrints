@@ -8,6 +8,7 @@ type MapReadoutProps = {
   selection: MapSelection | null;
   loadingSeries: boolean;
   seriesError: string | null;
+  seriesLength: number | null;
   seriesPreview: number[] | null;
   seriesUnits: string | null;
 };
@@ -16,6 +17,7 @@ export function MapReadout({
   selection,
   loadingSeries,
   seriesError,
+  seriesLength,
   seriesPreview,
   seriesUnits,
 }: MapReadoutProps) {
@@ -56,8 +58,8 @@ export function MapReadout({
               {!loadingSeries &&
                 !seriesError &&
                 seriesPreview &&
-                `${seriesPreview.length} steps · first ${seriesPreview
-                  .slice(0, 3)
+                seriesLength !== null &&
+                `${seriesLength} steps · first ${seriesPreview
                   .map((value) => value.toFixed(2))
                   .join(", ")}${seriesUnits ? ` ${seriesUnits}` : ""}`}
             </dd>

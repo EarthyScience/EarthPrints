@@ -1,23 +1,27 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import * as zarr from "zarrita";
 import { ZarrChunkReader } from "@/lib/zarr/ZarrChunkReader";
-import { fetchChunk, type ZarrStore } from "@/lib/zarr/store";
+import { fetchPixelTimeSeries, type ZarrStore } from "@/lib/zarr/store";
 import type { GridCell } from "@/types/map";
 
-vi.mock("zarrita", () => ({
-  open: vi.fn().mockResolvedValue({
-    chunks: [1461, 24, 40, 40],
-  }),
-}));
+vi.mock("zarrita", async (importOriginal) => {
+  const original = await importOriginal<typeof import("zarrita")>();
+  return {
+    ...original,
+    open: vi.fn(),
+  };
+});
 
 vi.mock("@/lib/zarr/store", async (importOriginal) => {
   const original = await importOriginal<typeof import("@/lib/zarr/store")>();
   return {
     ...original,
-    fetchChunk: vi.fn(),
+    fetchPixelTimeSeries: vi.fn(),
   };
 });
 
-const mockFetchChunk = vi.mocked(fetchChunk);
+const mockOpen = vi.mocked(zarr.open);
+const mockFetchPixelTimeSeries = vi.mocked(fetchPixelTimeSeries);
 
 const ds = {
   store: {},
@@ -53,30 +57,75 @@ function makeChunkData(shape: readonly [number, number, number, number]) {
 }
 
 describe("ZarrChunkReader", () => {
+  const mockGetChunk = vi.fn();
+
   beforeEach(() => {
-    mockFetchChunk.mockReset();
+    mockGetChunk.mockReset();
+    mockFetchPixelTimeSeries.mockReset();
+    mockOpen.mockResolvedValue({
+      shape: [4, 2, 40, 40],
+      chunks: [2, 2, 40, 40],
+      attrs: { units: "gC m-2 h-1" },
+      getChunk: mockGetChunk,
+    } as never);
   });
 
-  it("fetches once and reuses the cache for nearby pixels", async () => {
-    const shape = [2, 2, 40, 40] as const;
-    const data = makeChunkData(shape);
-
-    mockFetchChunk.mockResolvedValue({
-      data,
-      shape,
-      chunkKey: "NEE:1:1",
-      localOffset: { localLat: 10, localLon: 10 },
+  it("uses the fast pixel fetch on cache miss and prefetches native chunks", async () => {
+    mockFetchPixelTimeSeries.mockResolvedValue({
+      values: new Float32Array([1, 2, 3, 4]),
       variable: "NEE",
       units: "gC m-2 h-1",
+    });
+    mockGetChunk.mockImplementation(async (coords: number[]) => {
+      const [timeChunkIdx] = coords;
+      const shape = [2, 2, 40, 40] as const;
+      const data = makeChunkData(shape);
+      for (let i = 0; i < data.length; i++) {
+        data[i] += timeChunkIdx * 10_000;
+      }
+      return { data, shape: [...shape] };
     });
 
     const reader = new ZarrChunkReader(ds);
     const first = await reader.getTimeSeries(makeGrid(50, 50));
+
+    expect(mockFetchPixelTimeSeries).toHaveBeenCalledTimes(1);
+    expect(Array.from(first.values)).toEqual([1, 2, 3, 4]);
+
+    await vi.waitFor(() => {
+      expect(mockGetChunk).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  it("serves nearby pixels from native cache after prefetch", async () => {
+    mockFetchPixelTimeSeries.mockResolvedValue({
+      values: new Float32Array([1, 2, 3, 4]),
+      variable: "NEE",
+      units: "gC m-2 h-1",
+    });
+    mockGetChunk.mockImplementation(async (coords: number[]) => {
+      const [timeChunkIdx] = coords;
+      const shape = [2, 2, 40, 40] as const;
+      const data = makeChunkData(shape);
+      for (let i = 0; i < data.length; i++) {
+        data[i] += timeChunkIdx * 10_000;
+      }
+      return { data, shape: [...shape] };
+    });
+
+    const reader = new ZarrChunkReader(ds);
+    await reader.getTimeSeries(makeGrid(50, 50));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    mockFetchPixelTimeSeries.mockClear();
+    mockGetChunk.mockClear();
+
     const second = await reader.getTimeSeries(makeGrid(51, 51));
 
-    expect(mockFetchChunk).toHaveBeenCalledTimes(1);
-    expect(first.units).toBe("gC m-2 h-1");
-    expect(Array.from(first.values)).toEqual([110, 210, 1110, 1210]);
-    expect(Array.from(second.values)).toEqual([121, 221, 1121, 1221]);
+    expect(mockFetchPixelTimeSeries).not.toHaveBeenCalled();
+    expect(mockGetChunk).not.toHaveBeenCalled();
+    expect(Array.from(second.values)).toEqual([
+      121, 221, 1121, 1221, 10_121, 10_221, 11_121, 11_221,
+    ]);
   });
 });

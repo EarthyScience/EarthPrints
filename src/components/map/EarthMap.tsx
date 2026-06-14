@@ -30,6 +30,7 @@ export function EarthMap({ className }: EarthMapProps) {
   const [selection, setSelection] = useState<MapSelection | null>(null);
   const [loadingSeries, setLoadingSeries] = useState(false);
   const [seriesError, setSeriesError] = useState<string | null>(null);
+  const [seriesLength, setSeriesLength] = useState<number | null>(null);
   const [seriesPreview, setSeriesPreview] = useState<number[] | null>(null);
   const [seriesUnits, setSeriesUnits] = useState<string | null>(null);
 
@@ -37,6 +38,7 @@ export function EarthMap({ className }: EarthMapProps) {
     const requestId = ++requestIdRef.current;
     setLoadingSeries(true);
     setSeriesError(null);
+    setSeriesLength(null);
     setSeriesPreview(null);
     setSeriesUnits(null);
 
@@ -54,7 +56,8 @@ export function EarthMap({ className }: EarthMapProps) {
 
       if (requestId !== requestIdRef.current) return;
 
-      setSeriesPreview(Array.from(values));
+      setSeriesLength(values.length);
+      setSeriesPreview(Array.from(values.subarray(0, 3)));
       setSeriesUnits(units ?? null);
     } catch (error) {
       if (requestId !== requestIdRef.current) return;
@@ -128,6 +131,7 @@ export function EarthMap({ className }: EarthMapProps) {
         selection={selection}
         loadingSeries={loadingSeries}
         seriesError={seriesError}
+        seriesLength={seriesLength}
         seriesPreview={seriesPreview}
         seriesUnits={seriesUnits}
       />

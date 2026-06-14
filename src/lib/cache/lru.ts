@@ -32,4 +32,8 @@ export class LRUCache <K, V> {
     }
     this.cache.set(key, value);
   }
+
+  has(key: K): boolean {
+    return this.cache.has(key);
+  }
 }

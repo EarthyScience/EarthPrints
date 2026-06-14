@@ -11,12 +11,26 @@ export type LocalOffset = {
   localLon: number;
 };
 
-export type SpatialChunkSlices = {
-  latSlice: AxisSlice;
-  lonSlice: AxisSlice;
+export type ArrayChunkSizes = {
+  time: number;
+  hour: number;
+  lat: number;
+  lon: number;
 };
 
-/** Map a pixel index to its spatial chunk index along one axis. */
+export type NativeChunkCoords = {
+  timeChunkIdx: number;
+  hourChunkIdx: number;
+  latChunkIdx: number;
+  lonChunkIdx: number;
+};
+
+export type PixelNativeChunkContext = ChunkIndices &
+  LocalOffset & {
+    timeChunkIndices: number[];
+  };
+
+/** Map a pixel index to its chunk index along one axis. */
 export function indexToChunkIndex(index: number, chunkSize: number): number {
   return Math.floor(index / chunkSize);
 }
@@ -44,23 +58,6 @@ export function pixelToChunkIndices(
   };
 }
 
-/** Cache key for one spatial chunk of a variable. */
-export function pixelToChunkKey(
-  variable: string,
-  latIndex: number,
-  lonIndex: number,
-  chunkLat: number,
-  chunkLon: number,
-): string {
-  const { chunkLatIdx, chunkLonIdx } = pixelToChunkIndices(
-    latIndex,
-    lonIndex,
-    chunkLat,
-    chunkLon,
-  );
-  return `${variable}:${chunkLatIdx}:${chunkLonIdx}`;
-}
-
 export function pixelToLocalOffset(
   latIndex: number,
   lonIndex: number,
@@ -79,23 +76,47 @@ export function pixelToLocalOffset(
   };
 }
 
-/** Lat/lon slice ranges for fetching one spatial chunk from a 4D `[time, hour, lat, lon]` array. */
-export function spatialChunkToSlices(
-  chunkLatIdx: number,
-  chunkLonIdx: number,
-  chunkLat: number,
-  chunkLon: number,
-  latCount: number,
-  lonCount: number,
-): SpatialChunkSlices {
+/** Cache key for one on-disk Zarr chunk. */
+export function nativeChunkKey(
+  variable: string,
+  coords: NativeChunkCoords,
+): string {
+  return `${variable}:${coords.timeChunkIdx}:${coords.hourChunkIdx}:${coords.latChunkIdx}:${coords.lonChunkIdx}`;
+}
+
+export function listTimeChunkIndices(
+  timeCount: number,
+  chunkTime: number,
+): number[] {
+  const chunkCount = Math.ceil(timeCount / chunkTime);
+  return Array.from({ length: chunkCount }, (_, index) => index);
+}
+
+/** Resolve native-chunk indices and local offsets for one pixel. */
+export function pixelToNativeChunkContext(
+  latIndex: number,
+  lonIndex: number,
+  timeCount: number,
+  chunkSizes: ArrayChunkSizes,
+): PixelNativeChunkContext {
+  const { chunkLatIdx, chunkLonIdx } = pixelToChunkIndices(
+    latIndex,
+    lonIndex,
+    chunkSizes.lat,
+    chunkSizes.lon,
+  );
+
   return {
-    latSlice: chunkIndexToSlice(chunkLatIdx, chunkLat, latCount),
-    lonSlice: chunkIndexToSlice(chunkLonIdx, chunkLon, lonCount),
+    chunkLatIdx,
+    chunkLonIdx,
+    localLat: latIndex - chunkLatIdx * chunkSizes.lat,
+    localLon: lonIndex - chunkLonIdx * chunkSizes.lon,
+    timeChunkIndices: listTimeChunkIndices(timeCount, chunkSizes.time),
   };
 }
 
-/** Pick one pixel's time series out of a downloaded spatial chunk. */
-export function extractTimeSeries(
+/** Pick one pixel's series out of a single native on-disk chunk. */
+export function extractPixelFromNativeChunk(
   data: Float32Array,
   shape: readonly number[],
   localOffset: LocalOffset,
@@ -112,6 +133,19 @@ export function extractTimeSeries(
         ((t * hourCount + h) * latCount + localLat) * lonCount + localLon;
       series[out++] = data[index]!;
     }
+  }
+
+  return series;
+}
+
+export function stitchTimeSeries(segments: Float32Array[]): Float32Array {
+  const length = segments.reduce((total, segment) => total + segment.length, 0);
+  const series = new Float32Array(length);
+  let offset = 0;
+
+  for (const segment of segments) {
+    series.set(segment, offset);
+    offset += segment.length;
   }
 
   return series;
