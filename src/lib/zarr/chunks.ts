@@ -98,6 +98,7 @@ export function pixelToNativeChunkContext(
   lonIndex: number,
   timeCount: number,
   chunkSizes: ArrayChunkSizes,
+  timeRange?: AxisSlice,
 ): PixelNativeChunkContext {
   const { chunkLatIdx, chunkLonIdx } = pixelToChunkIndices(
     latIndex,
@@ -106,13 +107,36 @@ export function pixelToNativeChunkContext(
     chunkSizes.lon,
   );
 
+  const timeChunkIndices = timeRange
+    ? listTimeChunkIndicesForRange(timeRange, chunkSizes.time, timeCount)
+    : listTimeChunkIndices(timeCount, chunkSizes.time);
+
   return {
     chunkLatIdx,
     chunkLonIdx,
     localLat: latIndex - chunkLatIdx * chunkSizes.lat,
     localLon: lonIndex - chunkLonIdx * chunkSizes.lon,
-    timeChunkIndices: listTimeChunkIndices(timeCount, chunkSizes.time),
+    timeChunkIndices,
   };
+}
+
+/** List native time-chunk indices that overlap a day slice. */
+export function listTimeChunkIndicesForRange(
+  timeRange: AxisSlice,
+  chunkTime: number,
+  totalDays: number,
+): number[] {
+  const [start, stop] = timeRange;
+  const clampedStart = Math.max(0, start);
+  const clampedStop = Math.min(stop, totalDays);
+  if (clampedStart >= clampedStop) return [];
+
+  const firstChunk = Math.floor(clampedStart / chunkTime);
+  const lastChunk = Math.floor((clampedStop - 1) / chunkTime);
+  return Array.from(
+    { length: lastChunk - firstChunk + 1 },
+    (_, index) => firstChunk + index,
+  );
 }
 
 /** Pick one pixel's series out of a single native on-disk chunk. */
@@ -149,4 +173,33 @@ export function stitchTimeSeries(segments: Float32Array[]): Float32Array {
   }
 
   return series;
+}
+
+type TimeChunkSegment = {
+  values: Float32Array;
+  chunkStartDay: number;
+};
+
+/** Trim stitched native-chunk segments to a day slice. */
+export function stitchTimeSeriesForRange(
+  segments: TimeChunkSegment[],
+  timeRange: AxisSlice,
+  hourCount: number,
+): Float32Array {
+  const [rangeStart, rangeStop] = timeRange;
+  const parts: Float32Array[] = [];
+
+  for (const { values, chunkStartDay } of segments) {
+    const chunkDayCount = values.length / hourCount;
+    const chunkStopDay = chunkStartDay + chunkDayCount;
+    const overlapStart = Math.max(rangeStart, chunkStartDay);
+    const overlapStop = Math.min(rangeStop, chunkStopDay);
+    if (overlapStart >= overlapStop) continue;
+
+    const localStart = overlapStart - chunkStartDay;
+    const localStop = overlapStop - chunkStartDay;
+    parts.push(values.subarray(localStart * hourCount, localStop * hourCount));
+  }
+
+  return stitchTimeSeries(parts);
 }

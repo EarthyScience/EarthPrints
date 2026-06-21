@@ -5,11 +5,17 @@ import {
   extractPixelFromNativeChunk,
   nativeChunkKey,
   pixelToNativeChunkContext,
-  stitchTimeSeries,
+  stitchTimeSeriesForRange,
   type ArrayChunkSizes,
+  type AxisSlice,
   type LocalOffset,
   type PixelNativeChunkContext,
 } from "@/lib/zarr/chunks";
+import {
+  chunkIndexToStartDay,
+  DEFAULT_HISTORY_YEARS,
+  yearsToDayRange,
+} from "@/lib/zarr/timeRange";
 import {
   fetchPixelTimeSeries,
   type ZarrArrayHandle,
@@ -117,10 +123,6 @@ export class ZarrChunkReader {
         this.cache.set(key, entry);
         return entry;
       })
-      .catch((error: unknown) => {
-        this.chunkLoadsInFlight.delete(key);
-        throw error;
-      })
       .finally(() => {
         this.chunkLoadsInFlight.delete(key);
       });
@@ -132,6 +134,9 @@ export class ZarrChunkReader {
   private buildFromNativeCache(
     variable: string,
     context: PixelNativeChunkContext,
+    timeRange: AxisSlice,
+    hourCount: number,
+    chunkTime: number,
     units?: string,
   ): { values: Float32Array; variable: string; units?: string } {
     const localOffset: LocalOffset = {
@@ -145,15 +150,18 @@ export class ZarrChunkReader {
         this.nativeCoords(context, timeChunkIdx),
       );
       const chunk = this.cache.get(key)!;
-      return extractPixelFromNativeChunk(
-        chunk.data,
-        chunk.shape,
-        localOffset,
-      );
+      return {
+        values: extractPixelFromNativeChunk(
+          chunk.data,
+          chunk.shape,
+          localOffset,
+        ),
+        chunkStartDay: chunkIndexToStartDay(timeChunkIdx, chunkTime),
+      };
     });
 
     return {
-      values: stitchTimeSeries(segments),
+      values: stitchTimeSeriesForRange(segments, timeRange, hourCount),
       variable,
       units,
     };
@@ -187,6 +195,9 @@ export class ZarrChunkReader {
       ),
     )
       .then(() => undefined)
+      .catch(() => {
+        // Prefetch is best-effort; explicit requests retry failed chunks.
+      })
       .finally(() => {
         this.prefetchInFlight.delete(prefetchKey);
       });
@@ -197,24 +208,34 @@ export class ZarrChunkReader {
   async getTimeSeries(
     grid: GridCell,
     variable = ZARR_STORE.defaultVariable,
+    historyYears?: number,
   ): Promise<{ values: Float32Array; variable: string; units?: string }> {
     const array = await this.getArray(variable);
     const chunkSizes = this.getChunkSizes(array);
-    const [timeCount] = array.shape;
+    const [timeCount, hourCount] = array.shape;
+    const timeRange = yearsToDayRange(historyYears ?? DEFAULT_HISTORY_YEARS, timeCount);
     const context = pixelToNativeChunkContext(
       grid.latIndex,
       grid.lonIndex,
       timeCount,
       chunkSizes,
+      timeRange,
     );
     const units =
       typeof array.attrs.units === "string" ? array.attrs.units : undefined;
 
     if (this.hasAllNativeChunks(variable, context)) {
-      return this.buildFromNativeCache(variable, context, units);
+      return this.buildFromNativeCache(
+        variable,
+        context,
+        timeRange,
+        hourCount,
+        chunkSizes.time,
+        units,
+      );
     }
 
-    const pixel = await fetchPixelTimeSeries(array, grid, variable);
+    const pixel = await fetchPixelTimeSeries(array, grid, variable, timeRange);
     this.prefetchNativeChunks(array, variable, context);
     return pixel;
   }

@@ -1,5 +1,6 @@
 import * as zarr from "zarrita";
 import { ZARR_STORE } from "@/lib/constants/store";
+import type { AxisSlice } from "@/lib/zarr/chunks";
 import type { GridCell } from "@/types/map";
 
 export type ZarrStore = Awaited<ReturnType<typeof openZarrStore>>;
@@ -20,14 +21,20 @@ export async function openZarrStore(url = ZARR_STORE.url) {
   };
 }
 
-/** Fast path: one pixel, full time × hour, via zarrita's built-in slice assembly. */
+/** One pixel, time × hour slice, via zarrita's built-in slice assembly. */
 export async function fetchPixelTimeSeries(
   array: ZarrArrayHandle,
   grid: GridCell,
   variable = ZARR_STORE.defaultVariable,
+  timeRange?: AxisSlice,
 ): Promise<{ values: Float32Array; variable: string; units?: string }> {
+  const timeSelection =
+    timeRange === undefined
+      ? null
+      : zarr.slice(timeRange[0], timeRange[1]);
+
   const result = await zarr.get(array as Parameters<typeof zarr.get>[0], [
-    null,
+    timeSelection,
     null,
     grid.latIndex,
     grid.lonIndex,

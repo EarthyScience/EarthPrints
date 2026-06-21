@@ -727,6 +727,47 @@ button {
   line-height: 1.55;
 }
 
+.map-readout-control {
+  display: grid;
+  gap: 10px;
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border-strong);
+}
+
+.map-readout-control-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.map-readout-control-label {
+  font-size: 12px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+.map-readout-control-value {
+  font-size: 13px;
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.map-readout-slider {
+  width: 100%;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
+.map-readout-control-hint {
+  color: var(--text-dim);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
 .map-readout-grid {
   display: grid;
   gap: 12px;
