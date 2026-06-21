@@ -6,7 +6,7 @@ export function Brand() {
   return (
     <Link href="/" className="brand" aria-label={`${SITE_NAME} home`}>
       <span className="mark">
-        <BrandMark />
+        <BrandMark size={32} />
       </span>
       <span className="word">
         <b>{SITE_NAME}</b>
