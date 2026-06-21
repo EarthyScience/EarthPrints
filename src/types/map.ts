@@ -1,3 +1,5 @@
+import type { TransitionInterpolator } from "@deck.gl/core";
+
 export type GeoPoint = {
   lon: number;
   lat: number;
@@ -19,4 +21,6 @@ export type MapViewState = {
   zoom: number;
   bearing?: number;
   pitch?: number;
+  transitionDuration?: number;
+  transitionInterpolator?: TransitionInterpolator;
 };

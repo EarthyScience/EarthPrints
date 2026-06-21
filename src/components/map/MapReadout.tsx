@@ -31,8 +31,10 @@ export function MapReadout({
 
   return (
     <aside className="map-readout" aria-live="polite">
-      <p className="map-readout-kicker mono">{ZARR_STORE.kicker}</p>
-      <h2 className="map-readout-title">Pixel location</h2>
+      <div className="map-readout-heading">
+        <h2 className="map-readout-title">Pixel location</h2>
+        <p className="map-readout-kicker mono">{ZARR_STORE.kicker}</p>
+      </div>
       <p className="map-readout-hint">
         Click the map to snap to the {ZARR_STORE.spatialResolutionDeg}°
         grid used by the Zarr Store.
@@ -57,49 +59,51 @@ export function MapReadout({
             onHistoryYearsChange(Number(event.currentTarget.value))
           }
         />
-        <p className="map-readout-control-hint">
+        <p className="map-readout-hint">
           Fetch only the most recent window to keep pixel loads fast.
         </p>
       </div>
 
-      {selection ? (
-        <dl className="map-readout-grid mono">
-          <div>
-            <dt>Click</dt>
-            <dd>{formatGeoPoint(selection.click)}</dd>
-          </div>
-          <div>
-            <dt>Grid cell</dt>
-            <dd>{formatGeoPoint(selection.grid)}</dd>
-          </div>
-          <div>
-            <dt>Indices</dt>
-            <dd>
-              lon {selection.grid.lonIndex}, lat {selection.grid.latIndex}
-            </dd>
-          </div>
-          <div>
-            <dt>Variable</dt>
-            <dd>{ZARR_STORE.defaultVariable}</dd>
-          </div>
-          <div className="map-readout-span">
-            <dt>Time series</dt>
-            <dd>
-              {loadingSeries && "Fetching from Zarr…"}
-              {!loadingSeries && seriesError && seriesError}
-              {!loadingSeries &&
-                !seriesError &&
-                seriesPreview &&
-                seriesLength !== null &&
-                `${seriesLength} steps · first ${seriesPreview
-                  .map((value) => value.toFixed(2))
-                  .join(", ")}${seriesUnits ? ` ${seriesUnits}` : ""}`}
-            </dd>
-          </div>
-        </dl>
-      ) : (
-        <p className="map-readout-empty">No pixel selected yet.</p>
-      )}
+      <div className="map-readout-selection">
+        {selection ? (
+          <dl className="map-readout-grid mono">
+            <div>
+              <dt>Click</dt>
+              <dd>{formatGeoPoint(selection.click)}</dd>
+            </div>
+            <div>
+              <dt>Grid cell</dt>
+              <dd>{formatGeoPoint(selection.grid)}</dd>
+            </div>
+            <div>
+              <dt>Indices</dt>
+              <dd>
+                lon {selection.grid.lonIndex}, lat {selection.grid.latIndex}
+              </dd>
+            </div>
+            <div>
+              <dt>Variable</dt>
+              <dd>{ZARR_STORE.defaultVariable}</dd>
+            </div>
+            <div className="map-readout-span">
+              <dt>Time series</dt>
+              <dd>
+                {loadingSeries && "Fetching from Zarr…"}
+                {!loadingSeries && seriesError && seriesError}
+                {!loadingSeries &&
+                  !seriesError &&
+                  seriesPreview &&
+                  seriesLength !== null &&
+                  `${seriesLength} steps · first ${seriesPreview
+                    .map((value) => value.toFixed(2))
+                    .join(", ")}${seriesUnits ? ` ${seriesUnits}` : ""}`}
+              </dd>
+            </div>
+          </dl>
+        ) : (
+          <p className="map-readout-empty">No pixel selected yet.</p>
+        )}
+      </div>
     </aside>
   );
 }
