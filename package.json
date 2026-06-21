@@ -11,7 +11,7 @@
     "test:watch": "vitest"
   },
   "dependencies": {
-    "@deck.gl/react": "^9.3.3",
+    "@deck.gl/react": "^9.3.4",
     "deck.gl": "^9.3.3",
     "maplibre-gl": "^5.24.0",
     "next": "16.2.9",
