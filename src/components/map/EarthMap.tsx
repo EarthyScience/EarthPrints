@@ -9,7 +9,9 @@ import "maplibre-gl/dist/maplibre-gl.css";
 import { geoPointToZarrGrid } from "@/lib/map/geogrid";
 import { TEAL_ON_DARK_RGB } from "@/lib/constants/theme";
 import { DEFAULT_MAP_VIEW, MAP_BASE_STYLES } from "@/lib/map/viewState";
-import { fetchZarrTimeSeries, openZarrStore } from "@/lib/zarr/store";
+import { openZarrStore } from "@/lib/zarr/store";
+import { ZarrChunkReader } from "@/lib/zarr/ZarrChunkReader";
+import { DEFAULT_HISTORY_YEARS } from "@/lib/zarr/timeRange";
 import type { MapSelection } from "@/types/map";
 import { useTheme } from "@/providers/ThemeProvider";
 import { MapReadout } from "@/components/map/MapReadout";
@@ -20,51 +22,74 @@ type EarthMapProps = {
 
 export function EarthMap({ className }: EarthMapProps) {
   const { isLight } = useTheme();
-  const dsRef = useRef<Awaited<ReturnType<typeof openZarrStore>> | null>(
-    null,
-  );
+  const readerPromiseRef = useRef<Promise<ZarrChunkReader> | null>(null);
   const requestIdRef = useRef(0);
 
   const [selection, setSelection] = useState<MapSelection | null>(null);
+  const [historyYears, setHistoryYears] = useState(DEFAULT_HISTORY_YEARS);
   const [loadingSeries, setLoadingSeries] = useState(false);
   const [seriesError, setSeriesError] = useState<string | null>(null);
+  const [seriesLength, setSeriesLength] = useState<number | null>(null);
   const [seriesPreview, setSeriesPreview] = useState<number[] | null>(null);
   const [seriesUnits, setSeriesUnits] = useState<string | null>(null);
 
-  const loadTimeSeries = useCallback(async (nextSelection: MapSelection) => {
-    const requestId = ++requestIdRef.current;
-    setLoadingSeries(true);
-    setSeriesError(null);
-    setSeriesPreview(null);
-    setSeriesUnits(null);
+  const loadTimeSeries = useCallback(
+    async (nextSelection: MapSelection, years: number) => {
+      const requestId = ++requestIdRef.current;
+      setLoadingSeries(true);
+      setSeriesError(null);
+      setSeriesLength(null);
+      setSeriesPreview(null);
+      setSeriesUnits(null);
 
-    try {
-      if (!dsRef.current) {
-        dsRef.current = await openZarrStore();
+      try {
+        if (!readerPromiseRef.current) {
+          readerPromiseRef.current = openZarrStore()
+            .then((ds) => new ZarrChunkReader(ds))
+            .catch((error) => {
+              readerPromiseRef.current = null;
+              throw error;
+            });
+        }
+
+        const reader = await readerPromiseRef.current;
+
+        const { values, units } = await reader.getTimeSeries(
+          nextSelection.grid,
+          undefined,
+          years,
+        );
+
+        if (requestId !== requestIdRef.current) return;
+
+        setSeriesLength(values.length);
+        setSeriesPreview(Array.from(values.subarray(0, 3)));
+        setSeriesUnits(units ?? null);
+      } catch (error) {
+        if (requestId !== requestIdRef.current) return;
+        setSeriesError(
+          error instanceof Error
+            ? error.message
+            : "Could not load the Zarr time series.",
+        );
+      } finally {
+        if (requestId === requestIdRef.current) {
+          setLoadingSeries(false);
+        }
       }
+    },
+    [],
+  );
 
-      const { values, units } = await fetchZarrTimeSeries(
-        dsRef.current,
-        nextSelection.grid,
-      );
-
-      if (requestId !== requestIdRef.current) return;
-
-      setSeriesPreview(Array.from(values));
-      setSeriesUnits(units ?? null);
-    } catch (error) {
-      if (requestId !== requestIdRef.current) return;
-      setSeriesError(
-        error instanceof Error
-          ? error.message
-          : "Could not load the Zarr time series.",
-      );
-    } finally {
-      if (requestId === requestIdRef.current) {
-        setLoadingSeries(false);
+  const handleHistoryYearsChange = useCallback(
+    (years: number) => {
+      setHistoryYears(years);
+      if (selection) {
+        void loadTimeSeries(selection, years);
       }
-    }
-  }, []);
+    },
+    [selection, loadTimeSeries],
+  );
 
   const handleClick = useCallback(
     (info: PickingInfo) => {
@@ -77,9 +102,9 @@ export function EarthMap({ className }: EarthMapProps) {
       };
 
       setSelection(nextSelection);
-      void loadTimeSeries(nextSelection);
+      void loadTimeSeries(nextSelection, historyYears);
     },
-    [loadTimeSeries],
+    [historyYears, loadTimeSeries],
   );
 
   const layers = useMemo(() => {
@@ -122,8 +147,11 @@ export function EarthMap({ className }: EarthMapProps) {
 
       <MapReadout
         selection={selection}
+        historyYears={historyYears}
+        onHistoryYearsChange={handleHistoryYearsChange}
         loadingSeries={loadingSeries}
         seriesError={seriesError}
+        seriesLength={seriesLength}
         seriesPreview={seriesPreview}
         seriesUnits={seriesUnits}
       />

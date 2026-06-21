@@ -3,22 +3,32 @@
 import type { MapSelection } from "@/types/map";
 import { formatGeoPoint } from "@/lib/map/geogrid";
 import { ZARR_STORE } from "@/lib/constants/store";
+import { ZARR_TIME } from "@/lib/zarr/timeRange";
 
 type MapReadoutProps = {
   selection: MapSelection | null;
+  historyYears: number;
+  onHistoryYearsChange: (years: number) => void;
   loadingSeries: boolean;
   seriesError: string | null;
+  seriesLength: number | null;
   seriesPreview: number[] | null;
   seriesUnits: string | null;
 };
 
 export function MapReadout({
   selection,
+  historyYears,
+  onHistoryYearsChange,
   loadingSeries,
   seriesError,
+  seriesLength,
   seriesPreview,
   seriesUnits,
 }: MapReadoutProps) {
+  const historyLabel =
+    historyYears === 1 ? "Last 1 year" : `Last ${historyYears} years`;
+
   return (
     <aside className="map-readout" aria-live="polite">
       <p className="map-readout-kicker mono">{ZARR_STORE.kicker}</p>
@@ -27,6 +37,30 @@ export function MapReadout({
         Click the map to snap to the {ZARR_STORE.spatialResolutionDeg}°
         grid used by the Zarr Store.
       </p>
+
+      <div className="map-readout-control">
+        <div className="map-readout-control-header">
+          <label className="map-readout-control-label" htmlFor="history-years">
+            History window
+          </label>
+          <span className="map-readout-control-value mono">{historyLabel}</span>
+        </div>
+        <input
+          id="history-years"
+          className="map-readout-slider"
+          type="range"
+          min={ZARR_TIME.defaultHistoryYears}
+          max={ZARR_TIME.maxHistoryYears}
+          step={1}
+          value={historyYears}
+          onChange={(event) =>
+            onHistoryYearsChange(Number(event.currentTarget.value))
+          }
+        />
+        <p className="map-readout-control-hint">
+          Fetch only the most recent window to keep pixel loads fast.
+        </p>
+      </div>
 
       {selection ? (
         <dl className="map-readout-grid mono">
@@ -56,8 +90,8 @@ export function MapReadout({
               {!loadingSeries &&
                 !seriesError &&
                 seriesPreview &&
-                `${seriesPreview.length} steps · first ${seriesPreview
-                  .slice(0, 3)
+                seriesLength !== null &&
+                `${seriesLength} steps · first ${seriesPreview
                   .map((value) => value.toFixed(2))
                   .join(", ")}${seriesUnits ? ` ${seriesUnits}` : ""}`}
             </dd>
