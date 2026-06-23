@@ -5,11 +5,19 @@ import { MoonIcon } from "@/icons/MoonIcon";
 import { SunIcon } from "@/icons/SunIcon";
 import { useTheme } from "@/providers/ThemeProvider";
 
-export function ThemeToggle() {
+type ThemeToggleProps = {
+  className?: string;
+};
+
+export function ThemeToggle({ className }: ThemeToggleProps) {
   const { toggleTheme } = useTheme();
 
   return (
-    <IconButton onClick={toggleTheme} aria-label="Toggle theme">
+    <IconButton
+      onClick={toggleTheme}
+      aria-label="Toggle theme"
+      className={className}
+    >
       <SunIcon />
       <MoonIcon />
     </IconButton>

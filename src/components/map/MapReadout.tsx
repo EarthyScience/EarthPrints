@@ -30,19 +30,19 @@ export function MapReadout({
     historyYears === 1 ? "Last 1 year" : `Last ${historyYears} years`;
 
   return (
-    <aside className="map-readout" aria-live="polite">
+    <aside className="map-readout map-panel map-panel--left map-island" aria-live="polite">
       <div className="map-readout-heading">
-        <h2 className="map-readout-title">Pixel location</h2>
-        <p className="map-readout-kicker mono">{ZARR_STORE.kicker}</p>
+        <h2 className="ds-title map-readout-title">Pixel location</h2>
+        <p className="ds-kicker map-readout-kicker mono">{ZARR_STORE.kicker}</p>
       </div>
-      <p className="map-readout-hint">
+      <p className="ds-hint map-readout-hint">
         Click the map to snap to the {ZARR_STORE.spatialResolutionDeg}°
         grid used by the Zarr Store.
       </p>
 
       <div className="map-readout-control">
         <div className="map-readout-control-header">
-          <label className="map-readout-control-label" htmlFor="history-years">
+          <label className="ds-label map-readout-control-label" htmlFor="history-years">
             History window
           </label>
           <span className="map-readout-control-value mono">{historyLabel}</span>
@@ -59,7 +59,7 @@ export function MapReadout({
             onHistoryYearsChange(Number(event.currentTarget.value))
           }
         />
-        <p className="map-readout-hint">
+        <p className="ds-hint map-readout-hint">
           Fetch only the most recent window to keep pixel loads fast.
         </p>
       </div>
@@ -101,7 +101,7 @@ export function MapReadout({
             </div>
           </dl>
         ) : (
-          <p className="map-readout-empty">No pixel selected yet.</p>
+          <p className="ds-hint map-readout-empty">No pixel selected yet.</p>
         )}
       </div>
     </aside>

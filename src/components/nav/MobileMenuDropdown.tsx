@@ -5,12 +5,7 @@ import { usePathname } from "next/navigation";
 import { useEffect } from "react";
 import { ArrowUpRight } from "@/icons/ArrowUpRight";
 import { NAV_LINKS } from "@/lib/constants/nav";
-
-function isActive(pathname: string, href: string): boolean {
-  if (href === "#") return false;
-  if (href === "/") return pathname === "/";
-  return pathname === href || pathname.startsWith(`${href}/`);
-}
+import { isActiveLink } from "@/lib/nav/isActiveLink";
 
 type MobileMenuDropdownProps = {
   open: boolean;
@@ -58,13 +53,13 @@ export function MobileMenuDropdown({
             <Link
               key={link.label}
               href={link.href}
-              className={isActive(pathname, link.href) ? "active" : undefined}
+              className={isActiveLink(pathname, link.href) ? "active" : undefined}
               onClick={onClose}
             >
               {link.label}
             </Link>
           ))}
-          {!isActive(pathname, "/map") && (
+          {!isActiveLink(pathname, "/map") && (
             <Link href="/map" className="nav-dropdown-cta" onClick={onClose}>
               Open Map
               <span className="arrow">

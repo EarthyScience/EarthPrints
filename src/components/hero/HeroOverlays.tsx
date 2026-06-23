@@ -3,7 +3,6 @@ export function HeroOverlays() {
     <>
       <div className="hero-glow" />
       <div className="hero-grain" />
-      <div className="hero-scrim" />
     </>
   );
 }

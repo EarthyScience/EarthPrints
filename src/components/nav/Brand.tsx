@@ -8,7 +8,7 @@ export function Brand() {
       <span className="mark">
         <BrandMark size={32} />
       </span>
-      <span className="word">
+      <span className="word ds-brand-word">
         <b>{SITE_NAME}</b>
       </span>
     </Link>

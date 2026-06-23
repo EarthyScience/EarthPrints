@@ -1,0 +1,175 @@
+/* Shared UI primitives — compose these classes in components. */
+
+.island,
+.map-island {
+  border: 1px solid var(--map-island-border, var(--elevated-border));
+  border-radius: var(--radius-lg);
+  color: var(--text);
+  background: var(--elevated-bg);
+  backdrop-filter: blur(var(--blur-elevated));
+  -webkit-backdrop-filter: blur(var(--blur-elevated));
+  box-shadow: var(--elevated-shadow);
+}
+
+.elevated-chip,
+.map-nav-chip:not(.icon-btn) {
+  border: 1px solid var(--elevated-border);
+  border-radius: var(--radius-md);
+  background: var(--elevated-bg);
+  backdrop-filter: blur(var(--blur-elevated));
+  -webkit-backdrop-filter: blur(var(--blur-elevated));
+  box-shadow: var(--elevated-shadow);
+  color: var(--text);
+  transition:
+    border-color var(--duration-fast),
+    background var(--duration-fast);
+}
+
+.map-nav-chip.icon-btn {
+  border: 1px solid var(--elevated-border);
+  border-radius: 50%;
+  background: var(--elevated-bg);
+  backdrop-filter: blur(var(--blur-elevated));
+  -webkit-backdrop-filter: blur(var(--blur-elevated));
+  box-shadow: var(--elevated-shadow);
+  color: var(--text);
+  transition:
+    border-color var(--duration-fast),
+    background var(--duration-fast);
+}
+
+.elevated-chip:hover,
+.map-nav-theme.icon-btn:hover,
+.map-nav-brand:hover,
+.map-nav-chip.icon-btn:hover {
+  border-color: color-mix(in srgb, var(--elevated-border) 60%, var(--text));
+  background: color-mix(in srgb, var(--elevated-bg) 88%, var(--surface-2));
+}
+
+.ds-brand-word,
+.brand .word,
+.map-nav-brand-word {
+  font-weight: 600;
+  font-size: var(--font-size-lg);
+  letter-spacing: var(--tracking-snug);
+  white-space: nowrap;
+}
+
+.brand .word {
+  font-size: var(--font-size-brand);
+}
+
+.ds-brand-word b,
+.brand .word b,
+.map-nav-brand-word b {
+  font-weight: 600;
+}
+
+.ds-title,
+.map-readout-title {
+  font-size: var(--font-size-xl);
+  font-weight: 600;
+  letter-spacing: var(--tracking-tight);
+  margin-bottom: 0;
+  color: var(--text);
+}
+
+.ds-kicker,
+.map-readout-kicker {
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  flex-shrink: 0;
+  font-size: var(--font-size-xs);
+  font-weight: 600;
+  letter-spacing: var(--tracking-wider);
+  text-transform: uppercase;
+  color: var(--accent);
+  padding: 5px 10px;
+  border-radius: var(--radius-pill);
+  border: 1px solid color-mix(in srgb, var(--accent) 40%, transparent);
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+}
+
+.ds-label,
+.map-readout-control-label {
+  font-size: var(--font-size-sm);
+  letter-spacing: var(--tracking-wide);
+  text-transform: uppercase;
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
+.ds-hint,
+.map-readout-hint,
+.map-readout-empty {
+  color: var(--text-secondary);
+  font-size: var(--font-size-meta);
+  line-height: 1.55;
+}
+
+.ds-nav-link,
+.map-nav-menu-links a {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: var(--font-size-base);
+  color: var(--text-secondary);
+  padding: 7px 10px;
+  border-radius: var(--radius-sm);
+  letter-spacing: var(--tracking-normal);
+  transition:
+    color var(--duration-fast),
+    background var(--duration-fast);
+}
+
+.ds-nav-link:hover,
+.map-nav-menu-links a:hover {
+  color: var(--text);
+  background: var(--surface-2);
+}
+
+.ds-nav-link.active,
+.map-nav-menu-links a.active {
+  color: var(--text);
+  background: color-mix(in srgb, var(--accent) 10%, var(--surface-2));
+}
+
+.ds-nav-link.active::before,
+.map-nav-menu-links a.active::before {
+  content: "";
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: var(--accent);
+  flex-shrink: 0;
+}
+
+.ds-enter {
+  animation: fadeIn var(--duration-enter) var(--ease-out);
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.map-panel {
+  position: fixed;
+  top: var(--map-panel-top);
+  padding: var(--space-5) var(--space-5) var(--space-4);
+}
+
+.map-panel--left {
+  left: var(--space-page-x);
+  z-index: 2;
+}
+
+.map-panel--right {
+  right: var(--space-page-x);
+  z-index: 81;
+}

@@ -12,18 +12,36 @@ export function HeroCanvas() {
     const canvas = canvasRef.current;
     if (!canvas) return;
 
+    const reduceMotion = window.matchMedia(
+      "(prefers-reduced-motion: reduce)",
+    ).matches;
     let raf = 0;
+    let start = performance.now();
 
-    const draw = () => {
-      drawHeroField(canvas, isLight);
+    const drawFrame = (now: number) => {
+      const time = reduceMotion ? 0 : (now - start) / 1000;
+      drawHeroField(canvas, isLight, time);
+      if (!reduceMotion) {
+        raf = requestAnimationFrame(drawFrame);
+      }
     };
 
     const onResize = () => {
       cancelAnimationFrame(raf);
-      raf = requestAnimationFrame(draw);
+      start = performance.now();
+      if (reduceMotion) {
+        drawHeroField(canvas, isLight, 0);
+      } else {
+        raf = requestAnimationFrame(drawFrame);
+      }
     };
 
-    draw();
+    if (reduceMotion) {
+      drawHeroField(canvas, isLight, 0);
+    } else {
+      raf = requestAnimationFrame(drawFrame);
+    }
+
     window.addEventListener("resize", onResize);
 
     return () => {
