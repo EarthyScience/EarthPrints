@@ -2,6 +2,8 @@
 
 import { useEffect, useId, useRef, useState } from "react";
 import { AboutContent } from "@/components/about/AboutContent";
+import { IconButton } from "@/components/ui/IconButton";
+import { QuestionMarkIcon } from "@/icons/QuestionMarkIcon";
 
 export function EditorAboutDropdown() {
   const [open, setOpen] = useState(false);
@@ -31,15 +33,15 @@ export function EditorAboutDropdown() {
 
   return (
     <div className="editor-about-dropdown" ref={rootRef}>
-      <button
-        type="button"
-        className="editor-nav-btn"
+      <IconButton
+        className="editor-about-trigger"
+        aria-label="About the team"
         aria-expanded={open}
         aria-controls={panelId}
         onClick={() => setOpen((current) => !current)}
       >
-        About
-      </button>
+        <QuestionMarkIcon />
+      </IconButton>
 
       <div
         id={panelId}

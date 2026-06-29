@@ -849,7 +849,6 @@ body:has(.editor-shell) .footer {
 
 .editor-preview-frame,
 .editor-view-tabs,
-.nav--editor .editor-nav-btn,
 .nav--editor .icon-btn {
   border: 1px solid var(--editor-border);
   background: var(--editor-bg-primary);
@@ -1031,29 +1030,13 @@ body:has(.editor-shell) .footer {
   color: var(--editor-fg-primary);
 }
 
-.nav--editor .editor-nav-btn[aria-expanded="true"] {
+.nav--editor .editor-about-trigger[aria-expanded="true"] {
   position: relative;
   z-index: 102;
 }
 
 .editor-about-dropdown {
   position: relative;
-}
-
-.editor-nav-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  height: 32px;
-  padding: 0 12px;
-  box-sizing: border-box;
-  border-radius: var(--editor-radius-sm);
-  font-size: 12px;
-  font-weight: 600;
-  letter-spacing: -0.01em;
-  line-height: 1;
-  color: var(--editor-fg-primary);
-  cursor: pointer;
 }
 
 .editor-about-panel {
