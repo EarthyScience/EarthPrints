@@ -1,13 +1,5 @@
 import type { TeamMember } from "@/types/about";
 
-export const ABOUT_INTRO = {
-  chip: "Team",
-  label: "EarthPrints",
-  title: "Built at the intersection of climate science and the web.",
-  description:
-    "EarthPrints is a browser-native tool for exploring environmental fingerprints and flux-tower footprints. Click any pixel on a global map to inspect climate variables over time, alongside the spatial footprint of nearby eddy-covariance towers.",
-};
-
 export const TEAM_MEMBERS: TeamMember[] = [
   {
     name: "Anastasiia Ivanchenko",

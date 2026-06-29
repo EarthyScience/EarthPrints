@@ -93,6 +93,75 @@ export function gridCellToGuidePaths(
   ];
 }
 
+const GLOBE_GUIDE_STEP_DEG = 2;
+
+/** Add intermediate points so lines drape on the globe surface. */
+export function densifyLonLatPath(path: LonLatPath, stepDeg = GLOBE_GUIDE_STEP_DEG): LonLatPath {
+  if (path.length < 2) return path;
+
+  const [start, end] = [path[0], path[path.length - 1]];
+  const [lon0, lat0] = start;
+  const [lon1, lat1] = end;
+  const result: LonLatPath = [start];
+
+  if (Math.abs(lon0 - lon1) < 1e-9) {
+    const minLat = Math.min(lat0, lat1);
+    const maxLat = Math.max(lat0, lat1);
+    for (let lat = minLat + stepDeg; lat < maxLat; lat += stepDeg) {
+      result.push([lon0, lat]);
+    }
+  } else if (Math.abs(lat0 - lat1) < 1e-9) {
+    const minLon = Math.min(lon0, lon1);
+    const maxLon = Math.max(lon0, lon1);
+    for (let lon = minLon + stepDeg; lon < maxLon; lon += stepDeg) {
+      result.push([lon, lat0]);
+    }
+  }
+
+  result.push(end);
+  return result;
+}
+
+export type SelectionGuideGeoJson = {
+  type: "FeatureCollection";
+  features: Array<{
+    type: "Feature";
+    properties: { kind: "guide" | "cell" };
+    geometry:
+      | { type: "LineString"; coordinates: LonLatPath }
+      | { type: "Polygon"; coordinates: LonLatPath[] };
+  }>;
+};
+
+/** GeoJSON for MapLibre selection overlays that drape on the globe surface. */
+export function selectionGuideGeoJson(
+  cell: GridCell,
+  guidePaths: LonLatPath[],
+): SelectionGuideGeoJson {
+  const corners = gridCellToPolygon(cell);
+  const ring: LonLatPath = corners.map((point) => [point.lon, point.lat]);
+  ring.push(ring[0]);
+
+  return {
+    type: "FeatureCollection",
+    features: [
+      ...guidePaths.map((path) => ({
+        type: "Feature" as const,
+        properties: { kind: "guide" as const },
+        geometry: {
+          type: "LineString" as const,
+          coordinates: densifyLonLatPath(path),
+        },
+      })),
+      {
+        type: "Feature",
+        properties: { kind: "cell" },
+        geometry: { type: "Polygon", coordinates: [ring] },
+      },
+    ],
+  };
+}
+
 export function formatCoordinate(value: number, digits = 3): string {
   const direction = value >= 0 ? "" : "-";
   return `${direction}${Math.abs(value).toFixed(digits)}°`;

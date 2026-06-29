@@ -4,6 +4,8 @@ import {
   gridCellToBounds,
   gridCellToGuidePaths,
   gridCellToPolygon,
+  densifyLonLatPath,
+  selectionGuideGeoJson,
 } from "@/lib/map/geogrid";
 import { ZARR_STORE } from "@/lib/constants/store";
 
@@ -70,5 +72,32 @@ describe("gridCellToGuidePaths", () => {
         [9, 52],
       ],
     ]);
+  });
+});
+
+describe("densifyLonLatPath", () => {
+  it("adds intermediate points along a meridian segment", () => {
+    const path = densifyLonLatPath([
+      [10, 0],
+      [10, 6],
+    ]);
+
+    expect(path[0]).toEqual([10, 0]);
+    expect(path).toContainEqual([10, 2]);
+    expect(path).toContainEqual([10, 4]);
+    expect(path[path.length - 1]).toEqual([10, 6]);
+  });
+});
+
+describe("selectionGuideGeoJson", () => {
+  it("builds guide and cell features from shared guide paths", () => {
+    const cell = geoPointToZarrGrid({ lon: 10.012, lat: 51.998 });
+    const viewport = { west: 9, east: 11, south: 51, north: 53 };
+    const guidePaths = gridCellToGuidePaths(gridCellToBounds(cell), viewport);
+    const geojson = selectionGuideGeoJson(cell, guidePaths);
+
+    expect(geojson.features).toHaveLength(5);
+    expect(geojson.features.filter((f) => f.properties.kind === "guide")).toHaveLength(4);
+    expect(geojson.features.find((f) => f.properties.kind === "cell")).toBeDefined();
   });
 });

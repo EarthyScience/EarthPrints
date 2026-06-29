@@ -1,16 +1,5 @@
-import type { Metadata } from "next";
-import { Hero } from "@/components/hero/Hero";
-import { Nav } from "@/components/layout/Nav";
-
-export const metadata: Metadata = {
-  title: "Explore the planet, pixel by pixel",
-};
+import { redirect } from "next/navigation";
 
 export default function Home() {
-  return (
-    <>
-      <Nav />
-      <Hero />
-    </>
-  );
+  redirect("/map");
 }

@@ -1,11 +1,10 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import DeckGL from "@deck.gl/react";
 import { PathLayer, PolygonLayer } from "@deck.gl/layers";
 import { PathStyleExtension } from "@deck.gl/extensions";
-import type { PickingInfo, ViewStateChangeParameters } from "@deck.gl/core";
-import Map from "react-map-gl/maplibre";
+import type { Layer } from "@deck.gl/core";
+import Map, { type MapMouseEvent, type MapRef, type ViewStateChangeEvent } from "react-map-gl/maplibre";
 import type { StyleSpecification } from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import {
@@ -17,44 +16,55 @@ import {
 import { loadDarkMapStyle, brightenDarkMapPlaceLabels } from "@/lib/map/mapLabels";
 import type { MapLibreEvent, MapStyleDataEvent } from "maplibre-gl";
 import { viewportToGeoBounds } from "@/lib/map/viewportBounds";
-import { TEAL_ON_DARK_RGB, TEAL_RGB } from "@/lib/constants/theme";
-import { DEFAULT_MAP_VIEW, MAP_BASE_STYLES, viewStateFocusedOnCell } from "@/lib/map/viewState";
+import { SELECTION_CELL_COLOR, SELECTION_GUIDE_COLOR } from "@/lib/map/selectionStyle";
+import {
+  DEFAULT_MAP_VIEW,
+  MAP_BASE_STYLES,
+  SELECTION_FOCUS_TRANSITION_MS,
+  viewStateFocusedOnCell,
+  viewStateForMode,
+} from "@/lib/map/viewState";
 import { openZarrStore } from "@/lib/zarr/store";
 import { ZarrChunkReader } from "@/lib/zarr/ZarrChunkReader";
 import { DEFAULT_HISTORY_YEARS } from "@/lib/zarr/timeRange";
-import type { MapSelection, MapViewState } from "@/types/map";
+import type { MapSelection, MapViewMode, MapViewState } from "@/types/map";
 import { useTheme } from "@/providers/ThemeProvider";
+import { EditorShell } from "@/components/layout/EditorShell";
+import { Nav } from "@/components/layout/Nav";
 import { MapReadout } from "@/components/map/MapReadout";
-
-type EarthMapProps = {
-  className?: string;
-};
+import { MapDeckOverlay } from "@/components/map/MapDeckOverlay";
+import { GlobeSelectionOverlay } from "@/components/map/GlobeSelectionOverlay";
 
 const dashedPathExtension = new PathStyleExtension({ dash: true });
 
-const GUIDE_LINE_COLOR = {
-  light: [110, 110, 110, 170] as [number, number, number, number],
-  dark: [190, 190, 190, 150] as [number, number, number, number],
-};
-
-const SELECTION_CELL_COLOR = {
-  light: {
-    fill: [...TEAL_RGB, 36] as [number, number, number, number],
-    line: [...TEAL_RGB, 255] as [number, number, number, number],
+function toMapViewState(
+  viewState: {
+    longitude: number;
+    latitude: number;
+    zoom: number;
+    bearing: number;
+    pitch: number;
   },
-  dark: {
-    fill: [255, 255, 255, 48] as [number, number, number, number],
-    line: [...TEAL_ON_DARK_RGB, 255] as [number, number, number, number],
-  },
-};
+  mode: MapViewMode,
+): MapViewState {
+  return {
+    longitude: viewState.longitude,
+    latitude: viewState.latitude,
+    zoom: viewState.zoom,
+    bearing: mode === "sphere" ? viewState.bearing : 0,
+    pitch: mode === "sphere" ? viewState.pitch : 0,
+  };
+}
 
-export function EarthMap({ className }: EarthMapProps) {
+export function EarthMap() {
   const { isLight } = useTheme();
   const readerPromiseRef = useRef<Promise<ZarrChunkReader> | null>(null);
   const requestIdRef = useRef(0);
   const mapStageRef = useRef<HTMLDivElement>(null);
+  const mapRef = useRef<MapRef>(null);
 
   const [viewState, setViewState] = useState<MapViewState>(DEFAULT_MAP_VIEW);
+  const [viewMode, setViewMode] = useState<MapViewMode>("2d");
   const [mapSize, setMapSize] = useState({ width: 0, height: 0 });
   const [selection, setSelection] = useState<MapSelection | null>(null);
   const [historyYears, setHistoryYears] = useState(DEFAULT_HISTORY_YEARS);
@@ -66,6 +76,8 @@ export function EarthMap({ className }: EarthMapProps) {
   const [darkMapStyle, setDarkMapStyle] = useState<StyleSpecification | null>(
     null,
   );
+
+  const isSphere = viewMode === "sphere";
 
   useEffect(() => {
     let cancelled = false;
@@ -144,6 +156,17 @@ export function EarthMap({ className }: EarthMapProps) {
     [],
   );
 
+  const flyToView = useCallback((next: MapViewState, duration = 0) => {
+    mapRef.current?.flyTo({
+      center: [next.longitude, next.latitude],
+      zoom: next.zoom,
+      bearing: next.bearing ?? 0,
+      pitch: next.pitch ?? 0,
+      duration,
+    });
+    setViewState(next);
+  }, []);
+
   const handleHistoryYearsChange = useCallback(
     (years: number) => {
       setHistoryYears(years);
@@ -154,35 +177,45 @@ export function EarthMap({ className }: EarthMapProps) {
     [selection, loadTimeSeries],
   );
 
-  const handleClick = useCallback(
-    (info: PickingInfo) => {
-      if (!info.coordinate) return;
-
-      const [lon, lat] = info.coordinate;
+  const handlePick = useCallback(
+    (lon: number, lat: number) => {
       const nextSelection: MapSelection = {
         click: { lon, lat },
         grid: geoPointToZarrGrid({ lon, lat }),
       };
 
       setSelection(nextSelection);
-      setViewState((current) =>
-        viewStateFocusedOnCell(current, nextSelection.grid),
-      );
+      const focused = viewStateFocusedOnCell(viewState, nextSelection.grid, viewMode);
+      flyToView(focused, SELECTION_FOCUS_TRANSITION_MS);
       void loadTimeSeries(nextSelection, historyYears);
     },
-    [historyYears, loadTimeSeries],
+    [flyToView, historyYears, loadTimeSeries, viewMode, viewState],
   );
 
-  const handleViewStateChange = useCallback(
-    ({ viewState: nextViewState }: ViewStateChangeParameters) => {
-      setViewState(nextViewState as MapViewState);
+  const handleMapClick = useCallback(
+    (event: MapMouseEvent) => {
+      handlePick(event.lngLat.lng, event.lngLat.lat);
     },
-    [],
+    [handlePick],
   );
 
-  const mapStyle = isLight
-    ? MAP_BASE_STYLES.light
-    : darkMapStyle;
+  const handleViewModeChange = useCallback(
+    (mode: MapViewMode) => {
+      setViewMode(mode);
+      const next = viewStateForMode(viewState, mode);
+      flyToView(next, SELECTION_FOCUS_TRANSITION_MS);
+    },
+    [flyToView, viewState],
+  );
+
+  const handleMove = useCallback(
+    (event: ViewStateChangeEvent) => {
+      setViewState(toMapViewState(event.viewState, viewMode));
+    },
+    [viewMode],
+  );
+
+  const mapStyle = isLight ? MAP_BASE_STYLES.light : darkMapStyle;
 
   const applyDarkMapLabelColors = useCallback(
     (event: MapLibreEvent | MapStyleDataEvent) => {
@@ -195,8 +228,11 @@ export function EarthMap({ className }: EarthMapProps) {
   const handleMapLoad = useCallback(
     (event: MapLibreEvent) => {
       applyDarkMapLabelColors(event);
+      if (isSphere) {
+        event.target.setProjection({ type: "globe" });
+      }
     },
-    [applyDarkMapLabelColors],
+    [applyDarkMapLabelColors, isSphere],
   );
 
   const handleStyleData = useCallback(
@@ -208,31 +244,10 @@ export function EarthMap({ className }: EarthMapProps) {
   );
 
   const layers = useMemo(() => {
-    if (!selection || mapSize.width === 0 || mapSize.height === 0) return [];
+    if (isSphere || !selection || mapSize.width === 0 || mapSize.height === 0) return [];
 
-    const cellBounds = gridCellToBounds(selection.grid);
-    const viewportBounds = viewportToGeoBounds(
-      viewState,
-      mapSize.width,
-      mapSize.height,
-    );
-    const guidePaths = gridCellToGuidePaths(cellBounds, viewportBounds);
-    const guideColor = isLight ? GUIDE_LINE_COLOR.light : GUIDE_LINE_COLOR.dark;
     const cellColor = isLight ? SELECTION_CELL_COLOR.light : SELECTION_CELL_COLOR.dark;
-
-    return [
-      new PathLayer({
-        id: "selected-grid-cell-guides",
-        data: guidePaths,
-        getPath: (path) => path,
-        pickable: false,
-        widthUnits: "pixels",
-        getWidth: 1,
-        getColor: guideColor,
-        extensions: [dashedPathExtension],
-        getDashArray: [6, 5],
-        dashJustified: true,
-      }),
+    const nextLayers: Layer[] = [
       new PolygonLayer({
         id: "selected-grid-cell",
         data: [selection.grid],
@@ -248,41 +263,93 @@ export function EarthMap({ className }: EarthMapProps) {
         lineWidthUnits: "pixels",
       }),
     ];
-  }, [isLight, mapSize.height, mapSize.width, selection, viewState]);
+
+    const cellBounds = gridCellToBounds(selection.grid);
+    const guidePaths = gridCellToGuidePaths(
+      cellBounds,
+      viewportToGeoBounds(viewState, mapSize.width, mapSize.height),
+    );
+    const guideColor = isLight ? SELECTION_GUIDE_COLOR.light : SELECTION_GUIDE_COLOR.dark;
+
+    nextLayers.unshift(
+      new PathLayer({
+        id: "selected-grid-cell-guides",
+        data: guidePaths,
+        getPath: (path) => path,
+        pickable: false,
+        widthUnits: "pixels",
+        getWidth: 1,
+        getColor: guideColor,
+        extensions: [dashedPathExtension],
+        getDashArray: [6, 5],
+        dashJustified: true,
+      }),
+    );
+
+    return nextLayers;
+  }, [isLight, isSphere, mapSize.height, mapSize.width, selection, viewState]);
 
   return (
-    <div className={className ?? "map-shell"}>
-      <div className="map-stage" ref={mapStageRef}>
-        <DeckGL
-          viewState={viewState}
-          onViewStateChange={handleViewStateChange}
-          controller
-          layers={layers}
-          onClick={handleClick}
-          getCursor={() => "crosshair"}
-        >
+    <EditorShell
+      header={
+        <Nav
+          viewMode={viewMode}
+          onViewModeChange={handleViewModeChange}
+        />
+      }
+      sidebar={
+        <MapReadout
+          selection={selection}
+          historyYears={historyYears}
+          onHistoryYearsChange={handleHistoryYearsChange}
+          loadingSeries={loadingSeries}
+          seriesError={seriesError}
+          seriesLength={seriesLength}
+          seriesPreview={seriesPreview}
+          seriesUnits={seriesUnits}
+        />
+      }
+      preview={
+        <div className="map-stage" ref={mapStageRef}>
           {mapStyle ? (
             <Map
+              ref={mapRef}
+              key={viewMode}
               mapStyle={mapStyle}
-              attributionControl={false}
-              reuseMaps
+              projection={isSphere ? "globe" : "mercator"}
+              longitude={viewState.longitude}
+              latitude={viewState.latitude}
+              zoom={viewState.zoom}
+              bearing={viewState.bearing ?? 0}
+              pitch={viewState.pitch ?? 0}
+              minZoom={0}
+              maxZoom={22}
+              dragRotate={isSphere}
+              pitchWithRotate={isSphere}
+              touchZoomRotate={isSphere}
+              touchPitch={isSphere}
+              maxPitch={isSphere ? 85 : 0}
+              onMove={handleMove}
+              onClick={handleMapClick}
               onLoad={handleMapLoad}
               onStyleData={handleStyleData}
-            />
+              attributionControl={false}
+              cursor="crosshair"
+              style={{ width: "100%", height: "100%" }}
+            >
+              {isSphere && selection ? (
+                <GlobeSelectionOverlay
+                  cell={selection.grid}
+                  viewState={viewState}
+                  mapSize={mapSize}
+                  isLight={isLight}
+                />
+              ) : null}
+              <MapDeckOverlay layers={layers} interleaved />
+            </Map>
           ) : null}
-        </DeckGL>
-      </div>
-
-      <MapReadout
-        selection={selection}
-        historyYears={historyYears}
-        onHistoryYearsChange={handleHistoryYearsChange}
-        loadingSeries={loadingSeries}
-        seriesError={seriesError}
-        seriesLength={seriesLength}
-        seriesPreview={seriesPreview}
-        seriesUnits={seriesUnits}
-      />
-    </div>
+        </div>
+      }
+    />
   );
 }

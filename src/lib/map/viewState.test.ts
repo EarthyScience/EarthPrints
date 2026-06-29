@@ -3,6 +3,7 @@ import {
   DEFAULT_MAP_VIEW,
   SELECTION_FOCUS_TRANSITION_MS,
   SELECTION_FOCUS_ZOOM,
+  SPHERE_SELECTION_FOCUS_ZOOM,
   viewStateFocusedOnCell,
 } from "@/lib/map/viewState";
 
@@ -41,5 +42,12 @@ describe("viewStateFocusedOnCell", () => {
     };
 
     expect(viewStateFocusedOnCell(current, cell)).toBe(current);
+  });
+
+  it("zooms in further on the globe than in plan view", () => {
+    const next = viewStateFocusedOnCell(DEFAULT_MAP_VIEW, cell, "sphere");
+
+    expect(next.zoom).toBe(SPHERE_SELECTION_FOCUS_ZOOM);
+    expect(SPHERE_SELECTION_FOCUS_ZOOM).toBeGreaterThan(SELECTION_FOCUS_ZOOM);
   });
 });

@@ -15,6 +15,8 @@ export type MapSelection = {
   grid: GridCell;
 };
 
+export type MapViewMode = "2d" | "sphere";
+
 export type MapViewState = {
   longitude: number;
   latitude: number;

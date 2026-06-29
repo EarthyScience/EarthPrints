@@ -1,32 +1,29 @@
 "use client";
 
-import { useId, useState } from "react";
 import { Brand } from "@/components/nav/Brand";
-import { MobileMenuButton } from "@/components/nav/MobileMenuButton";
-import { MobileMenuDropdown } from "@/components/nav/MobileMenuDropdown";
+import { EditorViewTabs } from "@/components/layout/EditorViewTabs";
 import { NavActions } from "@/components/nav/NavActions";
-import { NavLinks } from "@/components/nav/NavLinks";
+import type { MapViewMode } from "@/types/map";
 
-export function Nav() {
-  const [menuOpen, setMenuOpen] = useState(false);
-  const menuId = useId();
+type NavProps = {
+  viewMode?: MapViewMode;
+  onViewModeChange?: (mode: MapViewMode) => void;
+};
 
+export function Nav({ viewMode = "2d", onViewModeChange }: NavProps) {
   return (
-    <nav className="nav">
-      <div className="nav-inner">
-        <Brand />
-        <NavLinks />
-        <NavActions
-          menuOpen={menuOpen}
-          onMenuToggle={() => setMenuOpen((current) => !current)}
-          menuControlsId={menuId}
-        />
+    <nav className="nav nav--editor">
+      <div className="nav-inner nav-inner--editor">
+        <div className="nav-editor-sidebar-slot">
+          <Brand />
+        </div>
+        <div className="nav-editor-preview-slot">
+          {onViewModeChange ? (
+            <EditorViewTabs value={viewMode} onChange={onViewModeChange} />
+          ) : null}
+          <NavActions />
+        </div>
       </div>
-      <MobileMenuDropdown
-        open={menuOpen}
-        onClose={() => setMenuOpen(false)}
-        menuId={menuId}
-      />
     </nav>
   );
 }

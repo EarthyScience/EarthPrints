@@ -4,7 +4,7 @@ import { BrandMark } from "@/icons/BrandMark";
 
 export function Brand() {
   return (
-    <Link href="/" className="brand" aria-label={`${SITE_NAME} home`}>
+    <Link href="/map" className="brand" aria-label={`${SITE_NAME} home`}>
       <span className="mark">
         <BrandMark size={32} />
       </span>

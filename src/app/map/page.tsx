@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import { Nav } from "@/components/layout/Nav";
 import { MapExperience } from "@/components/map/MapExperience";
 
 export const metadata: Metadata = {
@@ -7,10 +6,5 @@ export const metadata: Metadata = {
 };
 
 export default function MapPage() {
-  return (
-    <>
-      <Nav />
-      <MapExperience />
-    </>
-  );
+  return <MapExperience />;
 }
