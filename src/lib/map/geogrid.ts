@@ -137,7 +137,9 @@ export type SelectionGuideGeoJson = {
 export function selectionGuideGeoJson(
   cell: GridCell,
   guidePaths: LonLatPath[],
+  options?: { densifyGuides?: boolean },
 ): SelectionGuideGeoJson {
+  const densifyGuides = options?.densifyGuides ?? true;
   const corners = gridCellToPolygon(cell);
   const ring: LonLatPath = corners.map((point) => [point.lon, point.lat]);
   ring.push(ring[0]);
@@ -150,7 +152,7 @@ export function selectionGuideGeoJson(
         properties: { kind: "guide" as const },
         geometry: {
           type: "LineString" as const,
-          coordinates: densifyLonLatPath(path),
+          coordinates: densifyGuides ? densifyLonLatPath(path) : path,
         },
       })),
       {

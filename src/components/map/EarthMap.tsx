@@ -1,22 +1,15 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { PathLayer, PolygonLayer } from "@deck.gl/layers";
-import { PathStyleExtension } from "@deck.gl/extensions";
-import type { Layer } from "@deck.gl/core";
-import Map, { type MapMouseEvent, type MapRef, type ViewStateChangeEvent } from "react-map-gl/maplibre";
-import type { StyleSpecification } from "maplibre-gl";
+import { useCallback, useEffect, useRef, useState } from "react";
+import Map, {
+  type MapMouseEvent,
+  type MapRef,
+  type ViewStateChangeEvent,
+} from "react-map-gl/maplibre";
 import "maplibre-gl/dist/maplibre-gl.css";
-import {
-  geoPointToZarrGrid,
-  gridCellToBounds,
-  gridCellToGuidePaths,
-  gridCellToPolygon,
-} from "@/lib/map/geogrid";
-import { loadDarkMapStyle, brightenDarkMapPlaceLabels } from "@/lib/map/mapLabels";
+import { geoPointToZarrGrid } from "@/lib/map/geogrid";
+import { brightenDarkMapPlaceLabels } from "@/lib/map/mapLabels";
 import type { MapLibreEvent, MapStyleDataEvent } from "maplibre-gl";
-import { viewportToGeoBounds } from "@/lib/map/viewportBounds";
-import { SELECTION_CELL_COLOR, SELECTION_GUIDE_COLOR } from "@/lib/map/selectionStyle";
 import {
   DEFAULT_MAP_VIEW,
   MAP_BASE_STYLES,
@@ -32,10 +25,7 @@ import { useTheme } from "@/providers/ThemeProvider";
 import { EditorShell } from "@/components/layout/EditorShell";
 import { Nav } from "@/components/layout/Nav";
 import { MapReadout } from "@/components/map/MapReadout";
-import { MapDeckOverlay } from "@/components/map/MapDeckOverlay";
 import { GlobeSelectionOverlay } from "@/components/map/GlobeSelectionOverlay";
-
-const dashedPathExtension = new PathStyleExtension({ dash: true });
 
 function toMapViewState(
   viewState: {
@@ -73,27 +63,9 @@ export function EarthMap() {
   const [seriesLength, setSeriesLength] = useState<number | null>(null);
   const [seriesPreview, setSeriesPreview] = useState<number[] | null>(null);
   const [seriesUnits, setSeriesUnits] = useState<string | null>(null);
-  const [darkMapStyle, setDarkMapStyle] = useState<StyleSpecification | null>(
-    null,
-  );
 
   const isSphere = viewMode === "sphere";
-
-  useEffect(() => {
-    let cancelled = false;
-
-    void loadDarkMapStyle()
-      .then((style) => {
-        if (!cancelled) setDarkMapStyle(style);
-      })
-      .catch(() => {
-        // Fall back to the remote style URL if patching fails.
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+  const mapStyle = isLight ? MAP_BASE_STYLES.light : MAP_BASE_STYLES.dark;
 
   useEffect(() => {
     const node = mapStageRef.current;
@@ -102,6 +74,7 @@ export function EarthMap() {
     const observer = new ResizeObserver(([entry]) => {
       const { width, height } = entry.contentRect;
       setMapSize({ width, height });
+      mapRef.current?.resize();
     });
 
     observer.observe(node);
@@ -215,8 +188,6 @@ export function EarthMap() {
     [viewMode],
   );
 
-  const mapStyle = isLight ? MAP_BASE_STYLES.light : darkMapStyle;
-
   const applyDarkMapLabelColors = useCallback(
     (event: MapLibreEvent | MapStyleDataEvent) => {
       if (isLight) return;
@@ -231,6 +202,7 @@ export function EarthMap() {
       if (isSphere) {
         event.target.setProjection({ type: "globe" });
       }
+      event.target.resize();
     },
     [applyDarkMapLabelColors, isSphere],
   );
@@ -242,52 +214,6 @@ export function EarthMap() {
     },
     [applyDarkMapLabelColors],
   );
-
-  const layers = useMemo(() => {
-    if (isSphere || !selection || mapSize.width === 0 || mapSize.height === 0) return [];
-
-    const cellColor = isLight ? SELECTION_CELL_COLOR.light : SELECTION_CELL_COLOR.dark;
-    const nextLayers: Layer[] = [
-      new PolygonLayer({
-        id: "selected-grid-cell",
-        data: [selection.grid],
-        getPolygon: (cell: MapSelection["grid"]) => [
-          gridCellToPolygon(cell).map((point) => [point.lon, point.lat]),
-        ],
-        filled: true,
-        stroked: true,
-        pickable: false,
-        getFillColor: cellColor.fill,
-        getLineColor: cellColor.line,
-        getLineWidth: 2,
-        lineWidthUnits: "pixels",
-      }),
-    ];
-
-    const cellBounds = gridCellToBounds(selection.grid);
-    const guidePaths = gridCellToGuidePaths(
-      cellBounds,
-      viewportToGeoBounds(viewState, mapSize.width, mapSize.height),
-    );
-    const guideColor = isLight ? SELECTION_GUIDE_COLOR.light : SELECTION_GUIDE_COLOR.dark;
-
-    nextLayers.unshift(
-      new PathLayer({
-        id: "selected-grid-cell-guides",
-        data: guidePaths,
-        getPath: (path) => path,
-        pickable: false,
-        widthUnits: "pixels",
-        getWidth: 1,
-        getColor: guideColor,
-        extensions: [dashedPathExtension],
-        getDashArray: [6, 5],
-        dashJustified: true,
-      }),
-    );
-
-    return nextLayers;
-  }, [isLight, isSphere, mapSize.height, mapSize.width, selection, viewState]);
 
   return (
     <EditorShell
@@ -311,43 +237,41 @@ export function EarthMap() {
       }
       preview={
         <div className="map-stage" ref={mapStageRef}>
-          {mapStyle ? (
-            <Map
-              ref={mapRef}
-              key={viewMode}
-              mapStyle={mapStyle}
-              projection={isSphere ? "globe" : "mercator"}
-              longitude={viewState.longitude}
-              latitude={viewState.latitude}
-              zoom={viewState.zoom}
-              bearing={viewState.bearing ?? 0}
-              pitch={viewState.pitch ?? 0}
-              minZoom={0}
-              maxZoom={22}
-              dragRotate={isSphere}
-              pitchWithRotate={isSphere}
-              touchZoomRotate={isSphere}
-              touchPitch={isSphere}
-              maxPitch={isSphere ? 85 : 0}
-              onMove={handleMove}
-              onClick={handleMapClick}
-              onLoad={handleMapLoad}
-              onStyleData={handleStyleData}
-              attributionControl={false}
-              cursor="crosshair"
-              style={{ width: "100%", height: "100%" }}
-            >
-              {isSphere && selection ? (
-                <GlobeSelectionOverlay
-                  cell={selection.grid}
-                  viewState={viewState}
-                  mapSize={mapSize}
-                  isLight={isLight}
-                />
-              ) : null}
-              <MapDeckOverlay layers={layers} interleaved />
-            </Map>
-          ) : null}
+          <Map
+            ref={mapRef}
+            key={viewMode}
+            mapStyle={mapStyle}
+            initialViewState={DEFAULT_MAP_VIEW}
+            longitude={viewState.longitude}
+            latitude={viewState.latitude}
+            zoom={viewState.zoom}
+            bearing={viewState.bearing ?? 0}
+            pitch={viewState.pitch ?? 0}
+            minZoom={0}
+            maxZoom={22}
+            dragRotate={isSphere}
+            pitchWithRotate={isSphere}
+            touchZoomRotate={isSphere}
+            touchPitch={isSphere}
+            maxPitch={isSphere ? 85 : 0}
+            onMove={handleMove}
+            onClick={handleMapClick}
+            onLoad={handleMapLoad}
+            onStyleData={handleStyleData}
+            attributionControl={false}
+            cursor="crosshair"
+            style={{ width: "100%", height: "100%" }}
+          >
+            {selection && mapSize.width > 0 && mapSize.height > 0 ? (
+              <GlobeSelectionOverlay
+                cell={selection.grid}
+                viewState={viewState}
+                mapSize={mapSize}
+                isLight={isLight}
+                isSphere={isSphere}
+              />
+            ) : null}
+          </Map>
         </div>
       }
     />

@@ -844,15 +844,14 @@ body:has(.editor-shell) .footer {
   flex: 1;
   min-width: 0;
   padding: 0 8px 8px 0;
-  background: var(--editor-bg-depth);
+  background: var(--editor-bg-base);
 }
 
-.editor-preview-frame,
 .editor-view-tabs,
 .nav--editor .icon-btn {
   border: 1px solid var(--editor-border);
   background: var(--editor-bg-primary);
-  box-shadow: var(--editor-shadow);
+  box-shadow: none;
 }
 
 .editor-preview-frame {
@@ -861,7 +860,10 @@ body:has(.editor-shell) .footer {
   flex: 1;
   min-height: 0;
   overflow: hidden;
+  border: 1px solid var(--editor-border);
   border-radius: var(--editor-radius-lg);
+  background: var(--editor-bg-primary);
+  box-shadow: none;
 }
 
 .editor-preview-stage {
@@ -870,6 +872,7 @@ body:has(.editor-shell) .footer {
   min-height: 0;
   overflow: hidden;
   border-radius: inherit;
+  isolation: isolate;
 }
 
 .editor-view-tabs {
@@ -973,7 +976,7 @@ body:has(.editor-shell) .footer {
   min-width: 0;
   padding: 8px 8px 8px 0;
   box-sizing: border-box;
-  background: var(--editor-bg-depth);
+  background: var(--editor-bg-base);
 }
 
 .nav-editor-preview-slot .editor-view-tabs {
@@ -1192,7 +1195,13 @@ body:has(.editor-shell) .footer {
   border-radius: inherit;
 }
 
-.map-stage .maplibregl-map,
+.map-stage .maplibregl-map {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
 .map-stage canvas {
   outline: none;
 }

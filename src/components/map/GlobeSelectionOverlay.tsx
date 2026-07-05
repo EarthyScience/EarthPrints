@@ -16,6 +16,7 @@ type GlobeSelectionOverlayProps = {
   viewState: MapViewState;
   mapSize: { width: number; height: number };
   isLight: boolean;
+  isSphere?: boolean;
 };
 
 export function GlobeSelectionOverlay({
@@ -23,14 +24,15 @@ export function GlobeSelectionOverlay({
   viewState,
   mapSize,
   isLight,
+  isSphere = false,
 }: GlobeSelectionOverlayProps) {
   const data = useMemo(() => {
     const guidePaths = gridCellToGuidePaths(
       gridCellToBounds(cell),
       viewportToGeoBounds(viewState, mapSize.width, mapSize.height),
     );
-    return selectionGuideGeoJson(cell, guidePaths);
-  }, [cell, mapSize.height, mapSize.width, viewState]);
+    return selectionGuideGeoJson(cell, guidePaths, { densifyGuides: isSphere });
+  }, [cell, isSphere, mapSize.height, mapSize.width, viewState]);
 
   const guideColor = rgba(
     isLight ? SELECTION_GUIDE_COLOR.light : SELECTION_GUIDE_COLOR.dark,
@@ -38,9 +40,9 @@ export function GlobeSelectionOverlay({
   const cellColor = isLight ? SELECTION_CELL_COLOR.light : SELECTION_CELL_COLOR.dark;
 
   return (
-    <Source id="globe-selection" type="geojson" data={data}>
+    <Source id="map-selection" type="geojson" data={data}>
       <Layer
-        id="globe-selection-guides"
+        id="map-selection-guides"
         type="line"
         filter={["==", ["get", "kind"], "guide"]}
         paint={{
@@ -50,7 +52,7 @@ export function GlobeSelectionOverlay({
         }}
       />
       <Layer
-        id="globe-selection-cell-fill"
+        id="map-selection-cell-fill"
         type="fill"
         filter={["==", ["get", "kind"], "cell"]}
         paint={{
@@ -58,7 +60,7 @@ export function GlobeSelectionOverlay({
         }}
       />
       <Layer
-        id="globe-selection-cell-line"
+        id="map-selection-cell-line"
         type="line"
         filter={["==", ["get", "kind"], "cell"]}
         paint={{
