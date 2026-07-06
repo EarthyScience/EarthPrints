@@ -5,6 +5,7 @@ import {
   extractPixelFromNativeChunk,
   nativeChunkKey,
   pixelToNativeChunkContext,
+  stitchTimeSeries,
   stitchTimeSeriesForRange,
   type ArrayChunkSizes,
   type AxisSlice,
@@ -27,6 +28,9 @@ type CachedNativeChunk = {
   data: Float32Array;
   shape: readonly number[];
 };
+
+/** Reports download progress as `completed` of `total` time-chunks. */
+export type SeriesProgress = (completed: number, total: number) => void;
 
 type ZarrArray = ZarrArrayHandle & {
   getChunk(
@@ -209,6 +213,7 @@ export class ZarrChunkReader {
     grid: GridCell,
     variable = ZARR_STORE.defaultVariable,
     historyYears?: number,
+    onProgress?: SeriesProgress,
   ): Promise<{ values: Float32Array; variable: string; units?: string }> {
     const array = await this.getArray(variable);
     const chunkSizes = this.getChunkSizes(array);
@@ -223,8 +228,10 @@ export class ZarrChunkReader {
     );
     const units =
       typeof array.attrs.units === "string" ? array.attrs.units : undefined;
+    const total = context.timeChunkIndices.length;
 
     if (this.hasAllNativeChunks(variable, context)) {
+      onProgress?.(total, total);
       return this.buildFromNativeCache(
         variable,
         context,
@@ -235,8 +242,60 @@ export class ZarrChunkReader {
       );
     }
 
-    const pixel = await fetchPixelTimeSeries(array, grid, variable, timeRange);
+    const pixel = await this.fetchPixelSeriesByTimeChunk(
+      array,
+      grid,
+      variable,
+      timeRange,
+      chunkSizes.time,
+      context.timeChunkIndices,
+      units,
+      onProgress,
+    );
     this.prefetchNativeChunks(array, variable, context);
     return pixel;
+  }
+
+  /**
+   * Fetch the pixel's series one time-chunk at a time so we can report real
+   * download progress. Each request pulls the same bytes a single slice would;
+   * the segments are stitched back in chunk order, so the result is identical.
+   */
+  private async fetchPixelSeriesByTimeChunk(
+    array: ZarrArray,
+    grid: GridCell,
+    variable: string,
+    timeRange: AxisSlice,
+    chunkTime: number,
+    timeChunkIndices: number[],
+    units: string | undefined,
+    onProgress?: SeriesProgress,
+  ): Promise<{ values: Float32Array; variable: string; units?: string }> {
+    const total = timeChunkIndices.length;
+    if (total === 0) {
+      onProgress?.(0, 0);
+      return { values: new Float32Array(0), variable, units };
+    }
+
+    const [rangeStart, rangeStop] = timeRange;
+    const segments = new Array<Float32Array>(total);
+    let completed = 0;
+    onProgress?.(0, total);
+
+    await Promise.all(
+      timeChunkIndices.map(async (timeChunkIdx, position) => {
+        const chunkStart = timeChunkIdx * chunkTime;
+        const subRange: AxisSlice = [
+          Math.max(rangeStart, chunkStart),
+          Math.min(rangeStop, chunkStart + chunkTime),
+        ];
+        const part = await fetchPixelTimeSeries(array, grid, variable, subRange);
+        segments[position] = part.values;
+        completed += 1;
+        onProgress?.(completed, total);
+      }),
+    );
+
+    return { values: stitchTimeSeries(segments), variable, units };
   }
 }

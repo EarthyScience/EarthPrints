@@ -28,13 +28,7 @@ export function TimeSeriesPlotLoading({
   const dayCount = dayCountForHistory(historyYears);
 
   return (
-    <div
-      className="relative w-full min-w-0"
-      role="status"
-      aria-live="polite"
-      aria-busy="true"
-      aria-label="Loading time series"
-    >
+    <div className="relative w-full min-w-0" aria-hidden="true">
       <ResponsiveContainer width="100%" height={TIME_SERIES_PLOT_HEIGHT}>
         <LineChart data={[]} margin={TIME_SERIES_CHART_MARGIN}>
           <CartesianGrid stroke={grid} vertical={false} />
@@ -65,9 +59,6 @@ export function TimeSeriesPlotLoading({
           />
         </LineChart>
       </ResponsiveContainer>
-      <p className="pointer-events-none absolute inset-[12px_8px_28px_48px] m-0 grid place-items-center text-[13px] text-editor-fg-tertiary">
-        Loading…
-      </p>
     </div>
   );
 }

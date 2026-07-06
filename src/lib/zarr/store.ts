@@ -25,7 +25,7 @@ export async function openZarrStore(url = ZARR_STORE.url) {
 export async function fetchPixelTimeSeries(
   array: ZarrArrayHandle,
   grid: GridCell,
-  variable = ZARR_STORE.defaultVariable,
+  variable: string = ZARR_STORE.defaultVariable,
   timeRange?: AxisSlice,
 ): Promise<{ values: Float32Array; variable: string; units?: string }> {
   const timeSelection =
