@@ -44,7 +44,7 @@ export function TimeSeriesPlot({
   if (data.length === 0) return null;
 
   return (
-    <div className="map-time-series-plot">
+    <div className="w-full min-w-0">
       <ResponsiveContainer width="100%" height={TIME_SERIES_PLOT_HEIGHT}>
         <LineChart data={data} margin={TIME_SERIES_CHART_MARGIN}>
           <CartesianGrid stroke={grid} vertical={false} />
@@ -93,7 +93,7 @@ export function TimeSeriesPlot({
           />
         </LineChart>
       </ResponsiveContainer>
-      <p className="map-time-series-caption mono">
+      <p className="mt-2 font-mono text-xs leading-normal text-editor-fg-tertiary">
         {values.length.toLocaleString()} hourly steps · {data.length} daily means
         {units ? ` · ${units}` : ""}
       </p>

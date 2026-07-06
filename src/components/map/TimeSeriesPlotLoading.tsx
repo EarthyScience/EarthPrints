@@ -29,7 +29,7 @@ export function TimeSeriesPlotLoading({
 
   return (
     <div
-      className="map-time-series-plot map-time-series-loading"
+      className="relative w-full min-w-0"
       role="status"
       aria-live="polite"
       aria-busy="true"
@@ -65,7 +65,9 @@ export function TimeSeriesPlotLoading({
           />
         </LineChart>
       </ResponsiveContainer>
-      <p className="map-time-series-loading-label">Loading…</p>
+      <p className="pointer-events-none absolute inset-[12px_8px_28px_48px] m-0 grid place-items-center text-[13px] text-editor-fg-tertiary">
+        Loading…
+      </p>
     </div>
   );
 }

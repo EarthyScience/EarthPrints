@@ -178,6 +178,12 @@ export function EarthMap() {
     [flyToView, viewState],
   );
 
+  const handleZoomToSelection = useCallback(() => {
+    if (!selection) return;
+    const focused = viewStateFocusedOnCell(viewState, selection.grid, viewMode);
+    flyToView(focused, SELECTION_FOCUS_TRANSITION_MS);
+  }, [flyToView, selection, viewMode, viewState]);
+
   const handleMove = useCallback(
     (event: ViewStateChangeEvent) => {
       setViewState(toMapViewState(event.viewState, viewMode));
@@ -218,6 +224,8 @@ export function EarthMap() {
         <Nav
           viewMode={viewMode}
           onViewModeChange={handleViewModeChange}
+          hasSelection={selection !== null}
+          onZoomToSelection={handleZoomToSelection}
         />
       }
       sidebar={
@@ -232,7 +240,10 @@ export function EarthMap() {
         />
       }
       preview={
-        <div className="map-stage" ref={mapStageRef}>
+        <div
+          className="map-stage absolute inset-0 overflow-hidden rounded-[inherit]"
+          ref={mapStageRef}
+        >
           <Map
             ref={mapRef}
             key={viewMode}
