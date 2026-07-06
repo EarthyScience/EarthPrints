@@ -51,9 +51,9 @@ export function gridCellToBounds(cell: GridCell): GridCellBounds {
   };
 }
 
-/** Closed lon/lat ring for the cell footprint (counter-clockwise). */
-export function gridCellToPolygon(cell: GridCell): GeoPoint[] {
-  const { west, east, south, north } = gridCellToBounds(cell);
+/** Closed lon/lat ring for the given bounds (counter-clockwise). */
+export function boundsToPolygon(bounds: GridCellBounds): GeoPoint[] {
+  const { west, east, south, north } = bounds;
 
   return [
     { lon: west, lat: north },
@@ -61,6 +61,42 @@ export function gridCellToPolygon(cell: GridCell): GeoPoint[] {
     { lon: east, lat: south },
     { lon: west, lat: south },
   ];
+}
+
+/** Closed lon/lat ring for the cell footprint (counter-clockwise). */
+export function gridCellToPolygon(cell: GridCell): GeoPoint[] {
+  return boundsToPolygon(gridCellToBounds(cell));
+}
+
+/**
+ * Geographic bounds of the on-disk chunk (patch) that contains a cell. A
+ * click downloads this whole patch, so this is what the "downloaded extent"
+ * box outlines.
+ */
+export function chunkPatchBounds(
+  cell: GridCell,
+  chunkLat: number,
+  chunkLon: number,
+): GridCellBounds {
+  const firstLatIdx = Math.floor(cell.latIndex / chunkLat) * chunkLat;
+  const lastLatIdx = Math.min(firstLatIdx + chunkLat, dimensions.lat) - 1;
+  const firstLonIdx = Math.floor(cell.lonIndex / chunkLon) * chunkLon;
+  const lastLonIdx = Math.min(firstLonIdx + chunkLon, dimensions.lon) - 1;
+
+  const latEdgeA = grid.latStart + firstLatIdx * grid.latStep;
+  const latEdgeB = grid.latStart + lastLatIdx * grid.latStep;
+  const lonEdgeA = grid.lonStart + firstLonIdx * grid.lonStep;
+  const lonEdgeB = grid.lonStart + lastLonIdx * grid.lonStep;
+
+  const halfLon = Math.abs(grid.lonStep) / 2;
+  const halfLat = Math.abs(grid.latStep) / 2;
+
+  return {
+    west: Math.min(lonEdgeA, lonEdgeB) - halfLon,
+    east: Math.max(lonEdgeA, lonEdgeB) + halfLon,
+    south: Math.min(latEdgeA, latEdgeB) - halfLat,
+    north: Math.max(latEdgeA, latEdgeB) + halfLat,
+  };
 }
 
 export type LonLatPath = [lon: number, lat: number][];
@@ -126,23 +162,27 @@ export type SelectionGuideGeoJson = {
   type: "FeatureCollection";
   features: Array<{
     type: "Feature";
-    properties: { kind: "guide" | "cell" };
+    properties: { kind: "guide" | "cell" | "patch" };
     geometry:
       | { type: "LineString"; coordinates: LonLatPath }
       | { type: "Polygon"; coordinates: LonLatPath[] };
   }>;
 };
 
+function closedRing(corners: GeoPoint[]): LonLatPath {
+  const ring: LonLatPath = corners.map((point) => [point.lon, point.lat]);
+  ring.push(ring[0]);
+  return ring;
+}
+
 /** GeoJSON for MapLibre selection overlays that drape on the globe surface. */
 export function selectionGuideGeoJson(
   cell: GridCell,
   guidePaths: LonLatPath[],
-  options?: { densifyGuides?: boolean },
+  options?: { densifyGuides?: boolean; patchBounds?: GridCellBounds | null },
 ): SelectionGuideGeoJson {
   const densifyGuides = options?.densifyGuides ?? true;
-  const corners = gridCellToPolygon(cell);
-  const ring: LonLatPath = corners.map((point) => [point.lon, point.lat]);
-  ring.push(ring[0]);
+  const patchBounds = options?.patchBounds ?? null;
 
   return {
     type: "FeatureCollection",
@@ -155,10 +195,22 @@ export function selectionGuideGeoJson(
           coordinates: densifyGuides ? densifyLonLatPath(path) : path,
         },
       })),
+      ...(patchBounds
+        ? [
+            {
+              type: "Feature" as const,
+              properties: { kind: "patch" as const },
+              geometry: {
+                type: "Polygon" as const,
+                coordinates: [closedRing(boundsToPolygon(patchBounds))],
+              },
+            },
+          ]
+        : []),
       {
         type: "Feature",
         properties: { kind: "cell" },
-        geometry: { type: "Polygon", coordinates: [ring] },
+        geometry: { type: "Polygon", coordinates: [closedRing(gridCellToPolygon(cell))] },
       },
     ],
   };

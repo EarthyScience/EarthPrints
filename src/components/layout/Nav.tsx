@@ -5,6 +5,7 @@ import { EditorViewTabs } from "@/components/layout/EditorViewTabs";
 import { NavActions } from "@/components/nav/NavActions";
 import { IconButton } from "@/components/ui/IconButton";
 import { CrosshairIcon } from "@/icons/CrosshairIcon";
+import { PatchIcon } from "@/icons/PatchIcon";
 import type { MapViewMode } from "@/types/map";
 
 type NavProps = {
@@ -12,6 +13,8 @@ type NavProps = {
   onViewModeChange?: (mode: MapViewMode) => void;
   hasSelection?: boolean;
   onZoomToSelection?: () => void;
+  showPatch?: boolean;
+  onTogglePatch?: () => void;
 };
 
 export function Nav({
@@ -19,6 +22,8 @@ export function Nav({
   onViewModeChange,
   hasSelection = false,
   onZoomToSelection,
+  showPatch = false,
+  onTogglePatch,
 }: NavProps) {
   return (
     <nav className="relative z-[100] flex w-full flex-col gap-0 overflow-visible">
@@ -38,6 +43,20 @@ export function Nav({
                 onClick={onZoomToSelection}
               >
                 <CrosshairIcon />
+              </IconButton>
+            ) : null}
+            {hasSelection && onTogglePatch ? (
+              <IconButton
+                className="animate-[zoomToSelectionIn_0.18s_cubic-bezier(0.16,1,0.3,1)]"
+                aria-label={
+                  showPatch
+                    ? "Hide downloaded patch extent"
+                    : "Show downloaded patch extent"
+                }
+                aria-pressed={showPatch}
+                onClick={onTogglePatch}
+              >
+                <PatchIcon />
               </IconButton>
             ) : null}
           </div>

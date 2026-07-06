@@ -16,6 +16,18 @@ export const SELECTION_CELL_COLOR = {
   },
 };
 
+/** The downloaded 40x40 patch: a faint fill with a dashed outline. */
+export const SELECTION_PATCH_COLOR = {
+  light: {
+    fill: [...TEAL_RGB, 14] as const,
+    line: [...TEAL_RGB, 150] as const,
+  },
+  dark: {
+    fill: [...TEAL_ON_DARK_RGB, 20] as const,
+    line: [...TEAL_ON_DARK_RGB, 170] as const,
+  },
+};
+
 export function rgba(
   [r, g, b, a]: readonly [number, number, number, number],
 ): string {

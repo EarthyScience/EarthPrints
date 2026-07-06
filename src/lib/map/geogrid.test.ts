@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  chunkPatchBounds,
   geoPointToZarrGrid,
   gridCellToBounds,
   gridCellToGuidePaths,
@@ -36,6 +37,25 @@ describe("gridCellToPolygon", () => {
       { lon: bounds.east, lat: bounds.south },
       { lon: bounds.west, lat: bounds.south },
     ]);
+  });
+});
+
+describe("chunkPatchBounds", () => {
+  it("spans the 40x40 native chunk that contains the cell", () => {
+    const { lat, lon } = ZARR_STORE.nativeChunks;
+    const cell = geoPointToZarrGrid({ lon: 10.012, lat: 51.998 });
+    const bounds = chunkPatchBounds(cell, lat, lon);
+
+    // 40 cells of 0.05° = 2° on each side.
+    expect(bounds.east - bounds.west).toBeCloseTo(lon * ZARR_STORE.spatialResolutionDeg);
+    expect(bounds.north - bounds.south).toBeCloseTo(lat * ZARR_STORE.spatialResolutionDeg);
+
+    // The clicked cell sits inside the patch.
+    const cellBounds = gridCellToBounds(cell);
+    expect(bounds.west).toBeLessThanOrEqual(cellBounds.west);
+    expect(bounds.east).toBeGreaterThanOrEqual(cellBounds.east);
+    expect(bounds.south).toBeLessThanOrEqual(cellBounds.south);
+    expect(bounds.north).toBeGreaterThanOrEqual(cellBounds.north);
   });
 });
 

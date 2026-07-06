@@ -57,6 +57,7 @@ export function EarthMap() {
   const [viewMode, setViewMode] = useState<MapViewMode>("2d");
   const [mapSize, setMapSize] = useState({ width: 0, height: 0 });
   const [selection, setSelection] = useState<MapSelection | null>(null);
+  const [showPatch, setShowPatch] = useState(true);
   const [historyYears, setHistoryYears] = useState(DEFAULT_HISTORY_YEARS);
   const [loadingSeries, setLoadingSeries] = useState(false);
   const [seriesError, setSeriesError] = useState<string | null>(null);
@@ -184,6 +185,10 @@ export function EarthMap() {
     flyToView(focused, SELECTION_FOCUS_TRANSITION_MS);
   }, [flyToView, selection, viewMode, viewState]);
 
+  const handleTogglePatch = useCallback(() => {
+    setShowPatch((previous) => !previous);
+  }, []);
+
   const handleMove = useCallback(
     (event: ViewStateChangeEvent) => {
       setViewState(toMapViewState(event.viewState, viewMode));
@@ -226,6 +231,8 @@ export function EarthMap() {
           onViewModeChange={handleViewModeChange}
           hasSelection={selection !== null}
           onZoomToSelection={handleZoomToSelection}
+          showPatch={showPatch}
+          onTogglePatch={handleTogglePatch}
         />
       }
       sidebar={
@@ -276,6 +283,7 @@ export function EarthMap() {
                 mapSize={mapSize}
                 isLight={isLight}
                 isSphere={isSphere}
+                showPatch={showPatch}
               />
             ) : null}
           </Map>
