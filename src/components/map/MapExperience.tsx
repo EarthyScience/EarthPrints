@@ -6,7 +6,11 @@ const EarthMap = dynamic(
   () => import("@/components/map/EarthMap").then((module) => module.EarthMap),
   {
     ssr: false,
-    loading: () => <div className="map-loading">Loading map…</div>,
+    loading: () => (
+      <div className="grid h-full min-h-80 place-items-center bg-editor-bg-primary text-editor-fg-tertiary">
+        Loading map…
+      </div>
+    ),
   },
 );
 

@@ -60,8 +60,7 @@ export function EarthMap() {
   const [historyYears, setHistoryYears] = useState(DEFAULT_HISTORY_YEARS);
   const [loadingSeries, setLoadingSeries] = useState(false);
   const [seriesError, setSeriesError] = useState<string | null>(null);
-  const [seriesLength, setSeriesLength] = useState<number | null>(null);
-  const [seriesPreview, setSeriesPreview] = useState<number[] | null>(null);
+  const [seriesValues, setSeriesValues] = useState<Float32Array | null>(null);
   const [seriesUnits, setSeriesUnits] = useState<string | null>(null);
 
   const isSphere = viewMode === "sphere";
@@ -86,8 +85,7 @@ export function EarthMap() {
       const requestId = ++requestIdRef.current;
       setLoadingSeries(true);
       setSeriesError(null);
-      setSeriesLength(null);
-      setSeriesPreview(null);
+      setSeriesValues(null);
       setSeriesUnits(null);
 
       try {
@@ -110,8 +108,7 @@ export function EarthMap() {
 
         if (requestId !== requestIdRef.current) return;
 
-        setSeriesLength(values.length);
-        setSeriesPreview(Array.from(values.subarray(0, 3)));
+        setSeriesValues(values);
         setSeriesUnits(units ?? null);
       } catch (error) {
         if (requestId !== requestIdRef.current) return;
@@ -181,6 +178,12 @@ export function EarthMap() {
     [flyToView, viewState],
   );
 
+  const handleZoomToSelection = useCallback(() => {
+    if (!selection) return;
+    const focused = viewStateFocusedOnCell(viewState, selection.grid, viewMode);
+    flyToView(focused, SELECTION_FOCUS_TRANSITION_MS);
+  }, [flyToView, selection, viewMode, viewState]);
+
   const handleMove = useCallback(
     (event: ViewStateChangeEvent) => {
       setViewState(toMapViewState(event.viewState, viewMode));
@@ -221,6 +224,8 @@ export function EarthMap() {
         <Nav
           viewMode={viewMode}
           onViewModeChange={handleViewModeChange}
+          hasSelection={selection !== null}
+          onZoomToSelection={handleZoomToSelection}
         />
       }
       sidebar={
@@ -230,13 +235,15 @@ export function EarthMap() {
           onHistoryYearsChange={handleHistoryYearsChange}
           loadingSeries={loadingSeries}
           seriesError={seriesError}
-          seriesLength={seriesLength}
-          seriesPreview={seriesPreview}
+          seriesValues={seriesValues}
           seriesUnits={seriesUnits}
         />
       }
       preview={
-        <div className="map-stage" ref={mapStageRef}>
+        <div
+          className="map-stage absolute inset-0 overflow-hidden rounded-[inherit]"
+          ref={mapStageRef}
+        >
           <Map
             ref={mapRef}
             key={viewMode}

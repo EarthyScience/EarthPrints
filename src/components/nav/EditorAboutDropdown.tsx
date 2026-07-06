@@ -32,9 +32,9 @@ export function EditorAboutDropdown() {
   }, [open]);
 
   return (
-    <div className="editor-about-dropdown" ref={rootRef}>
+    <div className="relative" ref={rootRef}>
       <IconButton
-        className="editor-about-trigger"
+        className="aria-expanded:relative aria-expanded:z-[102]"
         aria-label="About the team"
         aria-expanded={open}
         aria-controls={panelId}
@@ -45,7 +45,11 @@ export function EditorAboutDropdown() {
 
       <div
         id={panelId}
-        className={`editor-about-panel${open ? " open" : ""}`}
+        className={`absolute left-auto right-0 top-[calc(100%+2px)] z-[101] box-border w-[min(420px,calc(100vw-24px))] rounded-editor-md border border-editor-border bg-editor-bg-base p-4 shadow-editor transition-[opacity,visibility] duration-[160ms] ${
+          open
+            ? "pointer-events-auto visible opacity-100"
+            : "pointer-events-none invisible opacity-0"
+        }`}
         aria-hidden={!open}
       >
         <AboutContent />
