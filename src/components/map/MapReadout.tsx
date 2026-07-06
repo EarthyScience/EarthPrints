@@ -6,6 +6,7 @@ import { ZARR_STORE } from "@/lib/constants/store";
 import { ZARR_TIME } from "@/lib/zarr/timeRange";
 import { TimeSeriesPlot } from "@/components/map/TimeSeriesPlot";
 import { TimeSeriesPlotLoading } from "@/components/map/TimeSeriesPlotLoading";
+import { ProgressBar } from "@/components/ui/ProgressBar";
 
 const PANEL_CLASS =
   "grid gap-3 rounded-editor-md border border-editor-border bg-editor-bg-secondary p-4 shadow-editor";
@@ -103,7 +104,10 @@ export function MapReadout({
             >
               <p className={LABEL_CLASS}>Time series</p>
               {loadingSeries && (
-                <TimeSeriesPlotLoading historyYears={historyYears} />
+                <>
+                  <ProgressBar label="Fetching time series" />
+                  <TimeSeriesPlotLoading historyYears={historyYears} />
+                </>
               )}
               {!loadingSeries && seriesError && (
                 <p className={HINT_CLASS}>{seriesError}</p>
