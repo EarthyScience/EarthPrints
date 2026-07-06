@@ -39,3 +39,7 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Lovable design reference exports (local visual reference only, never commit)
+*Lovable*.html
+*Lovable_files/
