@@ -49,7 +49,9 @@ export function TimeSeriesPlot({
         <LineChart data={data} margin={TIME_SERIES_CHART_MARGIN}>
           <CartesianGrid stroke={grid} vertical={false} />
           <XAxis
+            type="number"
             dataKey="day"
+            domain={[1, data.length]}
             tick={{ fill: tick, fontSize: 11 }}
             tickLine={false}
             axisLine={false}

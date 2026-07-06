@@ -17,15 +17,21 @@ export function dailyMeanSeries(
     const start = day * hoursPerDay;
     const end = Math.min(start + hoursPerDay, values.length);
     let sum = 0;
+    let count = 0;
 
     for (let i = start; i < end; i++) {
-      sum += values[i]!;
+      const value = values[i];
+      if (value === undefined || Number.isNaN(value)) continue;
+      sum += value;
+      count++;
     }
 
-    points.push({
-      day: day + 1,
-      value: sum / (end - start),
-    });
+    if (count > 0) {
+      points.push({
+        day: day + 1,
+        value: sum / count,
+      });
+    }
   }
 
   return points;

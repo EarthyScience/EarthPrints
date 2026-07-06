@@ -18,4 +18,16 @@ describe("dailyMeanSeries", () => {
   it("returns an empty array for empty input", () => {
     expect(dailyMeanSeries(new Float32Array(), 24)).toEqual([]);
   });
+
+  it("ignores NaN values when averaging a day", () => {
+    const hourly = new Float32Array([2, NaN, 4, NaN]);
+
+    expect(dailyMeanSeries(hourly, 4)).toEqual([{ day: 1, value: 3 }]);
+  });
+
+  it("skips days that have no valid values", () => {
+    const hourly = new Float32Array([NaN, NaN, 10, 20]);
+
+    expect(dailyMeanSeries(hourly, 2)).toEqual([{ day: 2, value: 15 }]);
+  });
 });
