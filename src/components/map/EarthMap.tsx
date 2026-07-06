@@ -60,8 +60,7 @@ export function EarthMap() {
   const [historyYears, setHistoryYears] = useState(DEFAULT_HISTORY_YEARS);
   const [loadingSeries, setLoadingSeries] = useState(false);
   const [seriesError, setSeriesError] = useState<string | null>(null);
-  const [seriesLength, setSeriesLength] = useState<number | null>(null);
-  const [seriesPreview, setSeriesPreview] = useState<number[] | null>(null);
+  const [seriesValues, setSeriesValues] = useState<Float32Array | null>(null);
   const [seriesUnits, setSeriesUnits] = useState<string | null>(null);
 
   const isSphere = viewMode === "sphere";
@@ -86,8 +85,7 @@ export function EarthMap() {
       const requestId = ++requestIdRef.current;
       setLoadingSeries(true);
       setSeriesError(null);
-      setSeriesLength(null);
-      setSeriesPreview(null);
+      setSeriesValues(null);
       setSeriesUnits(null);
 
       try {
@@ -110,8 +108,7 @@ export function EarthMap() {
 
         if (requestId !== requestIdRef.current) return;
 
-        setSeriesLength(values.length);
-        setSeriesPreview(Array.from(values.subarray(0, 3)));
+        setSeriesValues(values);
         setSeriesUnits(units ?? null);
       } catch (error) {
         if (requestId !== requestIdRef.current) return;
@@ -230,8 +227,7 @@ export function EarthMap() {
           onHistoryYearsChange={handleHistoryYearsChange}
           loadingSeries={loadingSeries}
           seriesError={seriesError}
-          seriesLength={seriesLength}
-          seriesPreview={seriesPreview}
+          seriesValues={seriesValues}
           seriesUnits={seriesUnits}
         />
       }

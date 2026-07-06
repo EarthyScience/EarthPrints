@@ -4,6 +4,8 @@ import type { MapSelection } from "@/types/map";
 import { formatGeoPoint } from "@/lib/map/geogrid";
 import { ZARR_STORE } from "@/lib/constants/store";
 import { ZARR_TIME } from "@/lib/zarr/timeRange";
+import { TimeSeriesPlot } from "@/components/map/TimeSeriesPlot";
+import { TimeSeriesPlotLoading } from "@/components/map/TimeSeriesPlotLoading";
 
 type MapReadoutProps = {
   selection: MapSelection | null;
@@ -11,8 +13,7 @@ type MapReadoutProps = {
   onHistoryYearsChange: (years: number) => void;
   loadingSeries: boolean;
   seriesError: string | null;
-  seriesLength: number | null;
-  seriesPreview: number[] | null;
+  seriesValues: Float32Array | null;
   seriesUnits: string | null;
 };
 
@@ -22,8 +23,7 @@ export function MapReadout({
   onHistoryYearsChange,
   loadingSeries,
   seriesError,
-  seriesLength,
-  seriesPreview,
+  seriesValues,
   seriesUnits,
 }: MapReadoutProps) {
   const historyLabel =
@@ -68,40 +68,48 @@ export function MapReadout({
 
       <section className="editor-panel editor-panel-grow" aria-live="polite">
         {selection ? (
-          <dl className="editor-readout-grid mono">
-            <div>
-              <dt>Click</dt>
-              <dd>{formatGeoPoint(selection.click)}</dd>
-            </div>
-            <div>
-              <dt>Grid cell</dt>
-              <dd>{formatGeoPoint(selection.grid)}</dd>
-            </div>
-            <div>
-              <dt>Indices</dt>
-              <dd>
-                lon {selection.grid.lonIndex}, lat {selection.grid.latIndex}
-              </dd>
-            </div>
-            <div>
-              <dt>Variable</dt>
-              <dd>{ZARR_STORE.defaultVariable}</dd>
-            </div>
-            <div className="editor-readout-span">
-              <dt>Time series</dt>
-              <dd>
-                {loadingSeries && "Fetching from Zarr…"}
-                {!loadingSeries && seriesError && seriesError}
-                {!loadingSeries &&
-                  !seriesError &&
-                  seriesPreview &&
-                  seriesLength !== null &&
-                  `${seriesLength} steps · first ${seriesPreview
-                    .map((value) => value.toFixed(2))
-                    .join(", ")}${seriesUnits ? ` ${seriesUnits}` : ""}`}
-              </dd>
-            </div>
-          </dl>
+          <>
+            <dl className="editor-readout-grid mono">
+              <div>
+                <dt>Click</dt>
+                <dd>{formatGeoPoint(selection.click)}</dd>
+              </div>
+              <div>
+                <dt>Grid cell</dt>
+                <dd>{formatGeoPoint(selection.grid)}</dd>
+              </div>
+              <div>
+                <dt>Indices</dt>
+                <dd>
+                  lon {selection.grid.lonIndex}, lat {selection.grid.latIndex}
+                </dd>
+              </div>
+              <div>
+                <dt>Variable</dt>
+                <dd>{ZARR_STORE.defaultVariable}</dd>
+              </div>
+            </dl>
+
+            <section
+              className="editor-readout-series"
+              aria-label="Time series"
+            >
+              <p className="editor-panel-label">Time series</p>
+              {loadingSeries && (
+                <TimeSeriesPlotLoading historyYears={historyYears} />
+              )}
+              {!loadingSeries && seriesError && (
+                <p className="editor-panel-hint">{seriesError}</p>
+              )}
+              {!loadingSeries && !seriesError && seriesValues && (
+                <TimeSeriesPlot
+                  values={seriesValues}
+                  units={seriesUnits}
+                  hoursPerDay={ZARR_TIME.hoursPerDay}
+                />
+              )}
+            </section>
+          </>
         ) : (
           <p className="editor-panel-empty">No pixel selected yet.</p>
         )}
