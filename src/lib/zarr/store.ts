@@ -11,8 +11,92 @@ export type ZarrArrayHandle = {
   chunks: number[];
 };
 
+type ByteSink = {
+  addExpected: (bytes: number) => void;
+  addReceived: (bytes: number) => void;
+};
+
+/**
+ * Accumulate downloaded / expected bytes and report the running totals. The
+ * expected total grows as each request's `Content-Length` arrives, so the
+ * denominator firms up over the first responses.
+ */
+export function createByteProgressSink(
+  onProgress: (loaded: number, total: number) => void,
+): ByteSink {
+  let loaded = 0;
+  let total = 0;
+  return {
+    addExpected(bytes) {
+      total += bytes;
+      onProgress(loaded, total);
+    },
+    addReceived(bytes) {
+      loaded += bytes;
+      onProgress(loaded, total);
+    },
+  };
+}
+
+// The FetchStore is created once, but progress is per request, so the active
+// sink is swapped in around a fetch and cleared afterwards.
+let activeByteSink: ByteSink | null = null;
+
+export function setActiveByteSink(sink: ByteSink | null): void {
+  activeByteSink = sink;
+}
+
+/**
+ * A `fetch` for zarrita's store that tees each chunk response through a
+ * counting stream so callers can show real download progress. Anything it
+ * can't measure (no body, no length, non-GET, errors) passes through
+ * untouched, so data loading never depends on the instrumentation.
+ */
+async function progressFetch(request: Request): Promise<Response> {
+  const response = await fetch(request);
+  const sink = activeByteSink;
+  const total = Number(response.headers.get("content-length"));
+
+  if (
+    !sink ||
+    !response.ok ||
+    !response.body ||
+    request.method !== "GET" ||
+    !Number.isFinite(total) ||
+    total <= 0
+  ) {
+    return response;
+  }
+
+  try {
+    const reader = response.body.getReader();
+    sink.addExpected(total);
+    const stream = new ReadableStream<Uint8Array>({
+      async pull(controller) {
+        const { done, value } = await reader.read();
+        if (done) {
+          controller.close();
+          return;
+        }
+        sink.addReceived(value.byteLength);
+        controller.enqueue(value);
+      },
+      cancel(reason) {
+        return reader.cancel(reason);
+      },
+    });
+    return new Response(stream, {
+      status: response.status,
+      statusText: response.statusText,
+      headers: response.headers,
+    });
+  } catch {
+    return response;
+  }
+}
+
 export async function openZarrStore(url = ZARR_STORE.url) {
-  const raw = new zarr.FetchStore(url);
+  const raw = new zarr.FetchStore(url, { fetch: progressFetch });
   const consolidated = await zarr.withConsolidatedMetadata(raw);
   const store = zarr.withByteCaching(consolidated);
   return {

@@ -8,7 +8,7 @@ import { TimeSeriesPlot } from "@/components/map/TimeSeriesPlot";
 import { TimeSeriesPlotLoading } from "@/components/map/TimeSeriesPlotLoading";
 import { ProgressBar } from "@/components/ui/ProgressBar";
 
-type SeriesProgress = { completed: number; total: number };
+type SeriesProgress = { loaded: number; total: number };
 
 type MapReadoutProps = {
   selection: MapSelection | null;
@@ -39,9 +39,9 @@ export function MapReadout({
 
   if (!selection) {
     return (
-      <div className="grid gap-2 py-8 text-center">
+      <div className="flex flex-1 flex-col items-center justify-center gap-2 py-8 text-center">
         <div
-          className="mx-auto grid h-9 w-9 place-items-center rounded-full border border-dashed border-editor-border-strong"
+          className="grid h-9 w-9 place-items-center rounded-full border border-dashed border-editor-border-strong"
           aria-hidden="true"
         >
           <span className="block h-2 w-2 rounded-full bg-accent" />
@@ -55,6 +55,59 @@ export function MapReadout({
       </div>
     );
   }
+
+  const historyControl = (
+    <section>
+      <div className="mb-3 flex items-baseline justify-between gap-3">
+        <label className={SECTION_LABEL} htmlFor="history-years">
+          History window
+        </label>
+        <span className="font-mono text-[12.5px] font-semibold text-accent">
+          {historyLabel}
+        </span>
+      </div>
+      <input
+        id="history-years"
+        className="w-full cursor-pointer [accent-color:var(--accent)]"
+        type="range"
+        min={ZARR_TIME.defaultHistoryYears}
+        max={ZARR_TIME.maxHistoryYears}
+        step={1}
+        value={historyYears}
+        onChange={(event) =>
+          onHistoryYearsChange(Number(event.currentTarget.value))
+        }
+      />
+    </section>
+  );
+
+  const chart = (
+    <section aria-live="polite">
+      <div className="mb-3 flex items-baseline justify-between gap-3">
+        <span className={SECTION_LABEL}>Daily mean</span>
+        {!loadingSeries && !seriesError && seriesValues && seriesUnits ? (
+          <span className={META}>{seriesUnits}</span>
+        ) : null}
+      </div>
+
+      {loadingSeries ? (
+        <div className="grid gap-3">
+          <SeriesLoader progress={seriesProgress} />
+          <TimeSeriesPlotLoading historyYears={historyYears} />
+        </div>
+      ) : seriesError ? (
+        <p className="text-[13px] leading-[1.55] text-editor-fg-tertiary">
+          {seriesError}
+        </p>
+      ) : seriesValues ? (
+        <TimeSeriesPlot
+          values={seriesValues}
+          units={seriesUnits}
+          hoursPerDay={ZARR_TIME.hoursPerDay}
+        />
+      ) : null}
+    </section>
+  );
 
   return (
     <div className="flex flex-col divide-y divide-editor-border">
@@ -73,33 +126,13 @@ export function MapReadout({
         </p>
       </section>
 
-      <section className="py-4" aria-live="polite">
-        <div className="mb-3 flex items-baseline justify-between gap-3">
-          <span className={SECTION_LABEL}>Daily mean</span>
-          {!loadingSeries && !seriesError && seriesValues && seriesUnits ? (
-            <span className={META}>{seriesUnits}</span>
-          ) : null}
-        </div>
+      {/* History drives the chart, so they sit together with no divider. */}
+      <div className="grid gap-4 py-4">
+        {historyControl}
+        {chart}
+      </div>
 
-        {loadingSeries ? (
-          <div className="grid gap-3">
-            <SeriesLoader progress={seriesProgress} />
-            <TimeSeriesPlotLoading historyYears={historyYears} />
-          </div>
-        ) : seriesError ? (
-          <p className="text-[13px] leading-[1.55] text-editor-fg-tertiary">
-            {seriesError}
-          </p>
-        ) : seriesValues ? (
-          <TimeSeriesPlot
-            values={seriesValues}
-            units={seriesUnits}
-            hoursPerDay={ZARR_TIME.hoursPerDay}
-          />
-        ) : null}
-      </section>
-
-      <section className="py-4">
+      <section className="pt-4">
         <dl className="grid grid-cols-2 gap-x-4 gap-y-3">
           <Fact label="Grid cell" value={formatGeoPoint(selection.grid)} />
           <Fact
@@ -107,29 +140,6 @@ export function MapReadout({
             value={`lon ${selection.grid.lonIndex} · lat ${selection.grid.latIndex}`}
           />
         </dl>
-      </section>
-
-      <section className="pt-4">
-        <div className="mb-3 flex items-baseline justify-between gap-3">
-          <label className={SECTION_LABEL} htmlFor="history-years">
-            History window
-          </label>
-          <span className="font-mono text-[12.5px] font-semibold text-accent">
-            {historyLabel}
-          </span>
-        </div>
-        <input
-          id="history-years"
-          className="w-full cursor-pointer [accent-color:var(--accent)]"
-          type="range"
-          min={ZARR_TIME.defaultHistoryYears}
-          max={ZARR_TIME.maxHistoryYears}
-          step={1}
-          value={historyYears}
-          onChange={(event) =>
-            onHistoryYearsChange(Number(event.currentTarget.value))
-          }
-        />
       </section>
     </div>
   );
@@ -146,10 +156,16 @@ function Fact({ label, value }: { label: string; value: string }) {
   );
 }
 
+function formatBytes(bytes: number): string {
+  if (bytes >= 1_048_576) return `${(bytes / 1_048_576).toFixed(1)} MB`;
+  if (bytes >= 1024) return `${Math.round(bytes / 1024)} KB`;
+  return `${bytes} B`;
+}
+
 function SeriesLoader({ progress }: { progress: SeriesProgress | null }) {
-  const hasCount = progress !== null && progress.total > 0;
-  const value = hasCount ? progress.completed / progress.total : undefined;
-  const pct = value === undefined ? null : Math.round(value * 100);
+  const hasBytes = progress !== null && progress.total > 0;
+  const value = hasBytes ? progress.loaded / progress.total : undefined;
+  const pct = value === undefined ? null : Math.min(100, Math.round(value * 100));
 
   return (
     <div className="grid gap-2">
@@ -162,9 +178,9 @@ function SeriesLoader({ progress }: { progress: SeriesProgress | null }) {
         </span>
       </div>
       <ProgressBar value={value} label="Fetching time series" />
-      {hasCount ? (
+      {hasBytes ? (
         <p className={META}>
-          {progress.completed} of {progress.total} chunks
+          {formatBytes(progress.loaded)} / {formatBytes(progress.total)}
         </p>
       ) : null}
     </div>

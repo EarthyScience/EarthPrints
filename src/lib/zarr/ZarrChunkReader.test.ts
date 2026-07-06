@@ -84,7 +84,7 @@ describe("ZarrChunkReader", () => {
     });
   });
 
-  it("fetches per time-chunk on cache miss, reports progress, and prefetches", async () => {
+  it("uses the fast pixel fetch on cache miss and prefetches native chunks", async () => {
     mockFetchPixelTimeSeries.mockResolvedValue({
       values: new Float32Array([1, 2, 3, 4]),
       variable: "NEE",
@@ -101,20 +101,10 @@ describe("ZarrChunkReader", () => {
     });
 
     const reader = new ZarrChunkReader(ds);
-    const progress: Array<[number, number]> = [];
-    // The stub spans two native time-chunks, so the pixel fetch runs twice
-    // and the segments are stitched in order.
-    const first = await reader.getTimeSeries(
-      makeGrid(50, 50),
-      undefined,
-      undefined,
-      (completed, total) => progress.push([completed, total]),
-    );
+    const first = await reader.getTimeSeries(makeGrid(50, 50));
 
-    expect(mockFetchPixelTimeSeries).toHaveBeenCalledTimes(2);
-    expect(Array.from(first.values)).toEqual([1, 2, 3, 4, 1, 2, 3, 4]);
-    expect(progress[0]).toEqual([0, 2]);
-    expect(progress.at(-1)).toEqual([2, 2]);
+    expect(mockFetchPixelTimeSeries).toHaveBeenCalledTimes(1);
+    expect(Array.from(first.values)).toEqual([1, 2, 3, 4]);
 
     await vi.waitFor(() => {
       expect(mockGetChunk).toHaveBeenCalledTimes(2);

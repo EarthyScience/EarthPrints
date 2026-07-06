@@ -60,7 +60,7 @@ export function EarthMap() {
   const [historyYears, setHistoryYears] = useState(DEFAULT_HISTORY_YEARS);
   const [loadingSeries, setLoadingSeries] = useState(false);
   const [seriesProgress, setSeriesProgress] = useState<{
-    completed: number;
+    loaded: number;
     total: number;
   } | null>(null);
   const [seriesError, setSeriesError] = useState<string | null>(null);
@@ -109,9 +109,9 @@ export function EarthMap() {
           nextSelection.grid,
           undefined,
           years,
-          (completed, total) => {
+          (loaded, total) => {
             if (requestId !== requestIdRef.current) return;
-            setSeriesProgress({ completed, total });
+            setSeriesProgress({ loaded, total });
           },
         );
 
