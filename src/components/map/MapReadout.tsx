@@ -10,8 +10,7 @@ import { TimeSeriesPlotLoading } from "@/components/map/TimeSeriesPlotLoading";
 const PANEL_CLASS =
   "grid gap-3 rounded-editor-md border border-editor-border bg-editor-bg-secondary p-4 shadow-editor";
 const HINT_CLASS = "text-[13px] leading-[1.55] text-editor-fg-tertiary";
-const LABEL_CLASS =
-  "text-[11px] font-medium uppercase tracking-[0.06em] text-editor-fg-tertiary";
+const LABEL_CLASS = "text-[13px] font-medium text-editor-fg-secondary";
 
 type MapReadoutProps = {
   selection: MapSelection | null;
@@ -38,17 +37,16 @@ export function MapReadout({
   return (
     <>
       <section className={PANEL_CLASS}>
-        <header className="flex items-center justify-between gap-3">
+        <header className="flex items-baseline justify-between gap-3">
           <h2 className="text-[15px] font-semibold tracking-[-0.02em] text-editor-fg-primary">
             Pixel location
           </h2>
-          <span className="inline-flex flex-shrink-0 items-center rounded-full border border-[color-mix(in_srgb,var(--accent)_40%,transparent)] bg-[color-mix(in_srgb,var(--accent)_14%,transparent)] px-2.5 py-1 font-mono text-[10px] font-semibold uppercase tracking-[0.08em] text-accent">
+          <span className="flex-shrink-0 font-mono text-[11px] text-editor-fg-tertiary">
             {ZARR_STORE.kicker}
           </span>
         </header>
         <p className={HINT_CLASS}>
-          Click the map to snap to the {ZARR_STORE.spatialResolutionDeg}° grid
-          used by the Zarr Store.
+          Click the map to sample a {ZARR_STORE.spatialResolutionDeg}° cell.
         </p>
       </section>
 
@@ -73,15 +71,12 @@ export function MapReadout({
             onHistoryYearsChange(Number(event.currentTarget.value))
           }
         />
-        <p className={HINT_CLASS}>
-          Fetch only the most recent window to keep pixel loads fast.
-        </p>
       </section>
 
       <section className={`${PANEL_CLASS} flex-1`} aria-live="polite">
         {selection ? (
           <>
-            <dl className="grid grid-cols-2 gap-x-4 gap-y-3 font-mono [&_dd]:text-[13px] [&_dd]:font-medium [&_dd]:leading-[1.45] [&_dd]:text-editor-fg-secondary [&_div]:grid [&_div]:min-w-0 [&_div]:gap-1 [&_dt]:text-[11px] [&_dt]:font-medium [&_dt]:uppercase [&_dt]:tracking-[0.06em] [&_dt]:text-editor-fg-tertiary">
+            <dl className="grid grid-cols-2 gap-x-4 gap-y-3 [&_dd]:font-mono [&_dd]:text-[13px] [&_dd]:font-medium [&_dd]:leading-[1.45] [&_dd]:text-editor-fg-secondary [&_div]:grid [&_div]:min-w-0 [&_div]:gap-1 [&_dt]:text-[12px] [&_dt]:text-editor-fg-tertiary">
               <div>
                 <dt>Click</dt>
                 <dd>{formatGeoPoint(selection.click)}</dd>
@@ -123,7 +118,7 @@ export function MapReadout({
             </section>
           </>
         ) : (
-          <p className={HINT_CLASS}>No pixel selected yet.</p>
+          <p className={HINT_CLASS}>Pick a point on the map to begin.</p>
         )}
       </section>
     </>
