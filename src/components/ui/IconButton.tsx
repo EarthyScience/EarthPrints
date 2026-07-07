@@ -35,6 +35,7 @@ export function IconButton({
         rel="noreferrer noopener"
         className={classes}
         aria-label={ariaLabel}
+        onClick={onClick}
       >
         {children}
       </a>
