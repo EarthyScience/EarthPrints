@@ -34,6 +34,9 @@ export function MapReadout({
   const historyLabel =
     historyYears === 1 ? "Last 1 year" : `Last ${historyYears} years`;
 
+  const patchCells = ZARR_STORE.nativeChunks.lon;
+  const patchDeg = patchCells * ZARR_STORE.spatialResolutionDeg;
+
   return (
     <>
       <section className={PANEL_CLASS}>
@@ -47,6 +50,11 @@ export function MapReadout({
         </header>
         <p className={HINT_CLASS}>
           Click the map to sample a {ZARR_STORE.spatialResolutionDeg}° cell.
+        </p>
+        <p className={HINT_CLASS}>
+          Each click downloads a {patchCells}×{patchCells} patch ({patchDeg}° ×{" "}
+          {patchDeg}°), drawn as the dashed box. Toggle it with the patch button
+          in the top bar.
         </p>
       </section>
 
