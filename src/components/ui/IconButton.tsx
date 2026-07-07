@@ -5,6 +5,8 @@ type IconButtonProps = {
   "aria-label": string;
   "aria-expanded"?: boolean;
   "aria-controls"?: string;
+  /** When set, renders an anchor to this URL instead of a button. */
+  href?: string;
 };
 
 // Every IconButton renders inside the editor nav, so the editor sizing/colour
@@ -21,11 +23,28 @@ export function IconButton({
   "aria-label": ariaLabel,
   "aria-expanded": ariaExpanded,
   "aria-controls": ariaControls,
+  href,
 }: IconButtonProps) {
+  const classes = [ICON_BUTTON_CLASS, className].filter(Boolean).join(" ");
+
+  if (href) {
+    return (
+      <a
+        href={href}
+        target="_blank"
+        rel="noreferrer noopener"
+        className={classes}
+        aria-label={ariaLabel}
+      >
+        {children}
+      </a>
+    );
+  }
+
   return (
     <button
       type="button"
-      className={[ICON_BUTTON_CLASS, className].filter(Boolean).join(" ")}
+      className={classes}
       onClick={onClick}
       aria-label={ariaLabel}
       aria-expanded={ariaExpanded}
