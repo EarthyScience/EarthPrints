@@ -193,3 +193,27 @@
     transform: scale(1);
   }
 }
+
+/* Indeterminate progress: a segment sweeping across the track while a
+   download is in flight. We show motion rather than a fabricated percent,
+   since the pixel fetch is a single slice request with no per-chunk hook. */
+@keyframes progressIndeterminate {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(250%);
+  }
+}
+
+.progress-bar-indeterminate {
+  animation: progressIndeterminate 1.4s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .progress-bar-indeterminate {
+    animation: none;
+    width: 100%;
+    opacity: 0.55;
+  }
+}
