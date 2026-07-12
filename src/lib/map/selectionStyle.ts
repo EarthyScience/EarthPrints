@@ -1,4 +1,9 @@
-import { TEAL_ON_DARK_RGB, TEAL_RGB } from "@/lib/constants/theme";
+import {
+  TEAL_ON_DARK_RGB,
+  TEAL_RGB,
+  VIOLET_ON_DARK_RGB,
+  VIOLET_RGB,
+} from "@/lib/constants/theme";
 
 export const SELECTION_GUIDE_COLOR = {
   light: [110, 110, 110, 170] as const,
@@ -19,12 +24,12 @@ export const SELECTION_CELL_COLOR = {
 /** The downloaded 40x40 patch: a faint fill with a dashed outline. */
 export const SELECTION_PATCH_COLOR = {
   light: {
-    fill: [...TEAL_RGB, 14] as const,
-    line: [...TEAL_RGB, 150] as const,
+    fill: [...VIOLET_RGB, 14] as const,
+    line: [...VIOLET_RGB, 150] as const,
   },
   dark: {
-    fill: [...TEAL_ON_DARK_RGB, 20] as const,
-    line: [...TEAL_ON_DARK_RGB, 170] as const,
+    fill: [...VIOLET_ON_DARK_RGB, 20] as const,
+    line: [...VIOLET_ON_DARK_RGB, 170] as const,
   },
 };
 
