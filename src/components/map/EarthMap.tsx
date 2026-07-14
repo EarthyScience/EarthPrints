@@ -63,6 +63,10 @@ export function EarthMap() {
   const [controlsOpen, setControlsOpen] = useState(false);
   const [historyYears, setHistoryYears] = useState(DEFAULT_HISTORY_YEARS);
   const [loadingSeries, setLoadingSeries] = useState(false);
+  const [seriesProgress, setSeriesProgress] = useState<{
+    loaded: number;
+    total: number;
+  } | null>(null);
   const [seriesError, setSeriesError] = useState<string | null>(null);
   const [seriesValues, setSeriesValues] = useState<Float32Array | null>(null);
   const [seriesUnits, setSeriesUnits] = useState<string | null>(null);
@@ -88,6 +92,7 @@ export function EarthMap() {
     async (nextSelection: MapSelection, years: number) => {
       const requestId = ++requestIdRef.current;
       setLoadingSeries(true);
+      setSeriesProgress(null);
       setSeriesError(null);
       setSeriesValues(null);
       setSeriesUnits(null);
@@ -108,6 +113,10 @@ export function EarthMap() {
           nextSelection.grid,
           undefined,
           years,
+          (loaded, total) => {
+            if (requestId !== requestIdRef.current) return;
+            setSeriesProgress({ loaded, total });
+          },
         );
 
         if (requestId !== requestIdRef.current) return;
@@ -124,6 +133,7 @@ export function EarthMap() {
       } finally {
         if (requestId === requestIdRef.current) {
           setLoadingSeries(false);
+          setSeriesProgress(null);
         }
       }
     },
@@ -248,6 +258,7 @@ export function EarthMap() {
           historyYears={historyYears}
           onHistoryYearsChange={handleHistoryYearsChange}
           loadingSeries={loadingSeries}
+          seriesProgress={seriesProgress}
           seriesError={seriesError}
           seriesValues={seriesValues}
           seriesUnits={seriesUnits}
