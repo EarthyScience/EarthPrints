@@ -46,6 +46,10 @@ export function setActiveByteSink(sink: ByteSink | null): void {
   activeByteSink = sink;
 }
 
+export function getActiveByteSink(): ByteSink | null {
+  return activeByteSink;
+}
+
 /**
  * A `fetch` for zarrita's store that tees each chunk response through a
  * counting stream so callers can show real download progress. Anything it
@@ -53,8 +57,11 @@ export function setActiveByteSink(sink: ByteSink | null): void {
  * untouched, so data loading never depends on the instrumentation.
  */
 async function progressFetch(request: Request): Promise<Response> {
-  const response = await fetch(request);
+  // Capture the sink synchronously, before the await, so this fetch binds to
+  // the request that was active when it started even if another request swaps
+  // the global sink in while we await the response.
   const sink = activeByteSink;
+  const response = await fetch(request);
   const total = Number(response.headers.get("content-length"));
 
   if (

@@ -19,6 +19,7 @@ import {
 import {
   createByteProgressSink,
   fetchPixelTimeSeries,
+  getActiveByteSink,
   setActiveByteSink,
   type ZarrArrayHandle,
   type ZarrStore,
@@ -249,7 +250,8 @@ export class ZarrChunkReader {
     try {
       return await fetchPixelTimeSeries(array, grid, variable, timeRange);
     } finally {
-      if (sink) setActiveByteSink(null);
+      // Only clear if a newer request has not already swapped in its own sink.
+      if (sink && getActiveByteSink() === sink) setActiveByteSink(null);
       this.prefetchNativeChunks(array, variable, context);
     }
   }
