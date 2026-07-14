@@ -25,6 +25,7 @@ import { useTheme } from "@/providers/ThemeProvider";
 import { EditorShell } from "@/components/layout/EditorShell";
 import { Nav } from "@/components/layout/Nav";
 import { MapSideControls } from "@/components/map/MapSideControls";
+import { MapSearch } from "@/components/map/MapSearch";
 import { MapReadout } from "@/components/map/MapReadout";
 import { GlobeSelectionOverlay } from "@/components/map/GlobeSelectionOverlay";
 
@@ -293,6 +294,12 @@ export function EarthMap() {
               />
             ) : null}
           </Map>
+          <div className="pointer-events-none absolute inset-x-0 top-2 z-30 flex justify-center px-2">
+            <MapSearch
+              onSelect={handlePick}
+              className="pointer-events-auto w-full min-[901px]:max-w-[400px]"
+            />
+          </div>
           <MapSideControls
             viewMode={viewMode}
             onViewModeChange={handleViewModeChange}
