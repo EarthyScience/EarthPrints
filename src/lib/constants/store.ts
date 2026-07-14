@@ -19,6 +19,15 @@ export const ZARR_STORE = {
     latStart: 89.975,
     latStep: -0.05,
   },
+  /**
+   * On-disk chunk footprint along lat/lon. A click downloads this whole
+   * patch (40 x 40 cells = 2° x 2°), not a single pixel. Matches the store's
+   * `chunks` metadata `[1461, 24, 40, 40]`.
+   */
+  nativeChunks: {
+    lat: 40,
+    lon: 40,
+  },
   defaultVariable: "NEE",
 } as const;
 
