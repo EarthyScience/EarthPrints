@@ -7,7 +7,9 @@ import Map, {
   type ViewStateChangeEvent,
 } from "react-map-gl/maplibre";
 import "maplibre-gl/dist/maplibre-gl.css";
-import { geoPointToZarrGrid } from "@/lib/map/geogrid";
+import { chunkIndicesToPatchBounds, geoPointToZarrGrid } from "@/lib/map/geogrid";
+import type { GridCellBounds } from "@/lib/map/geogrid";
+import { ZARR_STORE } from "@/lib/constants/store";
 import { brightenDarkMapPlaceLabels } from "@/lib/map/mapLabels";
 import type { MapLibreEvent, MapStyleDataEvent } from "maplibre-gl";
 import {
@@ -58,6 +60,9 @@ export function EarthMap() {
   const [mapSize, setMapSize] = useState({ width: 0, height: 0 });
   const [selection, setSelection] = useState<MapSelection | null>(null);
   const [showPatch, setShowPatch] = useState(true);
+  const [showCached, setShowCached] = useState(true);
+  const [reader, setReader] = useState<ZarrChunkReader | null>(null);
+  const [cachedBounds, setCachedBounds] = useState<GridCellBounds[]>([]);
   const [historyYears, setHistoryYears] = useState(DEFAULT_HISTORY_YEARS);
   const [loadingSeries, setLoadingSeries] = useState(false);
   const [seriesError, setSeriesError] = useState<string | null>(null);
@@ -81,6 +86,24 @@ export function EarthMap() {
     return () => observer.disconnect();
   }, []);
 
+  useEffect(() => {
+    if (!reader) return;
+    const update = () => {
+      setCachedBounds(
+        reader.getCachedPatches().map((patch) =>
+          chunkIndicesToPatchBounds(
+            patch.latChunkIdx,
+            patch.lonChunkIdx,
+            ZARR_STORE.nativeChunks.lat,
+            ZARR_STORE.nativeChunks.lon,
+          ),
+        ),
+      );
+    };
+    update();
+    return reader.subscribe(update);
+  }, [reader]);
+
   const loadTimeSeries = useCallback(
     async (nextSelection: MapSelection, years: number) => {
       const requestId = ++requestIdRef.current;
@@ -100,6 +123,7 @@ export function EarthMap() {
         }
 
         const reader = await readerPromiseRef.current;
+        setReader(reader);
 
         const { values, units } = await reader.getTimeSeries(
           nextSelection.grid,
@@ -189,6 +213,10 @@ export function EarthMap() {
     setShowPatch((previous) => !previous);
   }, []);
 
+  const handleToggleCached = useCallback(() => {
+    setShowCached((previous) => !previous);
+  }, []);
+
   const handleMove = useCallback(
     (event: ViewStateChangeEvent) => {
       setViewState(toMapViewState(event.viewState, viewMode));
@@ -233,6 +261,8 @@ export function EarthMap() {
           onZoomToSelection={handleZoomToSelection}
           showPatch={showPatch}
           onTogglePatch={handleTogglePatch}
+          showCached={showCached}
+          onToggleCached={cachedBounds.length > 0 ? handleToggleCached : undefined}
         />
       }
       sidebar={
@@ -284,6 +314,7 @@ export function EarthMap() {
                 isLight={isLight}
                 isSphere={isSphere}
                 showPatch={showPatch}
+                cachedBounds={showCached ? cachedBounds : undefined}
               />
             ) : null}
           </Map>
