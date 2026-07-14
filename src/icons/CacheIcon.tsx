@@ -11,9 +11,8 @@ export function CacheIcon() {
       strokeLinejoin="round"
       aria-hidden="true"
     >
-      <ellipse cx="12" cy="5" rx="8" ry="3" />
-      <path d="M4 5v6c0 1.66 3.58 3 8 3s8-1.34 8-3V5" />
-      <path d="M4 11v6c0 1.66 3.58 3 8 3s8-1.34 8-3v-6" />
+      <rect x="8" y="8" width="12" height="12" rx="2" />
+      <path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2" />
     </svg>
   );
 }

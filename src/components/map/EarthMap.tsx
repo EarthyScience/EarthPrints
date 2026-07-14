@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Map, {
   type MapMouseEvent,
   type MapRef,
@@ -8,6 +8,7 @@ import Map, {
 } from "react-map-gl/maplibre";
 import "maplibre-gl/dist/maplibre-gl.css";
 import { chunkIndicesToPatchBounds, geoPointToZarrGrid } from "@/lib/map/geogrid";
+import type { GridCellBounds } from "@/lib/map/geogrid";
 import { ZARR_STORE } from "@/lib/constants/store";
 import { brightenDarkMapPlaceLabels } from "@/lib/map/mapLabels";
 import type { MapLibreEvent, MapStyleDataEvent } from "maplibre-gl";
@@ -19,7 +20,7 @@ import {
   viewStateForMode,
 } from "@/lib/map/viewState";
 import { openZarrStore } from "@/lib/zarr/store";
-import { ZarrChunkReader, type CachedPatch } from "@/lib/zarr/ZarrChunkReader";
+import { ZarrChunkReader } from "@/lib/zarr/ZarrChunkReader";
 import { DEFAULT_HISTORY_YEARS } from "@/lib/zarr/timeRange";
 import type { MapSelection, MapViewMode, MapViewState } from "@/types/map";
 import { useTheme } from "@/providers/ThemeProvider";
@@ -61,7 +62,7 @@ export function EarthMap() {
   const [showPatch, setShowPatch] = useState(true);
   const [showCached, setShowCached] = useState(true);
   const [reader, setReader] = useState<ZarrChunkReader | null>(null);
-  const [cachedPatches, setCachedPatches] = useState<CachedPatch[]>([]);
+  const [cachedBounds, setCachedBounds] = useState<GridCellBounds[]>([]);
   const [historyYears, setHistoryYears] = useState(DEFAULT_HISTORY_YEARS);
   const [loadingSeries, setLoadingSeries] = useState(false);
   const [seriesError, setSeriesError] = useState<string | null>(null);
@@ -87,38 +88,21 @@ export function EarthMap() {
 
   useEffect(() => {
     if (!reader) return;
-    const update = () => setCachedPatches(reader.getCachedPatches());
+    const update = () => {
+      setCachedBounds(
+        reader.getCachedPatches().map((patch) =>
+          chunkIndicesToPatchBounds(
+            patch.latChunkIdx,
+            patch.lonChunkIdx,
+            ZARR_STORE.nativeChunks.lat,
+            ZARR_STORE.nativeChunks.lon,
+          ),
+        ),
+      );
+    };
     update();
     return reader.subscribe(update);
   }, [reader]);
-
-  // Blue boxes for cached patches, minus the active selection's patch — that
-  // rectangle belongs to the violet patch overlay, so drawing both would make
-  // the patch toggle look like it does nothing.
-  const cachedBounds = useMemo(() => {
-    const { lat: chunkLat, lon: chunkLon } = ZARR_STORE.nativeChunks;
-    const activeLatChunk = selection
-      ? Math.floor(selection.grid.latIndex / chunkLat)
-      : null;
-    const activeLonChunk = selection
-      ? Math.floor(selection.grid.lonIndex / chunkLon)
-      : null;
-
-    return cachedPatches
-      .filter(
-        (patch) =>
-          patch.latChunkIdx !== activeLatChunk ||
-          patch.lonChunkIdx !== activeLonChunk,
-      )
-      .map((patch) =>
-        chunkIndicesToPatchBounds(
-          patch.latChunkIdx,
-          patch.lonChunkIdx,
-          chunkLat,
-          chunkLon,
-        ),
-      );
-  }, [cachedPatches, selection]);
 
   const loadTimeSeries = useCallback(
     async (nextSelection: MapSelection, years: number) => {
