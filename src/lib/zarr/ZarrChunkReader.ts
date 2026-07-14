@@ -17,7 +17,10 @@ import {
   yearsToDayRange,
 } from "@/lib/zarr/timeRange";
 import {
+  createByteProgressSink,
   fetchPixelTimeSeries,
+  getActiveByteSink,
+  setActiveByteSink,
   type ZarrArrayHandle,
   type ZarrStore,
 } from "@/lib/zarr/store";
@@ -27,6 +30,9 @@ type CachedNativeChunk = {
   data: Float32Array;
   shape: readonly number[];
 };
+
+/** Reports download progress as `loaded` of `total` bytes. */
+export type SeriesProgress = (loaded: number, total: number) => void;
 
 type ZarrArray = ZarrArrayHandle & {
   getChunk(
@@ -209,6 +215,7 @@ export class ZarrChunkReader {
     grid: GridCell,
     variable = ZARR_STORE.defaultVariable,
     historyYears?: number,
+    onProgress?: SeriesProgress,
   ): Promise<{ values: Float32Array; variable: string; units?: string }> {
     const array = await this.getArray(variable);
     const chunkSizes = this.getChunkSizes(array);
@@ -225,6 +232,7 @@ export class ZarrChunkReader {
       typeof array.attrs.units === "string" ? array.attrs.units : undefined;
 
     if (this.hasAllNativeChunks(variable, context)) {
+      onProgress?.(1, 1);
       return this.buildFromNativeCache(
         variable,
         context,
@@ -235,8 +243,16 @@ export class ZarrChunkReader {
       );
     }
 
-    const pixel = await fetchPixelTimeSeries(array, grid, variable, timeRange);
-    this.prefetchNativeChunks(array, variable, context);
-    return pixel;
+    // Stream byte-level progress off the chunk requests this fetch triggers.
+    // Prefetch runs after the sink is cleared, so it is not counted.
+    const sink = onProgress ? createByteProgressSink(onProgress) : null;
+    if (sink) setActiveByteSink(sink);
+    try {
+      return await fetchPixelTimeSeries(array, grid, variable, timeRange);
+    } finally {
+      // Only clear if a newer request has not already swapped in its own sink.
+      if (sink && getActiveByteSink() === sink) setActiveByteSink(null);
+      this.prefetchNativeChunks(array, variable, context);
+    }
   }
 }
