@@ -156,7 +156,32 @@ export function MapSearch({ onSelect, className }: MapSearchProps) {
           aria-label="Search address or coordinates"
           className="min-w-0 flex-1 bg-transparent text-sm text-editor-fg-primary placeholder:text-editor-fg-tertiary focus:outline-none"
         />
-        {!query && !open ? (
+        {query ? (
+          <button
+            type="button"
+            // Keep the input focused so clearing doesn't close the box.
+            onMouseDown={(event) => event.preventDefault()}
+            onClick={() => {
+              onQueryChange("");
+              inputRef.current?.focus();
+            }}
+            aria-label="Clear search"
+            className="grid size-6 flex-shrink-0 place-items-center rounded-full text-editor-fg-tertiary transition-colors hover:bg-editor-bg-secondary hover:text-editor-fg-primary"
+          >
+            <svg
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.8"
+              strokeLinecap="round"
+              aria-hidden="true"
+            >
+              <path d="M6 6l12 12M18 6 6 18" />
+            </svg>
+          </button>
+        ) : !open ? (
           <kbd className="flex-shrink-0 rounded-[5px] border border-editor-border px-1.5 py-0.5 font-mono text-[11px] text-editor-fg-tertiary">
             /
           </kbd>
