@@ -10,6 +10,12 @@ type IconButtonProps = {
   "aria-pressed"?: boolean;
   /** When set, renders an anchor to this URL instead of a button. */
   href?: string;
+  /**
+   * "plain" drops the border/background so the button reads as a bare icon —
+   * used inside the mobile floating islands, which already carry their own
+   * border and shadow.
+   */
+  variant?: "default" | "plain";
 };
 
 // Every IconButton renders inside the editor nav, so the editor sizing/colour
@@ -25,6 +31,16 @@ const ICON_BUTTON_PRESSED_CLASS =
   "bg-[color-mix(in_srgb,var(--accent)_16%,transparent)] text-accent " +
   "hover:text-accent hover:border-[color-mix(in_srgb,var(--accent)_45%,transparent)] " +
   "hover:bg-[color-mix(in_srgb,var(--accent)_16%,transparent)]";
+
+// Borderless variant — no border or resting background.
+const ICON_BUTTON_PLAIN_CLASS =
+  "peer grid size-8 place-items-center rounded-editor-sm border border-transparent " +
+  "bg-transparent text-editor-fg-secondary transition-all duration-200 " +
+  "hover:bg-editor-bg-secondary hover:text-editor-fg-primary";
+
+const ICON_BUTTON_PLAIN_PRESSED_CLASS =
+  "bg-[color-mix(in_srgb,var(--accent)_16%,transparent)] text-accent " +
+  "hover:text-accent hover:bg-[color-mix(in_srgb,var(--accent)_16%,transparent)]";
 
 // Appears below the button on hover or keyboard focus. Decorative only — the
 // button keeps its aria-label so screen readers do not double-announce.
@@ -47,11 +63,17 @@ export function IconButton({
   "aria-controls": ariaControls,
   "aria-pressed": ariaPressed,
   href,
+  variant = "default",
 }: IconButtonProps) {
   const tooltipLabel = tooltip ?? ariaLabel;
+  const plain = variant === "plain";
   const classes = [
-    ICON_BUTTON_CLASS,
-    ariaPressed ? ICON_BUTTON_PRESSED_CLASS : null,
+    plain ? ICON_BUTTON_PLAIN_CLASS : ICON_BUTTON_CLASS,
+    ariaPressed
+      ? plain
+        ? ICON_BUTTON_PLAIN_PRESSED_CLASS
+        : ICON_BUTTON_PRESSED_CLASS
+      : null,
     className,
   ]
     .filter(Boolean)

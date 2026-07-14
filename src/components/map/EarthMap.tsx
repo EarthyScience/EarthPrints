@@ -24,6 +24,7 @@ import type { MapSelection, MapViewMode, MapViewState } from "@/types/map";
 import { useTheme } from "@/providers/ThemeProvider";
 import { EditorShell } from "@/components/layout/EditorShell";
 import { Nav } from "@/components/layout/Nav";
+import { MapSideControls } from "@/components/map/MapSideControls";
 import { MapReadout } from "@/components/map/MapReadout";
 import { GlobeSelectionOverlay } from "@/components/map/GlobeSelectionOverlay";
 
@@ -58,6 +59,7 @@ export function EarthMap() {
   const [mapSize, setMapSize] = useState({ width: 0, height: 0 });
   const [selection, setSelection] = useState<MapSelection | null>(null);
   const [showPatch, setShowPatch] = useState(true);
+  const [controlsOpen, setControlsOpen] = useState(false);
   const [historyYears, setHistoryYears] = useState(DEFAULT_HISTORY_YEARS);
   const [loadingSeries, setLoadingSeries] = useState(false);
   const [seriesError, setSeriesError] = useState<string | null>(null);
@@ -225,6 +227,8 @@ export function EarthMap() {
 
   return (
     <EditorShell
+      controlsOpen={controlsOpen}
+      onCloseControls={() => setControlsOpen(false)}
       header={
         <Nav
           viewMode={viewMode}
@@ -233,6 +237,8 @@ export function EarthMap() {
           onZoomToSelection={handleZoomToSelection}
           showPatch={showPatch}
           onTogglePatch={handleTogglePatch}
+          controlsOpen={controlsOpen}
+          onToggleControls={() => setControlsOpen((open) => !open)}
         />
       }
       sidebar={
@@ -287,6 +293,14 @@ export function EarthMap() {
               />
             ) : null}
           </Map>
+          <MapSideControls
+            viewMode={viewMode}
+            onViewModeChange={handleViewModeChange}
+            hasSelection={selection !== null}
+            onZoomToSelection={handleZoomToSelection}
+            showPatch={showPatch}
+            onTogglePatch={handleTogglePatch}
+          />
         </div>
       }
     />
