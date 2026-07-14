@@ -8,6 +8,8 @@ type IconButtonProps = {
   "aria-expanded"?: boolean;
   "aria-controls"?: string;
   "aria-pressed"?: boolean;
+  /** When set, renders an anchor to this URL instead of a button. */
+  href?: string;
 };
 
 // Every IconButton renders inside the editor nav, so the editor sizing/colour
@@ -44,28 +46,45 @@ export function IconButton({
   "aria-expanded": ariaExpanded,
   "aria-controls": ariaControls,
   "aria-pressed": ariaPressed,
+  href,
 }: IconButtonProps) {
   const tooltipLabel = tooltip ?? ariaLabel;
+  const classes = [
+    ICON_BUTTON_CLASS,
+    ariaPressed ? ICON_BUTTON_PRESSED_CLASS : null,
+    className,
+  ]
+    .filter(Boolean)
+    .join(" ");
+
+  const control = href ? (
+    <a
+      href={href}
+      target="_blank"
+      rel="noreferrer noopener"
+      className={classes}
+      aria-label={ariaLabel}
+      onClick={onClick}
+    >
+      {children}
+    </a>
+  ) : (
+    <button
+      type="button"
+      className={classes}
+      onClick={onClick}
+      aria-label={ariaLabel}
+      aria-expanded={ariaExpanded}
+      aria-controls={ariaControls}
+      aria-pressed={ariaPressed}
+    >
+      {children}
+    </button>
+  );
 
   return (
     <span className="group relative inline-flex">
-      <button
-        type="button"
-        className={[
-          ICON_BUTTON_CLASS,
-          ariaPressed ? ICON_BUTTON_PRESSED_CLASS : null,
-          className,
-        ]
-          .filter(Boolean)
-          .join(" ")}
-        onClick={onClick}
-        aria-label={ariaLabel}
-        aria-expanded={ariaExpanded}
-        aria-controls={ariaControls}
-        aria-pressed={ariaPressed}
-      >
-        {children}
-      </button>
+      {control}
       <span role="tooltip" aria-hidden="true" className={TOOLTIP_CLASS}>
         {tooltipLabel}
       </span>
