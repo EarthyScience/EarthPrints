@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
 import {
-  chunkIndicesToPatchBounds,
   chunkPatchBounds,
   geoPointToZarrGrid,
   gridCellToBounds,
@@ -57,21 +56,6 @@ describe("chunkPatchBounds", () => {
     expect(bounds.east).toBeGreaterThanOrEqual(cellBounds.east);
     expect(bounds.south).toBeLessThanOrEqual(cellBounds.south);
     expect(bounds.north).toBeGreaterThanOrEqual(cellBounds.north);
-  });
-
-  it("matches chunkIndicesToPatchBounds for the cell's chunk", () => {
-    const { lat, lon } = ZARR_STORE.nativeChunks;
-    const cell = geoPointToZarrGrid({ lon: 10.012, lat: 51.998 });
-
-    const fromCell = chunkPatchBounds(cell, lat, lon);
-    const fromIndices = chunkIndicesToPatchBounds(
-      Math.floor(cell.latIndex / lat),
-      Math.floor(cell.lonIndex / lon),
-      lat,
-      lon,
-    );
-
-    expect(fromIndices).toEqual(fromCell);
   });
 });
 

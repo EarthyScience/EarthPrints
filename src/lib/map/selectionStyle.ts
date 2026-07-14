@@ -1,6 +1,4 @@
 import {
-  BLUE_ON_DARK_RGB,
-  BLUE_RGB,
   TEAL_ON_DARK_RGB,
   TEAL_RGB,
   VIOLET_ON_DARK_RGB,
@@ -32,18 +30,6 @@ export const SELECTION_PATCH_COLOR = {
   dark: {
     fill: [...VIOLET_ON_DARK_RGB, 20] as const,
     line: [...VIOLET_ON_DARK_RGB, 170] as const,
-  },
-};
-
-/** Patches already held in the LRU cache: a faint blue fill and outline. */
-export const SELECTION_CACHED_COLOR = {
-  light: {
-    fill: [...BLUE_RGB, 12] as const,
-    line: [...BLUE_RGB, 120] as const,
-  },
-  dark: {
-    fill: [...BLUE_ON_DARK_RGB, 16] as const,
-    line: [...BLUE_ON_DARK_RGB, 140] as const,
   },
 };
 

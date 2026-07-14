@@ -6,7 +6,6 @@ import { NavActions } from "@/components/nav/NavActions";
 import { IconButton } from "@/components/ui/IconButton";
 import { CrosshairIcon } from "@/icons/CrosshairIcon";
 import { PatchIcon } from "@/icons/PatchIcon";
-import { CacheIcon } from "@/icons/CacheIcon";
 import type { MapViewMode } from "@/types/map";
 
 type NavProps = {
@@ -16,8 +15,6 @@ type NavProps = {
   onZoomToSelection?: () => void;
   showPatch?: boolean;
   onTogglePatch?: () => void;
-  showCached?: boolean;
-  onToggleCached?: () => void;
 };
 
 export function Nav({
@@ -27,8 +24,6 @@ export function Nav({
   onZoomToSelection,
   showPatch = false,
   onTogglePatch,
-  showCached = false,
-  onToggleCached,
 }: NavProps) {
   return (
     <nav className="relative z-[100] flex w-full flex-col gap-0 overflow-visible">
@@ -62,20 +57,6 @@ export function Nav({
                 onClick={onTogglePatch}
               >
                 <PatchIcon />
-              </IconButton>
-            ) : null}
-            {onToggleCached ? (
-              <IconButton
-                className="animate-[zoomToSelectionIn_0.18s_cubic-bezier(0.16,1,0.3,1)]"
-                aria-label={
-                  showCached
-                    ? "Hide cached patches"
-                    : "Show cached patches"
-                }
-                aria-pressed={showCached}
-                onClick={onToggleCached}
-              >
-                <CacheIcon />
               </IconButton>
             ) : null}
           </div>

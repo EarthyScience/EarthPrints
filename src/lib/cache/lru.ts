@@ -37,11 +37,6 @@ export class LRUCache<K, V> {
     return this.cache.has(key);
   }
 
-  /** Current keys in LRU order (oldest first). Does not affect recency. */
-  keys(): IterableIterator<K> {
-    return this.cache.keys();
-  }
-
   delete(key: K): boolean {
     return this.cache.delete(key);
   }

@@ -28,12 +28,6 @@ type CachedNativeChunk = {
   shape: readonly number[];
 };
 
-/** A distinct lat/lon patch currently held in the native-chunk cache. */
-export type CachedPatch = {
-  latChunkIdx: number;
-  lonChunkIdx: number;
-};
-
 type ZarrArray = ZarrArrayHandle & {
   getChunk(
     chunkCoords: number[],
@@ -46,45 +40,11 @@ export class ZarrChunkReader {
   private arrayPromises = new Map<string, Promise<ZarrArray>>();
   private chunkLoadsInFlight = new Map<string, Promise<CachedNativeChunk>>();
   private prefetchInFlight = new Map<string, Promise<void>>();
-  private cacheVersion = 0;
-  private listeners = new Set<() => void>();
 
   /** Default holds ~8 pixels of full history (6 native chunks per pixel). */
   constructor(ds: ZarrStore, maxCacheSize = 48) {
     this.ds = ds;
     this.cache = new LRUCache(maxCacheSize);
-  }
-
-  /** Subscribe to cache mutations (for `useSyncExternalStore`). */
-  subscribe = (listener: () => void): (() => void) => {
-    this.listeners.add(listener);
-    return () => {
-      this.listeners.delete(listener);
-    };
-  };
-
-  /** Snapshot that changes whenever the cache contents change. */
-  getCacheVersion = (): number => this.cacheVersion;
-
-  /** Distinct lat/lon patches currently held in the cache. */
-  getCachedPatches(): CachedPatch[] {
-    const seen = new Set<string>();
-    const patches: CachedPatch[] = [];
-    for (const key of this.cache.keys()) {
-      const parts = key.split(":");
-      const latChunkIdx = Number(parts[3]);
-      const lonChunkIdx = Number(parts[4]);
-      const patchKey = `${latChunkIdx}:${lonChunkIdx}`;
-      if (seen.has(patchKey)) continue;
-      seen.add(patchKey);
-      patches.push({ latChunkIdx, lonChunkIdx });
-    }
-    return patches;
-  }
-
-  private onCacheChanged(): void {
-    this.cacheVersion += 1;
-    for (const listener of this.listeners) listener();
   }
 
   private getArray(variable: string): Promise<ZarrArray> {
@@ -161,7 +121,6 @@ export class ZarrChunkReader {
           shape: chunk.shape,
         };
         this.cache.set(key, entry);
-        this.onCacheChanged();
         return entry;
       })
       .finally(() => {

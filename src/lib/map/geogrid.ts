@@ -78,24 +78,9 @@ export function chunkPatchBounds(
   chunkLat: number,
   chunkLon: number,
 ): GridCellBounds {
-  return chunkIndicesToPatchBounds(
-    Math.floor(cell.latIndex / chunkLat),
-    Math.floor(cell.lonIndex / chunkLon),
-    chunkLat,
-    chunkLon,
-  );
-}
-
-/** Geographic bounds of a chunk addressed directly by its lat/lon chunk index. */
-export function chunkIndicesToPatchBounds(
-  latChunkIdx: number,
-  lonChunkIdx: number,
-  chunkLat: number,
-  chunkLon: number,
-): GridCellBounds {
-  const firstLatIdx = latChunkIdx * chunkLat;
+  const firstLatIdx = Math.floor(cell.latIndex / chunkLat) * chunkLat;
   const lastLatIdx = Math.min(firstLatIdx + chunkLat, dimensions.lat) - 1;
-  const firstLonIdx = lonChunkIdx * chunkLon;
+  const firstLonIdx = Math.floor(cell.lonIndex / chunkLon) * chunkLon;
   const lastLonIdx = Math.min(firstLonIdx + chunkLon, dimensions.lon) - 1;
 
   const latEdgeA = grid.latStart + firstLatIdx * grid.latStep;
@@ -177,7 +162,7 @@ export type SelectionGuideGeoJson = {
   type: "FeatureCollection";
   features: Array<{
     type: "Feature";
-    properties: { kind: "guide" | "cell" | "patch" | "cached" };
+    properties: { kind: "guide" | "cell" | "patch" };
     geometry:
       | { type: "LineString"; coordinates: LonLatPath }
       | { type: "Polygon"; coordinates: LonLatPath[] };
@@ -194,15 +179,10 @@ function closedRing(corners: GeoPoint[]): LonLatPath {
 export function selectionGuideGeoJson(
   cell: GridCell,
   guidePaths: LonLatPath[],
-  options?: {
-    densifyGuides?: boolean;
-    patchBounds?: GridCellBounds | null;
-    cachedBounds?: GridCellBounds[] | null;
-  },
+  options?: { densifyGuides?: boolean; patchBounds?: GridCellBounds | null },
 ): SelectionGuideGeoJson {
   const densifyGuides = options?.densifyGuides ?? true;
   const patchBounds = options?.patchBounds ?? null;
-  const cachedBounds = options?.cachedBounds ?? null;
 
   return {
     type: "FeatureCollection",
@@ -213,14 +193,6 @@ export function selectionGuideGeoJson(
         geometry: {
           type: "LineString" as const,
           coordinates: densifyGuides ? densifyLonLatPath(path) : path,
-        },
-      })),
-      ...(cachedBounds ?? []).map((bounds) => ({
-        type: "Feature" as const,
-        properties: { kind: "cached" as const },
-        geometry: {
-          type: "Polygon" as const,
-          coordinates: [closedRing(boundsToPolygon(bounds))],
         },
       })),
       ...(patchBounds
