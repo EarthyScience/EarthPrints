@@ -17,9 +17,24 @@
   --surface-2: #1f1f1f;
   --nav-bg: #121212;
   --text: #ffffff;
-  --text-secondary: rgba(255, 255, 255, 0.80); /* 5.7:1 — AA body text, subtitles */
-  --text-muted: rgba(255, 255, 255, 0.56);     /* 3.8:1 — AA large text only (18px+) */
-  --text-dim: rgba(255, 255, 255, 0.34);       /* 2.3:1 — decorative only, never body */
+  --text-secondary: rgba(
+    255,
+    255,
+    255,
+    0.8
+  ); /* 5.7:1 — AA body text, subtitles */
+  --text-muted: rgba(
+    255,
+    255,
+    255,
+    0.56
+  ); /* 3.8:1 — AA large text only (18px+) */
+  --text-dim: rgba(
+    255,
+    255,
+    255,
+    0.34
+  ); /* 2.3:1 — decorative only, never body */
   --border: rgba(220, 219, 214, 0.12);
   --border-strong: rgba(220, 219, 214, 0.18);
   /** Brand dark teal — icons on white chips, light-mode accent. */
@@ -49,9 +64,14 @@
   --surface-2: #f6f6f4;
   --nav-bg: #ffffff;
   --text: #0a0a0a;
-  --text-secondary: rgba(10, 10, 10, 0.72);   /* 5.0:1 — AA body text, subtitles */
-  --text-muted: rgba(10, 10, 10, 0.56);        /* 3.8:1 — AA large text only (18px+) */
-  --text-dim: rgba(10, 10, 10, 0.36);          /* 2.4:1 — decorative only, never body */
+  --text-secondary: rgba(
+    10,
+    10,
+    10,
+    0.72
+  ); /* 5.0:1 — AA body text, subtitles */
+  --text-muted: rgba(10, 10, 10, 0.56); /* 3.8:1 — AA large text only (18px+) */
+  --text-dim: rgba(10, 10, 10, 0.36); /* 2.4:1 — decorative only, never body */
   --border: rgba(45, 45, 42, 0.12);
   --border-strong: rgba(45, 45, 42, 0.17);
   --accent-solid: #006c66;
@@ -98,10 +118,12 @@
 
   --shadow-editor: var(--editor-shadow);
 
-  --font-sans: var(--font-geist-sans), "Geist", "Geist Fallback", -apple-system,
-    system-ui, sans-serif;
-  --font-mono: var(--font-geist-mono), "Geist Mono", "Geist Mono Fallback",
-    ui-monospace, monospace;
+  --font-sans:
+    var(--font-geist-sans), "Geist", "Geist Fallback", -apple-system, system-ui,
+    sans-serif;
+  --font-mono:
+    var(--font-geist-mono), "Geist Mono", "Geist Mono Fallback", ui-monospace,
+    monospace;
 }
 
 @layer base {
@@ -117,12 +139,17 @@
     -webkit-font-smoothing: antialiased;
     text-rendering: optimizeLegibility;
     overflow-x: hidden;
-    transition: background 0.5s ease, color 0.5s ease;
+    transition:
+      background 0.5s ease,
+      color 0.5s ease;
   }
 
   /* The app only ever renders the editor shell, which owns the viewport. */
+  html:has(.editor-shell),
   body:has(.editor-shell) {
+    height: 100%;
     overflow: hidden;
+    overscroll-behavior: none;
   }
 
   /* The footer is rendered by the root layout on every route, but the app

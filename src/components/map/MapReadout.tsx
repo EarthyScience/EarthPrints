@@ -115,22 +115,19 @@ export function MapReadout({
   return (
     <div className="flex flex-col divide-y divide-editor-border">
       <section className="pb-4">
-        <div className="flex items-baseline justify-between gap-3">
-          <h2 className="font-mono text-[20px] leading-none tracking-tight tabular-nums text-editor-fg-primary">
-            {formatCoordinate(selection.click.lat)}
-            <span className="text-editor-fg-tertiary">, </span>
-            {formatCoordinate(selection.click.lon)}
-          </h2>
-          <span className={`flex-shrink-0 ${META}`}>{ZARR_STORE.kicker}</span>
-        </div>
+        <h2 className="font-mono text-[20px] leading-none tracking-tight tabular-nums text-editor-fg-primary">
+          {formatCoordinate(selection.click.lat)}
+          <span className="text-editor-fg-tertiary">, </span>
+          {formatCoordinate(selection.click.lon)}
+        </h2>
         <p className="mt-2 text-[12.5px] leading-[1.5] text-editor-fg-tertiary">
-          Snapped to the nearest {ZARR_STORE.spatialResolutionDeg}° cell ·
-          variable {ZARR_STORE.defaultVariable}
+          {ZARR_STORE.kicker} · snapped to the nearest{" "}
+          {ZARR_STORE.spatialResolutionDeg}° cell
         </p>
         <p className="mt-2 text-[12.5px] leading-[1.5] text-editor-fg-tertiary">
           Each click downloads a {patchCells}×{patchCells} patch ({patchDeg}° ×{" "}
-          {patchDeg}°), drawn as the dashed box. Toggle it with the patch button
-          in the top bar.
+          {patchDeg}°), drawn as the dashed box. Toggle it with the patch
+          button.
         </p>
       </section>
 
@@ -173,7 +170,8 @@ function formatBytes(bytes: number): string {
 function SeriesLoader({ progress }: { progress: SeriesProgress | null }) {
   const hasBytes = progress !== null && progress.total > 0;
   const value = hasBytes ? progress.loaded / progress.total : undefined;
-  const pct = value === undefined ? null : Math.min(100, Math.round(value * 100));
+  const pct =
+    value === undefined ? null : Math.min(100, Math.round(value * 100));
 
   return (
     <div className="grid gap-2">

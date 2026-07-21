@@ -5,7 +5,6 @@ import { EditorViewTabs } from "@/components/layout/EditorViewTabs";
 import { NavActions } from "@/components/nav/NavActions";
 import { IconButton } from "@/components/ui/IconButton";
 import { CrosshairIcon } from "@/icons/CrosshairIcon";
-import { MenuIcon } from "@/icons/MenuIcon";
 import { PatchIcon } from "@/icons/PatchIcon";
 import type { MapViewMode } from "@/types/map";
 
@@ -16,9 +15,6 @@ type NavProps = {
   onZoomToSelection?: () => void;
   showPatch?: boolean;
   onTogglePatch?: () => void;
-  /** Toggles the mobile controls drawer (<=900px only). */
-  controlsOpen?: boolean;
-  onToggleControls?: () => void;
 };
 
 export function Nav({
@@ -28,25 +24,11 @@ export function Nav({
   onZoomToSelection,
   showPatch = false,
   onTogglePatch,
-  controlsOpen = false,
-  onToggleControls,
 }: NavProps) {
   return (
     <nav className="relative z-[100] flex w-full flex-col gap-0 overflow-visible">
       <div className="relative z-[2] box-border grid h-12 w-full grid-cols-[var(--editor-sidebar-width)_1fr] items-center max-[900px]:grid-cols-[auto_1fr] gap-0 overflow-visible rounded-none border-0 bg-transparent p-0">
         <div className="box-border flex min-w-0 items-center gap-2 px-4 py-2">
-          {onToggleControls ? (
-            <div className="hidden max-[900px]:flex">
-              <IconButton
-                variant="plain"
-                aria-label={controlsOpen ? "Close controls" : "Open controls"}
-                aria-expanded={controlsOpen}
-                onClick={onToggleControls}
-              >
-                <MenuIcon open={controlsOpen} />
-              </IconButton>
-            </div>
-          ) : null}
           <Brand />
         </div>
         <div className="box-border flex min-w-0 items-center bg-editor-bg-base py-2 pl-0 pr-2">
