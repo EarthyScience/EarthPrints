@@ -77,8 +77,12 @@ export async function geocodeAddress(
     throw new Error("Search request failed");
   }
 
-  const data = (await response.json()) as NominatimPlace[];
-  return data
+  const data = (await response.json()) as unknown;
+  if (!Array.isArray(data)) return [];
+
+  return (data as NominatimPlace[])
     .map(toResult)
-    .filter((result) => Number.isFinite(result.lon) && Number.isFinite(result.lat));
+    .filter(
+      (result) => Number.isFinite(result.lon) && Number.isFinite(result.lat),
+    );
 }

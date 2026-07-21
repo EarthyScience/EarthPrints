@@ -38,6 +38,7 @@ export function MapSideControls({
       <div className={ISLAND_CLASS}>
         <IconButton
           variant="plain"
+          tooltipPlacement="left"
           aria-label="Plan view"
           aria-pressed={viewMode === "2d"}
           onClick={() => onViewModeChange("2d")}
@@ -46,6 +47,7 @@ export function MapSideControls({
         </IconButton>
         <IconButton
           variant="plain"
+          tooltipPlacement="left"
           aria-label="Sphere view"
           aria-pressed={viewMode === "sphere"}
           onClick={() => onViewModeChange("sphere")}
@@ -57,6 +59,7 @@ export function MapSideControls({
         <div className={ISLAND_CLASS}>
           <IconButton
             variant="plain"
+            tooltipPlacement="left"
             className="animate-[zoomToSelectionIn_0.18s_cubic-bezier(0.16,1,0.3,1)]"
             aria-label="Zoom to selection"
             onClick={onZoomToSelection}
@@ -65,6 +68,7 @@ export function MapSideControls({
           </IconButton>
           <IconButton
             variant="plain"
+            tooltipPlacement="left"
             className="animate-[zoomToSelectionIn_0.18s_cubic-bezier(0.16,1,0.3,1)]"
             aria-label={
               showPatch

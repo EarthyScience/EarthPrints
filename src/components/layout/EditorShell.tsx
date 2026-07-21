@@ -39,13 +39,12 @@ export function EditorShell({
           }`}
         />
         <aside
-          className={`flex w-[var(--editor-sidebar-width)] flex-shrink-0 flex-col gap-3 overflow-y-auto bg-editor-bg-base p-4 max-[900px]:fixed max-[900px]:inset-0 max-[900px]:z-[110] max-[900px]:w-full max-[900px]:transition-transform max-[900px]:duration-300 max-[900px]:ease-[cubic-bezier(0.16,1,0.3,1)] ${
+          className={`flex w-[var(--editor-sidebar-width)] flex-shrink-0 flex-col gap-3 overflow-y-auto bg-editor-bg-base p-4 max-[900px]:fixed max-[900px]:inset-0 max-[900px]:z-[110] max-[900px]:w-full max-[900px]:transition-[transform,visibility] max-[900px]:duration-300 max-[900px]:ease-[cubic-bezier(0.16,1,0.3,1)] ${
             controlsOpen
-              ? "max-[900px]:translate-x-0"
-              : "max-[900px]:-translate-x-full"
+              ? "max-[900px]:visible max-[900px]:translate-x-0"
+              : "max-[900px]:invisible max-[900px]:-translate-x-full"
           }`}
           aria-label="Map controls"
-          aria-hidden={!controlsOpen}
         >
           {/* Drawer header — mobile only. */}
           <div className="hidden items-center justify-between max-[900px]:flex">

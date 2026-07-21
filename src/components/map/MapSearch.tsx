@@ -27,9 +27,7 @@ export function MapSearch({ onSelect, className }: MapSearchProps) {
   const [results, setResults] = useState<SearchResult[]>([]);
   const [status, setStatus] = useState<Status>("idle");
   const [open, setOpen] = useState(false);
-  const [history, setHistory] = useState<SearchResult[]>(() =>
-    loadSearchHistory(),
-  );
+  const [history, setHistory] = useState<SearchResult[]>([]);
   const [activeIndex, setActiveIndex] = useState(0);
 
   const trimmed = query.trim();
@@ -39,6 +37,7 @@ export function MapSearch({ onSelect, className }: MapSearchProps) {
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key !== "/") return;
+      if (event.ctrlKey || event.metaKey || event.altKey) return;
       const target = event.target as HTMLElement | null;
       const tag = target?.tagName;
       if (tag === "INPUT" || tag === "TEXTAREA" || target?.isContentEditable) {
@@ -149,12 +148,19 @@ export function MapSearch({ onSelect, className }: MapSearchProps) {
           type="text"
           value={query}
           onChange={(event) => onQueryChange(event.target.value)}
-          onFocus={() => setOpen(true)}
+          onFocus={() => {
+            setHistory(loadSearchHistory());
+            setOpen(true);
+          }}
           onBlur={() => setOpen(false)}
           onKeyDown={onKeyDown}
           placeholder="Search address or coordinates"
           aria-label="Search address or coordinates"
-          className="min-w-0 flex-1 bg-transparent text-sm text-editor-fg-primary placeholder:text-editor-fg-tertiary focus:outline-none"
+          autoComplete="off"
+          autoCorrect="off"
+          autoCapitalize="off"
+          spellCheck={false}
+          className="min-w-0 flex-1 bg-transparent text-base text-editor-fg-primary placeholder:text-editor-fg-tertiary focus:outline-none min-[901px]:text-sm"
         />
         {query ? (
           <button
@@ -195,7 +201,9 @@ export function MapSearch({ onSelect, className }: MapSearchProps) {
           className="absolute inset-x-0 top-full z-10 mt-2 overflow-hidden rounded-editor-sm border border-editor-border bg-editor-bg-base py-1 shadow-editor"
         >
           {status === "loading" ? (
-            <p className="px-3 py-3 text-sm text-editor-fg-tertiary">Searching…</p>
+            <p className="px-3 py-3 text-sm text-editor-fg-tertiary">
+              Searching…
+            </p>
           ) : showEmpty ? (
             <p className="px-3 py-3 text-sm text-editor-fg-tertiary">
               No matches for “{trimmed}”.

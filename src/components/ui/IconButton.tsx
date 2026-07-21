@@ -16,6 +16,7 @@ type IconButtonProps = {
    * border and shadow.
    */
   variant?: "default" | "plain";
+  tooltipPlacement?: "bottom" | "left";
 };
 
 // Every IconButton renders inside the editor nav, so the editor sizing/colour
@@ -42,16 +43,21 @@ const ICON_BUTTON_PLAIN_PRESSED_CLASS =
   "bg-[color-mix(in_srgb,var(--accent)_16%,transparent)] text-accent " +
   "hover:text-accent hover:bg-[color-mix(in_srgb,var(--accent)_16%,transparent)]";
 
-// Appears below the button on hover or keyboard focus. Decorative only — the
-// button keeps its aria-label so screen readers do not double-announce.
+// Appears on hover or keyboard focus. Decorative only — the button keeps its
+// aria-label so screen readers do not double-announce.
 const TOOLTIP_CLASS =
-  "pointer-events-none absolute left-1/2 top-full z-[200] mt-2 -translate-x-1/2 " +
-  "translate-y-[-2px] whitespace-nowrap rounded-editor-sm border border-editor-border " +
-  "bg-editor-bg-depth px-2 py-1 text-xs font-medium text-editor-fg-primary shadow-editor " +
-  "opacity-0 transition-all duration-150 " +
-  "group-hover:translate-y-0 group-hover:opacity-100 " +
-  "group-focus-within:translate-y-0 group-focus-within:opacity-100 " +
-  "peer-aria-expanded:hidden";
+  "pointer-events-none absolute z-[200] whitespace-nowrap rounded-editor-sm " +
+  "border border-editor-border bg-editor-bg-depth px-2 py-1 text-xs font-medium " +
+  "text-editor-fg-primary shadow-editor opacity-0 transition-all duration-150 " +
+  "group-hover:opacity-100 group-focus-within:opacity-100 peer-aria-expanded:hidden";
+
+const TOOLTIP_BOTTOM_CLASS =
+  "left-1/2 top-full mt-2 -translate-x-1/2 translate-y-[-2px] " +
+  "group-hover:translate-y-0 group-focus-within:translate-y-0";
+
+const TOOLTIP_LEFT_CLASS =
+  "right-full top-1/2 mr-2 -translate-y-1/2 translate-x-[2px] " +
+  "group-hover:translate-x-0 group-focus-within:translate-x-0";
 
 export function IconButton({
   children,
@@ -64,6 +70,7 @@ export function IconButton({
   "aria-pressed": ariaPressed,
   href,
   variant = "default",
+  tooltipPlacement = "bottom",
 }: IconButtonProps) {
   const tooltipLabel = tooltip ?? ariaLabel;
   const plain = variant === "plain";
@@ -107,7 +114,15 @@ export function IconButton({
   return (
     <span className="group relative inline-flex">
       {control}
-      <span role="tooltip" aria-hidden="true" className={TOOLTIP_CLASS}>
+      <span
+        role="tooltip"
+        aria-hidden="true"
+        className={`${TOOLTIP_CLASS} ${
+          tooltipPlacement === "left"
+            ? TOOLTIP_LEFT_CLASS
+            : TOOLTIP_BOTTOM_CLASS
+        }`}
+      >
         {tooltipLabel}
       </span>
     </span>
