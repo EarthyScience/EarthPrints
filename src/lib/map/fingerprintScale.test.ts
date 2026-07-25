@@ -2,7 +2,9 @@ import { describe, expect, it } from "vitest";
 import {
   dayIndexTicks,
   fingerprintColorScale,
+  formatIsoDate,
   symmetricAbsMax,
+  yearRangesInWindow,
 } from "@/lib/map/fingerprintScale";
 
 describe("symmetricAbsMax", () => {
@@ -54,5 +56,22 @@ describe("dayIndexTicks", () => {
   it("handles degenerate windows", () => {
     expect(dayIndexTicks(1)).toEqual([0]);
     expect(dayIndexTicks(0)).toEqual([0]);
+  });
+});
+
+describe("time mapping", () => {
+  it("maps day 0 to the 2001-01-01 origin", () => {
+    expect(formatIsoDate(0)).toBe("2001-01-01");
+    expect(formatIsoDate(364)).toBe("2001-12-31");
+  });
+
+  it("splits a window into contiguous calendar years", () => {
+    // A 400-day window starting mid-2001 spans 2001 and 2002.
+    const ranges = yearRangesInWindow(180, 400);
+    expect(ranges.map((r) => r.year)).toEqual([2001, 2002]);
+    expect(ranges[0].startDay).toBe(0);
+    expect(ranges[1].endDay).toBe(399);
+    // Ranges are contiguous and non-overlapping.
+    expect(ranges[1].startDay).toBe(ranges[0].endDay + 1);
   });
 });

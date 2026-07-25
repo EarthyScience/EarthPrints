@@ -9,6 +9,8 @@
  * `timeSeriesChartTheme` pattern rather than pulling from CSS variables.
  */
 
+import { dayIndexToUTCDate } from "@/lib/zarr/timeRange";
+
 export type Rgb = readonly [number, number, number];
 
 /*
@@ -101,8 +103,64 @@ export function symmetricAbsMax(values: ArrayLike<number>): number {
   return max;
 }
 
-/** Hour-of-day gridlines/labels worth annotating on the y axis. */
+/** Hour-of-day gridlines/labels worth annotating on the hour axis. */
 export const FINGERPRINT_HOUR_TICKS = [0, 6, 12, 18] as const;
+
+const SHORT_MONTHS = [
+  "Jan",
+  "Feb",
+  "Mar",
+  "Apr",
+  "May",
+  "Jun",
+  "Jul",
+  "Aug",
+  "Sep",
+  "Oct",
+  "Nov",
+  "Dec",
+] as const;
+
+/** A contiguous run of local day indices (inclusive) belonging to one calendar year. */
+export type YearRange = {
+  year: number;
+  /** Local index of the first day of this year within the loaded window. */
+  startDay: number;
+  /** Local index of the last day of this year within the loaded window. */
+  endDay: number;
+};
+
+/**
+ * Split the loaded window into the calendar years it spans. `base` is the
+ * absolute day index of the window's first day (0 = the time-axis origin); days
+ * are contiguous and chronological, so each year is a single inclusive range.
+ */
+export function yearRangesInWindow(base: number, nDays: number): YearRange[] {
+  const ranges: YearRange[] = [];
+  for (let local = 0; local < nDays; local++) {
+    const year = dayIndexToUTCDate(base + local).getUTCFullYear();
+    const last = ranges[ranges.length - 1];
+    if (last && last.year === year) {
+      last.endDay = local;
+    } else {
+      ranges.push({ year, startDay: local, endDay: local });
+    }
+  }
+  return ranges;
+}
+
+/** Compact "Mon 'yy" label for an axis tick at absolute day `absoluteDay`. */
+export function formatDayTick(absoluteDay: number): string {
+  const date = dayIndexToUTCDate(absoluteDay);
+  return `${SHORT_MONTHS[date.getUTCMonth()]} '${String(
+    date.getUTCFullYear(),
+  ).slice(2)}`;
+}
+
+/** ISO date (YYYY-MM-DD) for a tooltip readout. */
+export function formatIsoDate(absoluteDay: number): string {
+  return dayIndexToUTCDate(absoluteDay).toISOString().slice(0, 10);
+}
 
 /** Evenly spaced day-index ticks for the x axis (deduped, inclusive of ends). */
 export function dayIndexTicks(nDays: number, count = 6): number[] {
