@@ -11,13 +11,21 @@
 
 export type Rgb = readonly [number, number, number];
 
-/** Uptake (negative) end aligns with the app accent teal. */
-const UPTAKE_LIGHT: Rgb = [0, 108, 102]; // #006c66
-const UPTAKE_DARK: Rgb = [82, 212, 200]; // #52d4c8
+/*
+ * Poles follow the geoscience-standard "vik" diverging convention (Crameri's
+ * perceptually uniform, colourblind-safe scientific colour maps): a cool blue
+ * for uptake and a warm red for release, so warm reading as CO2 emission matches
+ * how signed anomaly fields are shown in the flux/climate literature. Dark-mode
+ * poles are lifted so they stay legible on the dark surface.
+ */
 
-/** Release (positive) end is a warm amber, the diverging counterpart. */
-const RELEASE_LIGHT: Rgb = [180, 83, 9]; // #b45309
-const RELEASE_DARK: Rgb = [251, 146, 60]; // #fb923c
+/** Uptake (negative) end: blue. */
+const UPTAKE_LIGHT: Rgb = [33, 102, 172]; // #2166ac
+const UPTAKE_DARK: Rgb = [106, 168, 224]; // #6aa8e0
+
+/** Release (positive) end: red. */
+const RELEASE_LIGHT: Rgb = [178, 24, 43]; // #b2182b
+const RELEASE_DARK: Rgb = [232, 114, 76]; // #e8724c
 
 /**
  * Zero end is a neutral gray kept distinct from both the panel background and
