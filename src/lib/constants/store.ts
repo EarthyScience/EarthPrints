@@ -1,3 +1,5 @@
+import type { GridSpec } from "@/types/map";
+
 /** ESDC v3 low-resolution test cube (2.5° × 16-day). */
 export const ZARR_STORE = {
   id: "nee-d-0.05deg",
@@ -32,3 +34,15 @@ export const ZARR_STORE = {
 } as const;
 
 export type ZarrDataset = typeof ZARR_STORE;
+
+/**
+ * Fallback grid used for first paint and whenever deriving the spec from the
+ * remote store fails. Mirrors the hardcoded `ZARR_STORE` values; the live spec
+ * is fetched at runtime by `@/lib/zarr/gridSpec`.
+ */
+export const DEFAULT_GRID_SPEC: GridSpec = {
+  grid: { ...ZARR_STORE.grid },
+  dimensions: { ...ZARR_STORE.dimensions },
+  nativeChunks: { ...ZARR_STORE.nativeChunks },
+  spatialResolutionDeg: ZARR_STORE.spatialResolutionDeg,
+};

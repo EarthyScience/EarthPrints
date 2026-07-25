@@ -1,9 +1,9 @@
 "use client";
 
 import { useState } from "react";
-import type { MapSelection } from "@/types/map";
+import type { GridSpec, MapSelection } from "@/types/map";
 import { formatCoordinate, formatGeoPoint } from "@/lib/map/geogrid";
-import { ZARR_STORE } from "@/lib/constants/store";
+import { DEFAULT_GRID_SPEC, ZARR_STORE } from "@/lib/constants/store";
 import { ZARR_TIME } from "@/lib/zarr/timeRange";
 import { TimeSeriesPlot } from "@/components/map/TimeSeriesPlot";
 import { TimeSeriesPlotLoading } from "@/components/map/TimeSeriesPlotLoading";
@@ -17,6 +17,7 @@ type SeriesProgress = { loaded: number; total: number };
 
 type MapReadoutProps = {
   selection: MapSelection | null;
+  gridSpec?: GridSpec;
   historyYears: number;
   onHistoryYearsChange: (years: number) => void;
   loadingSeries: boolean;
@@ -31,6 +32,7 @@ const META = "font-mono text-[11px] text-editor-fg-tertiary";
 
 export function MapReadout({
   selection,
+  gridSpec = DEFAULT_GRID_SPEC,
   historyYears,
   onHistoryYearsChange,
   loadingSeries,
@@ -62,8 +64,8 @@ export function MapReadout({
     );
   }
 
-  const patchCells = ZARR_STORE.nativeChunks.lon;
-  const patchDeg = patchCells * ZARR_STORE.spatialResolutionDeg;
+  const patchCells = gridSpec.nativeChunks.lon;
+  const patchDeg = patchCells * gridSpec.spatialResolutionDeg;
 
   const historyControl = (
     <section>
@@ -140,7 +142,7 @@ export function MapReadout({
         </h2>
         <p className="mt-2 text-[12.5px] leading-[1.5] text-editor-fg-tertiary">
           {ZARR_STORE.kicker} · snapped to the nearest{" "}
-          {ZARR_STORE.spatialResolutionDeg}° cell
+          {gridSpec.spatialResolutionDeg}° cell
         </p>
         <p className="mt-2 text-[12.5px] leading-[1.5] text-editor-fg-tertiary">
           Each click downloads a {patchCells}×{patchCells} patch ({patchDeg}° ×{" "}
