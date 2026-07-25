@@ -20,7 +20,13 @@ import {
 import { openZarrStore } from "@/lib/zarr/store";
 import { ZarrChunkReader } from "@/lib/zarr/ZarrChunkReader";
 import { DEFAULT_HISTORY_YEARS } from "@/lib/zarr/timeRange";
-import type { MapSelection, MapViewMode, MapViewState } from "@/types/map";
+import { DEFAULT_GRID_SPEC } from "@/lib/constants/store";
+import type {
+  GridSpec,
+  MapSelection,
+  MapViewMode,
+  MapViewState,
+} from "@/types/map";
 import { useTheme } from "@/providers/ThemeProvider";
 import {
   EditorShell,
@@ -73,9 +79,22 @@ export function EarthMap() {
   const [seriesError, setSeriesError] = useState<string | null>(null);
   const [seriesValues, setSeriesValues] = useState<Float32Array | null>(null);
   const [seriesUnits, setSeriesUnits] = useState<string | null>(null);
+  const [gridSpec, setGridSpec] = useState<GridSpec>(DEFAULT_GRID_SPEC);
 
   const isSphere = viewMode === "sphere";
   const mapStyle = isLight ? MAP_BASE_STYLES.light : MAP_BASE_STYLES.dark;
+
+  const ensureReader = useCallback(() => {
+    if (!readerPromiseRef.current) {
+      readerPromiseRef.current = openZarrStore()
+        .then((ds) => new ZarrChunkReader(ds))
+        .catch((error) => {
+          readerPromiseRef.current = null;
+          throw error;
+        });
+    }
+    return readerPromiseRef.current;
+  }, []);
 
   useEffect(() => {
     const node = mapStageRef.current;
@@ -91,6 +110,21 @@ export function EarthMap() {
     return () => observer.disconnect();
   }, []);
 
+  useEffect(() => {
+    let cancelled = false;
+    ensureReader()
+      .then((reader) => reader.getGridSpec())
+      .then((spec) => {
+        if (!cancelled) setGridSpec(spec);
+      })
+      .catch(() => {
+        // Keep DEFAULT_GRID_SPEC on failure; time-series loads surface errors.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [ensureReader]);
+
   const loadTimeSeries = useCallback(
     async (nextSelection: MapSelection, years: number) => {
       const requestId = ++requestIdRef.current;
@@ -101,16 +135,7 @@ export function EarthMap() {
       setSeriesUnits(null);
 
       try {
-        if (!readerPromiseRef.current) {
-          readerPromiseRef.current = openZarrStore()
-            .then((ds) => new ZarrChunkReader(ds))
-            .catch((error) => {
-              readerPromiseRef.current = null;
-              throw error;
-            });
-        }
-
-        const reader = await readerPromiseRef.current;
+        const reader = await ensureReader();
 
         const { values, units } = await reader.getTimeSeries(
           nextSelection.grid,
@@ -140,7 +165,7 @@ export function EarthMap() {
         }
       }
     },
-    [],
+    [ensureReader],
   );
 
   const flyToView = useCallback((next: MapViewState, duration = 0) => {
@@ -168,7 +193,7 @@ export function EarthMap() {
     (lon: number, lat: number) => {
       const nextSelection: MapSelection = {
         click: { lon, lat },
-        grid: geoPointToZarrGrid({ lon, lat }),
+        grid: geoPointToZarrGrid({ lon, lat }, gridSpec),
       };
 
       setSelection(nextSelection);
@@ -180,7 +205,7 @@ export function EarthMap() {
       flyToView(focused, SELECTION_FOCUS_TRANSITION_MS);
       void loadTimeSeries(nextSelection, historyYears);
     },
-    [flyToView, historyYears, loadTimeSeries, viewMode, viewState],
+    [flyToView, gridSpec, historyYears, loadTimeSeries, viewMode, viewState],
   );
 
   const handleMapClick = useCallback(
@@ -260,6 +285,7 @@ export function EarthMap() {
       sidebar={
         <MapReadout
           selection={selection}
+          gridSpec={gridSpec}
           historyYears={historyYears}
           onHistoryYearsChange={handleHistoryYearsChange}
           loadingSeries={loadingSeries}
@@ -302,6 +328,7 @@ export function EarthMap() {
             {selection && mapSize.width > 0 && mapSize.height > 0 ? (
               <GlobeSelectionOverlay
                 cell={selection.grid}
+                gridSpec={gridSpec}
                 viewState={viewState}
                 mapSize={mapSize}
                 isLight={isLight}

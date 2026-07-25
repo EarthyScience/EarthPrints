@@ -1,7 +1,5 @@
-import { ZARR_STORE } from "@/lib/constants/store";
-import type { GeoPoint, GridCell } from "@/types/map";
-
-const { grid, dimensions } = ZARR_STORE;
+import { DEFAULT_GRID_SPEC } from "@/lib/constants/store";
+import type { GeoPoint, GridCell, GridSpec } from "@/types/map";
 
 function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
@@ -19,7 +17,11 @@ function snapToAxis(value: number, start: number, step: number, count: number): 
 }
 
 /** Snap a WGS-84 point to the nearest Zarr grid cell center. */
-export function geoPointToZarrGrid(point: GeoPoint): GridCell {
+export function geoPointToZarrGrid(
+  point: GeoPoint,
+  spec: GridSpec = DEFAULT_GRID_SPEC,
+): GridCell {
+  const { grid, dimensions } = spec;
   const lon = snapToAxis(point.lon, grid.lonStart, grid.lonStep, dimensions.lon);
   const lat = snapToAxis(point.lat, grid.latStart, grid.latStep, dimensions.lat);
 
@@ -39,7 +41,11 @@ export type GridCellBounds = {
 };
 
 /** Half-open cell edges around a snapped cell center. */
-export function gridCellToBounds(cell: GridCell): GridCellBounds {
+export function gridCellToBounds(
+  cell: GridCell,
+  spec: GridSpec = DEFAULT_GRID_SPEC,
+): GridCellBounds {
+  const { grid } = spec;
   const halfLon = Math.abs(grid.lonStep) / 2;
   const halfLat = Math.abs(grid.latStep) / 2;
 
@@ -64,8 +70,11 @@ export function boundsToPolygon(bounds: GridCellBounds): GeoPoint[] {
 }
 
 /** Closed lon/lat ring for the cell footprint (counter-clockwise). */
-export function gridCellToPolygon(cell: GridCell): GeoPoint[] {
-  return boundsToPolygon(gridCellToBounds(cell));
+export function gridCellToPolygon(
+  cell: GridCell,
+  spec: GridSpec = DEFAULT_GRID_SPEC,
+): GeoPoint[] {
+  return boundsToPolygon(gridCellToBounds(cell, spec));
 }
 
 /**
@@ -77,7 +86,9 @@ export function chunkPatchBounds(
   cell: GridCell,
   chunkLat: number,
   chunkLon: number,
+  spec: GridSpec = DEFAULT_GRID_SPEC,
 ): GridCellBounds {
+  const { grid, dimensions } = spec;
   const firstLatIdx = Math.floor(cell.latIndex / chunkLat) * chunkLat;
   const lastLatIdx = Math.min(firstLatIdx + chunkLat, dimensions.lat) - 1;
   const firstLonIdx = Math.floor(cell.lonIndex / chunkLon) * chunkLon;
@@ -179,10 +190,15 @@ function closedRing(corners: GeoPoint[]): LonLatPath {
 export function selectionGuideGeoJson(
   cell: GridCell,
   guidePaths: LonLatPath[],
-  options?: { densifyGuides?: boolean; patchBounds?: GridCellBounds | null },
+  options?: {
+    densifyGuides?: boolean;
+    patchBounds?: GridCellBounds | null;
+    spec?: GridSpec;
+  },
 ): SelectionGuideGeoJson {
   const densifyGuides = options?.densifyGuides ?? true;
   const patchBounds = options?.patchBounds ?? null;
+  const spec = options?.spec ?? DEFAULT_GRID_SPEC;
 
   return {
     type: "FeatureCollection",
@@ -210,7 +226,7 @@ export function selectionGuideGeoJson(
       {
         type: "Feature",
         properties: { kind: "cell" },
-        geometry: { type: "Polygon", coordinates: [closedRing(gridCellToPolygon(cell))] },
+        geometry: { type: "Polygon", coordinates: [closedRing(gridCellToPolygon(cell, spec))] },
       },
     ],
   };

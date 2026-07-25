@@ -24,7 +24,8 @@ import {
   type ZarrArrayHandle,
   type ZarrStore,
 } from "@/lib/zarr/store";
-import type { GridCell } from "@/types/map";
+import { deriveGridSpec } from "@/lib/zarr/gridSpec";
+import type { GridCell, GridSpec } from "@/types/map";
 
 type CachedNativeChunk = {
   data: Float32Array;
@@ -46,11 +47,24 @@ export class ZarrChunkReader {
   private arrayPromises = new Map<string, Promise<ZarrArray>>();
   private chunkLoadsInFlight = new Map<string, Promise<CachedNativeChunk>>();
   private prefetchInFlight = new Map<string, Promise<void>>();
+  private gridSpecPromise?: Promise<GridSpec>;
 
   /** Default holds ~8 pixels of full history (6 native chunks per pixel). */
   constructor(ds: ZarrStore, maxCacheSize = 48) {
     this.ds = ds;
     this.cache = new LRUCache(maxCacheSize);
+  }
+
+  /**
+   * Derive the dataset's spatial grid from store metadata, memoized so the
+   * coordinate arrays are only read once. Falls back to DEFAULT_GRID_SPEC
+   * inside deriveGridSpec if the store cannot be read.
+   */
+  getGridSpec(variable = ZARR_STORE.defaultVariable): Promise<GridSpec> {
+    if (!this.gridSpecPromise) {
+      this.gridSpecPromise = deriveGridSpec(this.ds, variable);
+    }
+    return this.gridSpecPromise;
   }
 
   private getArray(variable: string): Promise<ZarrArray> {

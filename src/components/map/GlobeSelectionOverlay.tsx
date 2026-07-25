@@ -8,7 +8,7 @@ import {
   gridCellToGuidePaths,
   selectionGuideGeoJson,
 } from "@/lib/map/geogrid";
-import { ZARR_STORE } from "@/lib/constants/store";
+import { DEFAULT_GRID_SPEC } from "@/lib/constants/store";
 import {
   rgba,
   SELECTION_CELL_COLOR,
@@ -16,10 +16,11 @@ import {
   SELECTION_PATCH_COLOR,
 } from "@/lib/map/selectionStyle";
 import { viewportToGeoBounds } from "@/lib/map/viewportBounds";
-import type { GridCell, MapViewState } from "@/types/map";
+import type { GridCell, GridSpec, MapViewState } from "@/types/map";
 
 type GlobeSelectionOverlayProps = {
   cell: GridCell;
+  gridSpec?: GridSpec;
   viewState: MapViewState;
   mapSize: { width: number; height: number };
   isLight: boolean;
@@ -29,6 +30,7 @@ type GlobeSelectionOverlayProps = {
 
 export function GlobeSelectionOverlay({
   cell,
+  gridSpec = DEFAULT_GRID_SPEC,
   viewState,
   mapSize,
   isLight,
@@ -37,16 +39,22 @@ export function GlobeSelectionOverlay({
 }: GlobeSelectionOverlayProps) {
   const data = useMemo(() => {
     const guidePaths = gridCellToGuidePaths(
-      gridCellToBounds(cell),
+      gridCellToBounds(cell, gridSpec),
       viewportToGeoBounds(viewState, mapSize.width, mapSize.height),
     );
     return selectionGuideGeoJson(cell, guidePaths, {
       densifyGuides: isSphere,
+      spec: gridSpec,
       patchBounds: showPatch
-        ? chunkPatchBounds(cell, ZARR_STORE.nativeChunks.lat, ZARR_STORE.nativeChunks.lon)
+        ? chunkPatchBounds(
+            cell,
+            gridSpec.nativeChunks.lat,
+            gridSpec.nativeChunks.lon,
+            gridSpec,
+          )
         : null,
     });
-  }, [cell, isSphere, mapSize.height, mapSize.width, showPatch, viewState]);
+  }, [cell, gridSpec, isSphere, mapSize.height, mapSize.width, showPatch, viewState]);
 
   const guideColor = rgba(
     isLight ? SELECTION_GUIDE_COLOR.light : SELECTION_GUIDE_COLOR.dark,
