@@ -22,8 +22,13 @@ import { ZarrChunkReader } from "@/lib/zarr/ZarrChunkReader";
 import { DEFAULT_HISTORY_YEARS } from "@/lib/zarr/timeRange";
 import type { MapSelection, MapViewMode, MapViewState } from "@/types/map";
 import { useTheme } from "@/providers/ThemeProvider";
-import { EditorShell } from "@/components/layout/EditorShell";
+import {
+  EditorShell,
+  EDITOR_CONTROLS_ID,
+} from "@/components/layout/EditorShell";
 import { Nav } from "@/components/layout/Nav";
+import { MapSideControls } from "@/components/map/MapSideControls";
+import { MapSearch } from "@/components/map/MapSearch";
 import { MapReadout } from "@/components/map/MapReadout";
 import { GlobeSelectionOverlay } from "@/components/map/GlobeSelectionOverlay";
 
@@ -58,6 +63,7 @@ export function EarthMap() {
   const [mapSize, setMapSize] = useState({ width: 0, height: 0 });
   const [selection, setSelection] = useState<MapSelection | null>(null);
   const [showPatch, setShowPatch] = useState(true);
+  const [controlsOpen, setControlsOpen] = useState(false);
   const [historyYears, setHistoryYears] = useState(DEFAULT_HISTORY_YEARS);
   const [loadingSeries, setLoadingSeries] = useState(false);
   const [seriesProgress, setSeriesProgress] = useState<{
@@ -166,7 +172,11 @@ export function EarthMap() {
       };
 
       setSelection(nextSelection);
-      const focused = viewStateFocusedOnCell(viewState, nextSelection.grid, viewMode);
+      const focused = viewStateFocusedOnCell(
+        viewState,
+        nextSelection.grid,
+        viewMode,
+      );
       flyToView(focused, SELECTION_FOCUS_TRANSITION_MS);
       void loadTimeSeries(nextSelection, historyYears);
     },
@@ -235,6 +245,8 @@ export function EarthMap() {
 
   return (
     <EditorShell
+      controlsOpen={controlsOpen}
+      onCloseControls={() => setControlsOpen(false)}
       header={
         <Nav
           viewMode={viewMode}
@@ -298,6 +310,23 @@ export function EarthMap() {
               />
             ) : null}
           </Map>
+          <div className="pointer-events-none absolute inset-x-0 top-2 z-30 flex justify-center px-2">
+            <MapSearch
+              onSelect={handlePick}
+              className="pointer-events-auto w-full min-[901px]:max-w-[400px]"
+            />
+          </div>
+          <MapSideControls
+            viewMode={viewMode}
+            onViewModeChange={handleViewModeChange}
+            hasSelection={selection !== null}
+            onZoomToSelection={handleZoomToSelection}
+            showPatch={showPatch}
+            onTogglePatch={handleTogglePatch}
+            controlsOpen={controlsOpen}
+            onToggleControls={() => setControlsOpen((open) => !open)}
+            controlsId={EDITOR_CONTROLS_ID}
+          />
         </div>
       }
     />
