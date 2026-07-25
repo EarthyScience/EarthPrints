@@ -81,6 +81,8 @@ export function FingerprintPlot({
   );
 
   // Local day range currently in view: the whole window, or one selected year.
+  // Derived defensively, so a selection that falls outside the current window
+  // simply reads as "All" without needing an effect to reset the stored value.
   const activeYear = years.find((range) => range.year === selectedYear) ?? null;
   const dayLo = activeYear ? activeYear.startDay : 0;
   const dayHi = activeYear ? activeYear.endDay : nDays - 1;
@@ -95,13 +97,6 @@ export function FingerprintPlot({
     observer.observe(node);
     return () => observer.disconnect();
   }, []);
-
-  // Drop a stale year selection when the window no longer covers it.
-  useEffect(() => {
-    if (selectedYear !== null && !years.some((r) => r.year === selectedYear)) {
-      setSelectedYear(null);
-    }
-  }, [years, selectedYear]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
