@@ -88,6 +88,26 @@ export function FingerprintPlot({
   const dayHi = activeYear ? activeYear.endDay : nDays - 1;
   const nSel = Math.max(1, dayHi - dayLo + 1);
 
+  // Day-axis ticks. When several calendar years are in view the months live
+  // inside each year band, so a month label per tick reads as noise; label each
+  // year once instead (thinned to keep at most ~6 on the axis). A single year in
+  // view keeps the month labels.
+  const dayAxisTicks = useMemo<{ dayLocal: number; label: string }[]>(() => {
+    if (!activeYear && years.length > 1) {
+      const step = Math.ceil(years.length / 6);
+      return years
+        .filter((_, index) => index % step === 0)
+        .map((range) => ({
+          dayLocal: Math.round((range.startDay + range.endDay) / 2),
+          label: String(range.year),
+        }));
+    }
+    return dayIndexTicks(nSel).map((offset) => ({
+      dayLocal: dayLo + offset,
+      label: formatDayTick(baseDay + dayLo + offset),
+    }));
+  }, [activeYear, years, nSel, dayLo, baseDay]);
+
   useEffect(() => {
     const node = wrapperRef.current;
     if (!node) return;
@@ -162,7 +182,6 @@ export function FingerprintPlot({
     ctx.fillStyle = tick;
     ctx.font = "11px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
 
-    const dayTicks = dayIndexTicks(nSel).map((offset) => dayLo + offset);
     const dayFrac = (dayLocal: number) =>
       nSel <= 1 ? 0 : (dayLocal - dayLo) / (nSel - 1);
 
@@ -178,18 +197,18 @@ export function FingerprintPlot({
       }
       ctx.textAlign = "center";
       ctx.textBaseline = "top";
-      for (const dayLocal of dayTicks) {
+      for (const { dayLocal, label } of dayAxisTicks) {
         const x = clampLabelX(axisLeft + dayFrac(dayLocal) * plotW, plotW, axisLeft);
-        ctx.fillText(formatDayTick(baseDay + dayLocal), x, AXIS_TOP + plotH + 4);
+        ctx.fillText(label, x, AXIS_TOP + plotH + 4);
       }
     } else {
       // Dates down the left, hours along the bottom.
       ctx.textAlign = "right";
       ctx.textBaseline = "middle";
-      for (const dayLocal of dayTicks) {
+      for (const { dayLocal, label } of dayAxisTicks) {
         const y = AXIS_TOP + dayFrac(dayLocal) * plotH;
         ctx.fillText(
-          formatDayTick(baseDay + dayLocal),
+          label,
           axisLeft - 6,
           Math.max(AXIS_TOP + 6, Math.min(AXIS_TOP + plotH - 6, y)),
         );
@@ -208,7 +227,7 @@ export function FingerprintPlot({
     nSel,
     dayLo,
     dayHi,
-    baseDay,
+    dayAxisTicks,
     hoursPerDay,
     isLight,
     width,
