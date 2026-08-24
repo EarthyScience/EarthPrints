@@ -1,12 +1,17 @@
 "use client";
 
+import { useState } from "react";
 import type { GridSpec, MapSelection } from "@/types/map";
 import { formatCoordinate, formatGeoPoint } from "@/lib/map/geogrid";
 import { DEFAULT_GRID_SPEC, ZARR_STORE } from "@/lib/constants/store";
 import { ZARR_TIME } from "@/lib/zarr/timeRange";
 import { TimeSeriesPlot } from "@/components/map/TimeSeriesPlot";
 import { TimeSeriesPlotLoading } from "@/components/map/TimeSeriesPlotLoading";
+import { FingerprintPlot } from "@/components/map/FingerprintPlot";
+import { FingerprintPlotLoading } from "@/components/map/FingerprintPlotLoading";
 import { ProgressBar } from "@/components/ui/ProgressBar";
+
+type PlotView = "line" | "fingerprint";
 
 type SeriesProgress = { loaded: number; total: number };
 
@@ -36,6 +41,7 @@ export function MapReadout({
   seriesValues,
   seriesUnits,
 }: MapReadoutProps) {
+  const [plotView, setPlotView] = useState<PlotView>("line");
   const historyLabel =
     historyYears === 1 ? "Last 1 year" : `Last ${historyYears} years`;
 
@@ -89,27 +95,39 @@ export function MapReadout({
   const chart = (
     <section aria-live="polite">
       <div className="mb-3 flex items-baseline justify-between gap-3">
-        <span className={SECTION_LABEL}>Daily mean</span>
-        {!loadingSeries && !seriesError && seriesValues && seriesUnits ? (
-          <span className={META}>{seriesUnits}</span>
-        ) : null}
+        <span className={SECTION_LABEL}>
+          {plotView === "line" ? "Daily mean" : "Diurnal fingerprint"}
+        </span>
+        <PlotViewToggle view={plotView} onChange={setPlotView} />
       </div>
 
       {loadingSeries ? (
         <div className="grid gap-3">
           <SeriesLoader progress={seriesProgress} />
-          <TimeSeriesPlotLoading historyYears={historyYears} />
+          {plotView === "line" ? (
+            <TimeSeriesPlotLoading historyYears={historyYears} />
+          ) : (
+            <FingerprintPlotLoading />
+          )}
         </div>
       ) : seriesError ? (
         <p className="text-[13px] leading-[1.55] text-editor-fg-tertiary">
           {seriesError}
         </p>
       ) : seriesValues ? (
-        <TimeSeriesPlot
-          values={seriesValues}
-          units={seriesUnits}
-          hoursPerDay={ZARR_TIME.hoursPerDay}
-        />
+        plotView === "line" ? (
+          <TimeSeriesPlot
+            values={seriesValues}
+            units={seriesUnits}
+            hoursPerDay={ZARR_TIME.hoursPerDay}
+          />
+        ) : (
+          <FingerprintPlot
+            values={seriesValues}
+            units={seriesUnits}
+            hoursPerDay={ZARR_TIME.hoursPerDay}
+          />
+        )
       ) : null}
     </section>
   );
@@ -148,6 +166,46 @@ export function MapReadout({
           />
         </dl>
       </section>
+    </div>
+  );
+}
+
+function PlotViewToggle({
+  view,
+  onChange,
+}: {
+  view: PlotView;
+  onChange: (view: PlotView) => void;
+}) {
+  const options: { id: PlotView; label: string }[] = [
+    { id: "line", label: "Line" },
+    { id: "fingerprint", label: "Fingerprint" },
+  ];
+  return (
+    <div
+      className="inline-flex rounded-md border border-editor-border p-0.5"
+      role="tablist"
+      aria-label="Plot view"
+    >
+      {options.map((option) => {
+        const active = option.id === view;
+        return (
+          <button
+            key={option.id}
+            type="button"
+            role="tab"
+            aria-selected={active}
+            onClick={() => onChange(option.id)}
+            className={`rounded-[5px] px-2 py-0.5 text-[11.5px] font-semibold transition-colors ${
+              active
+                ? "bg-accent text-white"
+                : "text-editor-fg-tertiary hover:text-editor-fg-secondary"
+            }`}
+          >
+            {option.label}
+          </button>
+        );
+      })}
     </div>
   );
 }
