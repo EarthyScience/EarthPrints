@@ -21,6 +21,14 @@ import { FixedThemeProvider } from "@/providers/ThemeProvider";
  */
 export const EXPORT_STAGE_WIDTH = 760;
 
+/**
+ * Plot height in CSS px for the export, taller than the sidebar's 220. The PDF
+ * prints each plot at the full 182mm content width, so the capture's aspect
+ * ratio is what sets its printed height: 760x290 lands at ~69mm per plot, which
+ * is the tallest pair that still leaves the legend clear of the page footer.
+ */
+export const EXPORT_PLOT_HEIGHT = 290;
+
 type StageProps = {
   values: Float32Array;
   units?: string | null;
@@ -41,6 +49,7 @@ function ExportStage({ values, units, hoursPerDay }: StageProps) {
             values={values}
             units={units}
             hoursPerDay={hoursPerDay}
+            height={EXPORT_PLOT_HEIGHT}
           />
         </div>
         <div data-export-plot="fingerprint">
@@ -48,6 +57,7 @@ function ExportStage({ values, units, hoursPerDay }: StageProps) {
             values={values}
             units={units}
             hoursPerDay={hoursPerDay}
+            height={EXPORT_PLOT_HEIGHT}
           />
         </div>
       </div>

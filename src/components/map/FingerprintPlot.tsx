@@ -23,6 +23,8 @@ type FingerprintPlotProps = {
   values: Float32Array;
   units?: string | null;
   hoursPerDay?: number;
+  /** Canvas height in CSS px. The PDF export renders taller than the sidebar does. */
+  height?: number;
 };
 
 /**
@@ -60,6 +62,7 @@ export function FingerprintPlot({
   values,
   units,
   hoursPerDay = 24,
+  height = TIME_SERIES_PLOT_HEIGHT,
 }: FingerprintPlotProps) {
   const { isLight } = useTheme();
   const wrapperRef = useRef<HTMLDivElement | null>(null);
@@ -122,7 +125,6 @@ export function FingerprintPlot({
     const canvas = canvasRef.current;
     if (!canvas || width === 0 || nDays === 0) return;
 
-    const height = TIME_SERIES_PLOT_HEIGHT;
     const dpr =
       typeof window === "undefined" ? 1 : window.devicePixelRatio || 1;
     canvas.width = Math.round(width * dpr);
@@ -231,6 +233,7 @@ export function FingerprintPlot({
     hoursPerDay,
     isLight,
     width,
+    height,
     transposed,
   ]);
 
@@ -246,7 +249,7 @@ export function FingerprintPlot({
     const y = event.clientY - rect.top;
     const axisLeft = axisLeftFor(transposed);
     const plotW = Math.max(1, width - axisLeft - AXIS_RIGHT);
-    const plotH = Math.max(1, TIME_SERIES_PLOT_HEIGHT - AXIS_TOP - AXIS_BOTTOM);
+    const plotH = Math.max(1, height - AXIS_TOP - AXIS_BOTTOM);
     const inX = x - axisLeft;
     const inY = y - AXIS_TOP;
     if (inX < 0 || inX >= plotW || inY < 0 || inY >= plotH) {

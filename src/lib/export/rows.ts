@@ -25,7 +25,7 @@ function roundFloat32(value: number): number {
 
 /**
  * Flatten the loaded `[day, hour]` series into dated rows. The single row
- * builder behind both CSV and XLSX, so the two cannot drift apart.
+ * builder behind the workbook, and the seam a second table format would reuse.
  */
 export function buildSeriesRows(
   values: Float32Array,

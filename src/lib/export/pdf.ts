@@ -14,6 +14,9 @@ const CONTENT_W = PAGE_W - MARGIN * 2;
 const COL_GAP = 6;
 const COL_W = (CONTENT_W - COL_GAP) / 2;
 const HEAD_ROW_H = 54;
+/** Both head-row columns hang their label and content off these, so the two align. */
+const LABEL_DY = 3;
+const CONTENT_DY = 7;
 
 type Rgb = [number, number, number];
 
@@ -54,15 +57,18 @@ function parseRgb(value: string): Rgb {
   return [Number(parts[0]), Number(parts[1]), Number(parts[2])];
 }
 
-/** Fit `image` inside the box, centred, without cropping or distorting it. */
-function containRect(
+/**
+ * Scale `image` to fill the box completely, centred, overflowing on whichever
+ * axis is proportionally longer. The caller clips to the box.
+ */
+function coverRect(
   image: CapturedImage,
   x: number,
   y: number,
   w: number,
   h: number,
 ) {
-  const scale = Math.min(w / image.width, h / image.height);
+  const scale = Math.max(w / image.width, h / image.height);
   const drawW = image.width * scale;
   const drawH = image.height * scale;
   return {
@@ -73,12 +79,6 @@ function containRect(
   };
 }
 
-function drawPanel(doc: jsPDF, x: number, y: number, w: number, h: number) {
-  doc.setDrawColor(...BORDER);
-  doc.setLineWidth(0.3);
-  doc.roundedRect(x, y, w, h, 1.5, 1.5, "S");
-}
-
 function drawSectionLabel(doc: jsPDF, text: string, x: number, y: number) {
   doc.setFont("helvetica", "bold");
   doc.setFontSize(9);
@@ -86,18 +86,14 @@ function drawSectionLabel(doc: jsPDF, text: string, x: number, y: number) {
   doc.text(text.toUpperCase(), x, y);
 }
 
-/** Left panel of the head row: what was selected, and from where. */
+/** Left column of the head row: what was selected, and from where. Bare text, no frame. */
 function drawFacts(
   doc: jsPDF,
   prov: ExportProvenance,
   rowCount: number,
   x: number,
   y: number,
-  w: number,
-  h: number,
 ) {
-  drawPanel(doc, x, y, w, h);
-
   const rows: [string, string][] = [
     ["Cell centre", formatLatLon(prov.cell.lat, prov.cell.lon)],
     ["Clicked", formatLatLon(prov.click.lat, prov.click.lon)],
@@ -108,26 +104,29 @@ function drawFacts(
     ["Coverage", `${prov.dayCount} days, ${rowCount.toLocaleString()} hours`],
   ];
 
-  const padX = 4;
-  let cursor = y + 8;
-  drawSectionLabel(doc, "Selection", x + padX, cursor);
-  cursor += 5.5;
+  drawSectionLabel(doc, "Selection", x, y + LABEL_DY);
 
+  let cursor = y + CONTENT_DY + 3;
   for (const [label, value] of rows) {
     doc.setFont("helvetica", "normal");
-    doc.setFontSize(7.5);
+    doc.setFontSize(11);
     doc.setTextColor(...INK_SOFT);
-    doc.text(label, x + padX, cursor);
+    doc.text(label, x, cursor);
 
     doc.setFont("courier", "normal");
-    doc.setFontSize(8);
+    doc.setFontSize(11);
     doc.setTextColor(...INK);
-    doc.text(value, x + padX + 24, cursor);
+    doc.text(value, x + 24, cursor);
 
     cursor += 5.6;
   }
 }
 
+/**
+ * Right column of the head row: the label sits above the image, and the image
+ * fills the box edge to edge. Cropping the overflow needs a clip, since jsPDF
+ * would otherwise let the oversized image bleed across the page.
+ */
 function drawMapPanel(
   doc: jsPDF,
   map: CapturedImage | null,
@@ -136,27 +135,28 @@ function drawMapPanel(
   w: number,
   h: number,
 ) {
-  drawPanel(doc, x, y, w, h);
+  drawSectionLabel(doc, "Map view", x, y + LABEL_DY);
 
-  const padX = 4;
-  drawSectionLabel(doc, "Map view", x + padX, y + 8);
-
-  const boxY = y + 11;
-  const boxH = h - 15;
+  const boxY = y + CONTENT_DY;
+  const boxH = h - CONTENT_DY;
 
   if (!map) {
     doc.setFont("helvetica", "normal");
     doc.setFontSize(8);
     doc.setTextColor(...INK_SOFT);
-    doc.text("Map preview unavailable", x + padX, boxY + boxH / 2);
+    doc.text("Map preview unavailable", x, boxY + boxH / 2);
     return;
   }
 
-  const fit = containRect(map, x + padX, boxY, w - padX * 2, boxH);
+  const fit = coverRect(map, x, boxY, w, boxH);
+  doc.saveGraphicsState();
+  // The null style matters: without it jsPDF strokes the clip rect, outlining
+  // the image with a border the layout is not supposed to have.
+  doc.rect(x, boxY, w, boxH, null);
+  doc.clip();
+  doc.discardPath();
   doc.addImage(map.dataUrl, "PNG", fit.x, fit.y, fit.w, fit.h);
-  doc.setDrawColor(...BORDER);
-  doc.setLineWidth(0.2);
-  doc.rect(fit.x, fit.y, fit.w, fit.h, "S");
+  doc.restoreGraphicsState();
 }
 
 /**
@@ -225,9 +225,11 @@ function drawFooter(doc: jsPDF, prov: ExportProvenance, attribution: string) {
 
   const lines = [
     `Source: ${prov.sourceUrl}`,
-    `Basemap: ${attribution}`,
+    // Nothing to credit when the map could not be drawn, and an empty
+    // "Basemap:" reads as a missing value rather than an absent one.
+    attribution ? `Basemap: ${attribution}` : null,
     `Generated ${prov.generatedAt.toISOString()} by EarthPrints`,
-  ];
+  ].filter((line): line is string => line !== null);
 
   let cursor = pageH - 13.5;
   for (const line of lines) {
@@ -266,7 +268,7 @@ export async function buildReportPdf({
 
   const headY = MARGIN + 14;
   const rowCount = prov.dayCount * prov.hoursPerDay;
-  drawFacts(doc, prov, rowCount, MARGIN, headY, COL_W, HEAD_ROW_H);
+  drawFacts(doc, prov, rowCount, MARGIN, headY);
   drawMapPanel(
     doc,
     assets.map,

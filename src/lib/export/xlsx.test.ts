@@ -51,7 +51,7 @@ describe("buildWorkbookSheets", () => {
     expect(data[2][3]).toBe(1.5);
   });
 
-  it("carries the same provenance the CSV header does, on its own sheet", () => {
+  it("carries the provenance facts on its own sheet", () => {
     const { metadata, prov } = sheetsForDays(2);
     const facts = new Map(
       metadata.slice(1).map((row) => [row[0] as string, row[1]]),

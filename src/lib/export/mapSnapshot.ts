@@ -4,11 +4,6 @@ import type { StyleSpecification } from "maplibre-gl";
 const FALLBACK_ATTRIBUTION =
   "OpenFreeMap, OpenMapTiles, OpenStreetMap contributors";
 
-export type MapSnapshot = {
-  canvas: HTMLCanvasElement;
-  attribution: string;
-};
-
 /** Style attributions ship as HTML anchors; a PDF footer wants the words only. */
 export function plainText(html: string): string {
   return html

@@ -25,12 +25,15 @@ type TimeSeriesPlotProps = {
   values: Float32Array;
   units?: string | null;
   hoursPerDay?: number;
+  /** Plot height in CSS px. The PDF export renders taller than the sidebar does. */
+  height?: number;
 };
 
 export function TimeSeriesPlot({
   values,
   units,
   hoursPerDay = 24,
+  height = TIME_SERIES_PLOT_HEIGHT,
 }: TimeSeriesPlotProps) {
   const { isLight } = useTheme();
   const data = useMemo(
@@ -45,7 +48,7 @@ export function TimeSeriesPlot({
 
   return (
     <div className="w-full min-w-0">
-      <ResponsiveContainer width="100%" height={TIME_SERIES_PLOT_HEIGHT}>
+      <ResponsiveContainer width="100%" height={height}>
         <LineChart data={data} margin={TIME_SERIES_CHART_MARGIN}>
           <CartesianGrid stroke={grid} vertical={false} />
           <XAxis

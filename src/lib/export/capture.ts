@@ -13,6 +13,33 @@ export function nextFrame(): Promise<void> {
 }
 
 /**
+ * A container parked off the left edge of the page for the export-only React
+ * roots to mount into. Offscreen rather than hidden: `display:none` and
+ * `visibility:hidden` both stop ResizeObserver from reporting a size, which
+ * every plot and the map need before they will draw.
+ *
+ * The caller removes it.
+ */
+export function createOffscreenHost(
+  width: number,
+  height?: number,
+): HTMLDivElement {
+  const host = document.createElement("div");
+  host.setAttribute("aria-hidden", "true");
+  Object.assign(host.style, {
+    position: "fixed",
+    top: "0",
+    left: "-20000px",
+    width: `${width}px`,
+    ...(height === undefined ? {} : { height: `${height}px` }),
+    background: "#ffffff",
+    pointerEvents: "none",
+  });
+  document.body.appendChild(host);
+  return host;
+}
+
+/**
  * Poll on animation frames until `predicate` holds. The offscreen plots need a
  * layout pass plus a paint before their SVG/canvas has real dimensions, and
  * there is no event that fires for "Recharts has finished measuring".

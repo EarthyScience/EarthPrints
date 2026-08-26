@@ -10,8 +10,7 @@ import { TimeSeriesPlotLoading } from "@/components/map/TimeSeriesPlotLoading";
 import { FingerprintPlot } from "@/components/map/FingerprintPlot";
 import { FingerprintPlotLoading } from "@/components/map/FingerprintPlotLoading";
 import { ProgressBar } from "@/components/ui/ProgressBar";
-import { DownloadMenu } from "@/components/map/DownloadMenu";
-import type { MapSnapshot } from "@/lib/export/mapSnapshot";
+import { DownloadButton } from "@/components/map/DownloadButton";
 
 type PlotView = "line" | "fingerprint";
 
@@ -27,8 +26,6 @@ type MapReadoutProps = {
   seriesError: string | null;
   seriesValues: Float32Array | null;
   seriesUnits: string | null;
-  /** Reads the live map canvas for the PDF report's map preview. */
-  getMapSnapshot?: () => MapSnapshot | null;
 };
 
 const SECTION_LABEL = "text-[13px] font-semibold text-editor-fg-primary";
@@ -44,7 +41,6 @@ export function MapReadout({
   seriesError,
   seriesValues,
   seriesUnits,
-  getMapSnapshot,
 }: MapReadoutProps) {
   const [plotView, setPlotView] = useState<PlotView>("line");
   const historyLabel =
@@ -106,12 +102,12 @@ export function MapReadout({
       {/* View switch left, download right, on the row between title and plot. */}
       <div className="mb-3 mt-2 flex items-center justify-between gap-3">
         <PlotViewToggle view={plotView} onChange={setPlotView} />
-        <DownloadMenu
+        <DownloadButton
           selection={selection}
+          gridSpec={gridSpec}
           historyYears={historyYears}
           values={loadingSeries ? null : seriesValues}
           units={seriesUnits}
-          getMapSnapshot={getMapSnapshot}
         />
       </div>
 
@@ -165,13 +161,7 @@ export function MapReadout({
         </p>
       </section>
 
-      {/* History drives the chart, so they sit together with no divider. */}
-      <div className="grid gap-4 py-4">
-        {historyControl}
-        {chart}
-      </div>
-
-      <section className="pt-4">
+      <section className="py-4">
         <dl className="grid grid-cols-2 gap-x-4 gap-y-3">
           <Fact label="Grid cell" value={formatGeoPoint(selection.grid)} />
           <Fact
@@ -180,6 +170,12 @@ export function MapReadout({
           />
         </dl>
       </section>
+
+      {/* History drives the chart, so they sit together with no divider. */}
+      <div className="grid gap-4 py-4">
+        {historyControl}
+        {chart}
+      </div>
     </div>
   );
 }

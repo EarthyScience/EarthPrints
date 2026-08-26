@@ -4,8 +4,8 @@ import type { GeoPoint, GridCell, MapSelection } from "@/types/map";
 
 /**
  * Everything an export needs to describe where its numbers came from. Built
- * once per export and shared by the PDF, CSV and XLSX writers so the three can
- * never disagree about the pixel, the window or the units.
+ * once per export and shared by the PDF and XLSX writers so the two can never
+ * disagree about the pixel, the window or the units.
  */
 export type ExportProvenance = {
   generatedAt: Date;
@@ -84,7 +84,8 @@ function coordinateTag(value: number, positive: string, negative: string): strin
 }
 
 /**
- * Shared stem for every download, so a PDF and its CSV sort next to each other:
+ * Shared stem for every download, so a PDF and its workbook sort next to each
+ * other:
  * `earthprints_NEE_50.913N_11.567E_2025-01-01_2025-12-31`.
  */
 export function exportFileBaseName(prov: ExportProvenance): string {

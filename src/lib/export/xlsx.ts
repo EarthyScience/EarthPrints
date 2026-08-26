@@ -11,9 +11,9 @@ const BOLD = { fontWeight: "bold" } as const;
  * Shape the two sheets. Split out from the writer so the layout can be tested
  * without pulling the xlsx bundle into the test run.
  *
- * The workbook earns its place over the CSV precisely here: provenance sits on
- * its own sheet rather than in `#` comment lines, and timestamps are real date
- * cells rather than text that Excel re-parses by locale.
+ * The workbook earns its place over a plain CSV precisely here: provenance sits
+ * on its own sheet rather than in `#` comment lines, and timestamps are real
+ * date cells rather than text that Excel re-parses by locale.
  */
 export function buildWorkbookSheets(
   rows: SeriesRow[],

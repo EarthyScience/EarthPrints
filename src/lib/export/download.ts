@@ -14,12 +14,3 @@ export function downloadBlob(blob: Blob, filename: string): void {
   // click settle first.
   setTimeout(() => URL.revokeObjectURL(url), 10_000);
 }
-
-export function downloadText(
-  text: string,
-  filename: string,
-  mimeType: string,
-): void {
-  // The BOM keeps Excel from mangling non-ASCII when it opens a CSV directly.
-  downloadBlob(new Blob(["﻿", text], { type: mimeType }), filename);
-}
