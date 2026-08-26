@@ -37,6 +37,14 @@ import { MapSideControls } from "@/components/map/MapSideControls";
 import { MapSearch } from "@/components/map/MapSearch";
 import { MapReadout } from "@/components/map/MapReadout";
 import { GlobeSelectionOverlay } from "@/components/map/GlobeSelectionOverlay";
+import {
+  collectAttribution,
+  type MapSnapshot,
+} from "@/lib/export/mapSnapshot";
+
+// Hoisted so the object identity is stable: maplibre only reads these at
+// context creation, and a fresh literal each render churns the prop diff.
+const MAP_CANVAS_ATTRIBUTES = { preserveDrawingBuffer: true } as const;
 
 function toMapViewState(
   viewState: {
@@ -268,6 +276,22 @@ export function EarthMap() {
     [applyDarkMapLabelColors],
   );
 
+  /**
+   * Hand the live map canvas to the PDF export. `redraw` forces a synchronous
+   * frame first: with `preserveDrawingBuffer` the buffer holds the last painted
+   * frame, and reading it right after a pan would otherwise catch a stale one.
+   */
+  const getMapSnapshot = useCallback((): MapSnapshot | null => {
+    const map = mapRef.current?.getMap();
+    if (!map) return null;
+
+    map.redraw();
+    return {
+      canvas: map.getCanvas(),
+      attribution: collectAttribution(map.getStyle()?.sources),
+    };
+  }, []);
+
   return (
     <EditorShell
       controlsOpen={controlsOpen}
@@ -293,6 +317,7 @@ export function EarthMap() {
           seriesError={seriesError}
           seriesValues={seriesValues}
           seriesUnits={seriesUnits}
+          getMapSnapshot={getMapSnapshot}
         />
       }
       preview={
@@ -322,6 +347,9 @@ export function EarthMap() {
             onLoad={handleMapLoad}
             onStyleData={handleStyleData}
             attributionControl={false}
+            // Lets the PDF export read the rendered frame back off the WebGL
+            // canvas. Without it the buffer is cleared after each paint.
+            canvasContextAttributes={MAP_CANVAS_ATTRIBUTES}
             cursor="crosshair"
             style={{ width: "100%", height: "100%" }}
           >

@@ -10,6 +10,8 @@ import { TimeSeriesPlotLoading } from "@/components/map/TimeSeriesPlotLoading";
 import { FingerprintPlot } from "@/components/map/FingerprintPlot";
 import { FingerprintPlotLoading } from "@/components/map/FingerprintPlotLoading";
 import { ProgressBar } from "@/components/ui/ProgressBar";
+import { DownloadMenu } from "@/components/map/DownloadMenu";
+import type { MapSnapshot } from "@/lib/export/mapSnapshot";
 
 type PlotView = "line" | "fingerprint";
 
@@ -25,6 +27,8 @@ type MapReadoutProps = {
   seriesError: string | null;
   seriesValues: Float32Array | null;
   seriesUnits: string | null;
+  /** Reads the live map canvas for the PDF report's map preview. */
+  getMapSnapshot?: () => MapSnapshot | null;
 };
 
 const SECTION_LABEL = "text-[13px] font-semibold text-editor-fg-primary";
@@ -40,6 +44,7 @@ export function MapReadout({
   seriesError,
   seriesValues,
   seriesUnits,
+  getMapSnapshot,
 }: MapReadoutProps) {
   const [plotView, setPlotView] = useState<PlotView>("line");
   const historyLabel =
@@ -94,11 +99,20 @@ export function MapReadout({
 
   const chart = (
     <section aria-live="polite">
-      <div className="mb-3 flex items-baseline justify-between gap-3">
-        <span className={SECTION_LABEL}>
-          {plotView === "line" ? "Daily mean" : "Diurnal fingerprint"}
-        </span>
+      <span className={`${SECTION_LABEL} block`}>
+        {plotView === "line" ? "Daily mean" : "Diurnal fingerprint"}
+      </span>
+
+      {/* View switch left, download right, on the row between title and plot. */}
+      <div className="mb-3 mt-2 flex items-center justify-between gap-3">
         <PlotViewToggle view={plotView} onChange={setPlotView} />
+        <DownloadMenu
+          selection={selection}
+          historyYears={historyYears}
+          values={loadingSeries ? null : seriesValues}
+          units={seriesUnits}
+          getMapSnapshot={getMapSnapshot}
+        />
       </div>
 
       {loadingSeries ? (

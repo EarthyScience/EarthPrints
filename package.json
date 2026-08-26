@@ -13,12 +13,14 @@
   "dependencies": {
     "@deck.gl/react": "^9.3.3",
     "deck.gl": "^9.3.7",
+    "jspdf": "^4.2.1",
     "maplibre-gl": "^5.24.0",
     "next": "16.2.11",
     "react": "19.2.8",
     "react-dom": "19.2.8",
     "react-map-gl": "^8.1.1",
     "recharts": "^3.10.0",
+    "write-excel-file": "^4.1.1",
     "zarrita": "^0.7.3"
   },
   "devDependencies": {
