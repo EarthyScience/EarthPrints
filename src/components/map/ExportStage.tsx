@@ -5,11 +5,15 @@ import { FingerprintPlot } from "@/components/map/FingerprintPlot";
 import { TimeSeriesPlot } from "@/components/map/TimeSeriesPlot";
 import {
   canvasToPng,
+  createOffscreenHost,
   nextFrame,
   svgToPng,
   waitUntil,
+  whenVisible,
   type CapturedImage,
 } from "@/lib/export/capture";
+import { fingerprintPngWithLegend } from "@/lib/export/fingerprintImage";
+import { symmetricAbsMax } from "@/lib/map/fingerprintScale";
 import { FixedThemeProvider } from "@/providers/ThemeProvider";
 
 /**
@@ -28,6 +32,14 @@ export const EXPORT_STAGE_WIDTH = 760;
  * is the tallest pair that still leaves the legend clear of the page footer.
  */
 export const EXPORT_PLOT_HEIGHT = 290;
+
+/**
+ * Backing-store pixels per CSS pixel for both captures. Pinned rather than
+ * taken from the display, so a report and its images come out identically sharp
+ * whoever generated them, and high enough that the heatmap's day columns and
+ * the chart's labels survive being printed at full page width.
+ */
+const EXPORT_PIXEL_RATIO = 3;
 
 type StageProps = {
   values: Float32Array;
@@ -58,6 +70,7 @@ function ExportStage({ values, units, hoursPerDay }: StageProps) {
             units={units}
             hoursPerDay={hoursPerDay}
             height={EXPORT_PLOT_HEIGHT}
+            pixelRatio={EXPORT_PIXEL_RATIO}
           />
         </div>
       </div>
@@ -65,22 +78,13 @@ function ExportStage({ values, units, hoursPerDay }: StageProps) {
   );
 }
 
-function createHost(): HTMLDivElement {
-  const host = document.createElement("div");
-  host.setAttribute("aria-hidden", "true");
-  Object.assign(host.style, {
-    position: "fixed",
-    top: "0",
-    // Offscreen rather than hidden: `display:none` and `visibility:hidden` both
-    // stop ResizeObserver from reporting a width, which the plots need to draw.
-    left: "-20000px",
-    width: `${EXPORT_STAGE_WIDTH}px`,
-    background: "#ffffff",
-    pointerEvents: "none",
-  });
-  document.body.appendChild(host);
-  return host;
-}
+export type PlotCaptures = {
+  timeSeries: CapturedImage;
+  /** Bare heatmap. The report draws the colour ramp itself, under the plot. */
+  fingerprint: CapturedImage;
+  /** The same heatmap with the ramp baked in, for the image shipped on its own. */
+  fingerprintStandalone: CapturedImage;
+};
 
 /**
  * Mount both plots offscreen, wait for them to paint, and rasterise them.
@@ -88,8 +92,13 @@ function createHost(): HTMLDivElement {
  */
 export async function capturePlotsForExport(
   props: StageProps,
-): Promise<{ timeSeries: CapturedImage; fingerprint: CapturedImage }> {
-  const host = createHost();
+): Promise<PlotCaptures> {
+  // Recharts and the fingerprint both size themselves off a ResizeObserver,
+  // which a hidden tab never delivers. Mounting there would stage plots that
+  // can never measure.
+  await whenVisible();
+
+  const host = createOffscreenHost(EXPORT_STAGE_WIDTH);
   const root = createRoot(host);
 
   const findSvg = () =>
@@ -127,8 +136,13 @@ export async function capturePlotsForExport(
     if (!svg || !canvas) throw new Error("Export stage lost its plots");
 
     return {
-      timeSeries: await svgToPng(svg),
+      timeSeries: await svgToPng(svg, { scale: EXPORT_PIXEL_RATIO }),
       fingerprint: canvasToPng(canvas),
+      fingerprintStandalone: fingerprintPngWithLegend(canvas, {
+        absMax: symmetricAbsMax(props.values),
+        units: props.units,
+        pixelRatio: EXPORT_PIXEL_RATIO,
+      }),
     };
   } finally {
     root.unmount();

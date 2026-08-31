@@ -8,8 +8,43 @@ export type CapturedImage = {
 const EXPORT_FONT_STACK =
   "ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
 
+/** How long to wait for a frame that is not coming before carrying on anyway. */
+const FRAME_FALLBACK_MS = 200;
+
+/**
+ * Resolve on the next animation frame, or on a timer once it is clear no frame
+ * is coming. A hidden tab is served no frames at all, and a loop that waits on
+ * one there never turns again, so an export left in the background would sit on
+ * "Preparing…" for good rather than finishing or failing.
+ */
 export function nextFrame(): Promise<void> {
-  return new Promise((resolve) => requestAnimationFrame(() => resolve()));
+  return new Promise((resolve) => {
+    const settle = () => {
+      clearTimeout(timer);
+      cancelAnimationFrame(frame);
+      resolve();
+    };
+    const frame = requestAnimationFrame(settle);
+    const timer = setTimeout(settle, FRAME_FALLBACK_MS);
+  });
+}
+
+/**
+ * Resolve once the tab is being rendered again. Nothing offscreen lays out,
+ * paints, or loads map tiles while the tab is hidden, so an export started
+ * there can only wait for the user to come back.
+ */
+export function whenVisible(): Promise<void> {
+  if (!document.hidden) return Promise.resolve();
+
+  return new Promise((resolve) => {
+    const onChange = () => {
+      if (document.hidden) return;
+      document.removeEventListener("visibilitychange", onChange);
+      resolve();
+    };
+    document.addEventListener("visibilitychange", onChange);
+  });
 }
 
 /**
@@ -48,13 +83,17 @@ export async function waitUntil(
   predicate: () => boolean,
   { timeoutMs = 3000, label = "render" }: { timeoutMs?: number; label?: string } = {},
 ): Promise<void> {
-  const deadline = performance.now() + timeoutMs;
+  let spent = 0;
 
   while (!predicate()) {
-    if (performance.now() > deadline) {
+    if (spent > timeoutMs) {
       throw new Error(`Timed out waiting for ${label}`);
     }
+    const before = performance.now();
     await nextFrame();
+    // Time the tab spent hidden does not count against the budget: nothing was
+    // being rendered, so the wait is the user's tab switch, not a stall.
+    if (!document.hidden) spent += performance.now() - before;
   }
 }
 

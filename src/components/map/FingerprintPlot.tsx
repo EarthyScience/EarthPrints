@@ -25,6 +25,12 @@ type FingerprintPlotProps = {
   hoursPerDay?: number;
   /** Canvas height in CSS px. The PDF export renders taller than the sidebar does. */
   height?: number;
+  /**
+   * Backing-store pixels per CSS pixel. Defaults to the display's own ratio,
+   * which is right on screen but would make an exported image sharp or soft
+   * depending on whose laptop drew it, so the export pins its own.
+   */
+  pixelRatio?: number;
 };
 
 /**
@@ -63,6 +69,7 @@ export function FingerprintPlot({
   units,
   hoursPerDay = 24,
   height = TIME_SERIES_PLOT_HEIGHT,
+  pixelRatio,
 }: FingerprintPlotProps) {
   const { isLight } = useTheme();
   const wrapperRef = useRef<HTMLDivElement | null>(null);
@@ -126,7 +133,8 @@ export function FingerprintPlot({
     if (!canvas || width === 0 || nDays === 0) return;
 
     const dpr =
-      typeof window === "undefined" ? 1 : window.devicePixelRatio || 1;
+      pixelRatio ??
+      (typeof window === "undefined" ? 1 : window.devicePixelRatio || 1);
     canvas.width = Math.round(width * dpr);
     canvas.height = Math.round(height * dpr);
     canvas.style.width = `${width}px`;
@@ -234,6 +242,7 @@ export function FingerprintPlot({
     isLight,
     width,
     height,
+    pixelRatio,
     transposed,
   ]);
 

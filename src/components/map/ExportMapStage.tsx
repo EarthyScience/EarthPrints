@@ -12,6 +12,7 @@ import {
 import {
   canvasToPng,
   createOffscreenHost,
+  whenVisible,
   type CapturedImage,
 } from "@/lib/export/capture";
 import { collectAttribution } from "@/lib/export/mapSnapshot";
@@ -125,6 +126,10 @@ export async function captureMapForExport({
   cell,
   gridSpec,
 }: CaptureOptions): Promise<MapCapture> {
+  // A hidden tab paints nothing and fetches no tiles, so the load and idle
+  // budgets below would run out on a map that never had a chance to draw.
+  await whenVisible();
+
   const host = createOffscreenHost(EXPORT_MAP_WIDTH, EXPORT_MAP_HEIGHT);
   const root = createRoot(host);
 
