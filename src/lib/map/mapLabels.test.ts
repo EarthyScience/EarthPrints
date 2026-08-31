@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import type { StyleSpecification } from "maplibre-gl";
 import {
   isDarkBasemapTextLayer,
   isPlaceLabelLayer,
@@ -42,6 +43,20 @@ describe("isPrimaryDarkBasemapTextLayer", () => {
     expect(isPrimaryDarkBasemapTextLayer("place_city")).toBe(false);
   });
 });
+
+/**
+ * `LayerSpecification` is a union, and only its symbol arm has the `text-*`
+ * keys the assertions below read. Narrowing on `type` here keeps them free of
+ * casts, and a layer that came back as something else fails loudly rather than
+ * quietly returning undefined.
+ */
+function symbolLayerAt(style: StyleSpecification, index: number) {
+  const layer = style.layers[index];
+  if (layer?.type !== "symbol") {
+    throw new Error(`Layer ${index} is ${layer?.type ?? "missing"}, not symbol`);
+  }
+  return layer;
+}
 
 describe("patchDarkMapLabelStyle", () => {
   it("brightens primary labels, defers secondary labels, and uses single-line text", () => {
@@ -91,19 +106,18 @@ describe("patchDarkMapLabelStyle", () => {
       ],
     });
 
-    expect(style.layers?.[0]?.layout?.["text-field"]).toEqual(
-      SINGLE_LINE_LABEL_TEXT_FIELD,
-    );
-    expect(style.layers?.[0]?.paint?.["text-color"]).toBe("#ffffff");
-    expect(style.layers?.[0]?.paint?.["text-halo-color"]).toBe(
-      "rgba(0, 0, 0, 0.92)",
-    );
-    expect(style.layers?.[0]?.paint?.["text-halo-width"]).toBe(1.6);
-    expect(style.layers?.[1]?.minzoom).toBe(5);
-    expect(style.layers?.[1]?.paint?.["text-color"]).toBe(
-      "rgba(255, 255, 255, 0.9)",
-    );
-    expect(style.layers?.[2]?.paint?.["text-color"]).toBe("#ffffff");
-    expect(style.layers?.[3]?.paint?.["text-color"]).toBe("rgba(80, 78, 78, 1)");
+    const country = symbolLayerAt(style, 0);
+    const state = symbolLayerAt(style, 1);
+    const water = symbolLayerAt(style, 2);
+    const highway = symbolLayerAt(style, 3);
+
+    expect(country.layout?.["text-field"]).toEqual(SINGLE_LINE_LABEL_TEXT_FIELD);
+    expect(country.paint?.["text-color"]).toBe("#ffffff");
+    expect(country.paint?.["text-halo-color"]).toBe("rgba(0, 0, 0, 0.92)");
+    expect(country.paint?.["text-halo-width"]).toBe(1.6);
+    expect(state.minzoom).toBe(5);
+    expect(state.paint?.["text-color"]).toBe("rgba(255, 255, 255, 0.9)");
+    expect(water.paint?.["text-color"]).toBe("#ffffff");
+    expect(highway.paint?.["text-color"]).toBe("rgba(80, 78, 78, 1)");
   });
 });
