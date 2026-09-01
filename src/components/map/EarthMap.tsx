@@ -1,6 +1,12 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from "react";
 import Map, {
   type MapMouseEvent,
   type MapRef,
@@ -33,6 +39,14 @@ import {
   EDITOR_CONTROLS_ID,
 } from "@/components/layout/EditorShell";
 import { Nav } from "@/components/layout/Nav";
+import {
+  applySidebarState,
+  clampSidebarWidth,
+  getServerSidebarState,
+  getSidebarState,
+  setSidebarState,
+  subscribeSidebarState,
+} from "@/lib/sidebar";
 import { MapSideControls } from "@/components/map/MapSideControls";
 import { MapSearch } from "@/components/map/MapSearch";
 import { MapReadout } from "@/components/map/MapReadout";
@@ -70,6 +84,14 @@ export function EarthMap() {
   const [selection, setSelection] = useState<MapSelection | null>(null);
   const [showPatch, setShowPatch] = useState(true);
   const [controlsOpen, setControlsOpen] = useState(false);
+  // The boot script has already painted the stored layout onto the root
+  // element; this subscribes React to the same source rather than re-reading
+  // localStorage in an effect after first paint.
+  const sidebar = useSyncExternalStore(
+    subscribeSidebarState,
+    getSidebarState,
+    getServerSidebarState,
+  );
   const [historyYears, setHistoryYears] = useState(DEFAULT_HISTORY_YEARS);
   const [loadingSeries, setLoadingSeries] = useState(false);
   const [seriesProgress, setSeriesProgress] = useState<{
@@ -95,6 +117,19 @@ export function EarthMap() {
     }
     return readerPromiseRef.current;
   }, []);
+
+  // The stored width is what the reader asked for; a window too narrow to
+  // honour it borrows from the panel without forgetting the preference.
+  useEffect(() => {
+    const reclamp = () => {
+      applySidebarState({
+        width: clampSidebarWidth(sidebar.width, window.innerWidth),
+        collapsed: sidebar.collapsed,
+      });
+    };
+    window.addEventListener("resize", reclamp);
+    return () => window.removeEventListener("resize", reclamp);
+  }, [sidebar]);
 
   useEffect(() => {
     const node = mapStageRef.current;
@@ -234,6 +269,17 @@ export function EarthMap() {
     setShowPatch((previous) => !previous);
   }, []);
 
+  const handleSidebarWidthChange = useCallback(
+    (width: number) => {
+      setSidebarState({ width, collapsed: sidebar.collapsed });
+    },
+    [sidebar.collapsed],
+  );
+
+  const handleToggleSidebar = useCallback(() => {
+    setSidebarState({ width: sidebar.width, collapsed: !sidebar.collapsed });
+  }, [sidebar.collapsed, sidebar.width]);
+
   const handleMove = useCallback(
     (event: ViewStateChangeEvent) => {
       setViewState(toMapViewState(event.viewState, viewMode));
@@ -272,6 +318,9 @@ export function EarthMap() {
     <EditorShell
       controlsOpen={controlsOpen}
       onCloseControls={() => setControlsOpen(false)}
+      sidebarWidth={sidebar.width}
+      sidebarCollapsed={sidebar.collapsed}
+      onSidebarWidthChange={handleSidebarWidthChange}
       header={
         <Nav
           viewMode={viewMode}
@@ -280,6 +329,8 @@ export function EarthMap() {
           onZoomToSelection={handleZoomToSelection}
           showPatch={showPatch}
           onTogglePatch={handleTogglePatch}
+          sidebarCollapsed={sidebar.collapsed}
+          onToggleSidebar={handleToggleSidebar}
         />
       }
       sidebar={
