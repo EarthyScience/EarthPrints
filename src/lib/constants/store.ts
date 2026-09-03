@@ -4,7 +4,7 @@ import type { GridSpec } from "@/types/map";
 export const ZARR_STORE = {
   id: "nee-d-0.05deg",
   label: "NEE 0.05° (hourly)",
-  kicker: "FLUXCOM-X NEE",
+  kicker: "FLUXCOM-X",
   url: "https://swift.dkrz.de/v1/dkrz_a1e106384d7946408b9724b59858a536/fluxcom-x/FLUXCOMxBase/NEE",
   spatialResolutionDeg: 0.05,
   temporalResolutionDays: 1, /** Hourly. */
