@@ -138,7 +138,16 @@ export function EarthMap() {
     const observer = new ResizeObserver(([entry]) => {
       const { width, height } = entry.contentRect;
       setMapSize({ width, height });
-      mapRef.current?.resize();
+      const map = mapRef.current;
+      if (!map) return;
+      // Resizing the drawing buffer clears it, and on its own maplibre only
+      // repaints on the next frame. Dragging the seam resizes the stage every
+      // frame, so every frame would paint an empty canvas: the map strobes.
+      // redraw() renders synchronously, filling the canvas in the same frame
+      // the observer runs in. This is the pairing maplibre uses internally for
+      // its own (50ms-throttled) container observer.
+      map.resize();
+      map.redraw();
     });
 
     observer.observe(node);
