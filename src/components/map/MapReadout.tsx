@@ -43,6 +43,7 @@ export function MapReadout({
   seriesUnits,
 }: MapReadoutProps) {
   const [plotView, setPlotView] = useState<PlotView>("line");
+  const [selectedYear, setSelectedYear] = useState<number | null>(null);
   const historyLabel =
     historyYears === 1 ? "Last 1 year" : `Last ${historyYears} years`;
 
@@ -86,9 +87,10 @@ export function MapReadout({
         max={ZARR_TIME.maxHistoryYears}
         step={1}
         value={historyYears}
-        onChange={(event) =>
-          onHistoryYearsChange(Number(event.currentTarget.value))
-        }
+        onChange={(event) => {
+          setSelectedYear(null);
+          onHistoryYearsChange(Number(event.currentTarget.value));
+        }}
       />
     </section>
   );
@@ -108,6 +110,7 @@ export function MapReadout({
           historyYears={historyYears}
           values={loadingSeries ? null : seriesValues}
           units={seriesUnits}
+          selectedYear={selectedYear}
         />
       </div>
 
@@ -136,6 +139,8 @@ export function MapReadout({
             values={seriesValues}
             units={seriesUnits}
             hoursPerDay={ZARR_TIME.hoursPerDay}
+            selectedYear={selectedYear}
+            onSelectedYearChange={setSelectedYear}
           />
         )
       ) : null}

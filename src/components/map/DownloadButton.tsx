@@ -24,6 +24,7 @@ type DownloadButtonProps = {
   historyYears: number;
   values: Float32Array | null;
   units: string | null;
+  selectedYear?: number | null;
 };
 
 export function DownloadButton({
@@ -32,6 +33,7 @@ export function DownloadButton({
   historyYears,
   values,
   units,
+  selectedYear = null,
 }: DownloadButtonProps) {
   const { isLight } = useTheme();
   const [busy, setBusy] = useState(false);
@@ -98,6 +100,7 @@ export function DownloadButton({
         units,
         size: 1024,
         isLight: false,
+        selectedYear,
       });
       const squareDataUrl = squareCanvas.toDataURL("image/png");
 
@@ -153,7 +156,7 @@ export function DownloadButton({
     } finally {
       setBusy(false);
     }
-  }, [gridSpec, historyYears, selection, units, values]);
+  }, [gridSpec, historyYears, selectedYear, selection, units, values]);
 
   // Single square logo badge export with selectable resolution
   const runSquareBadgeExport = useCallback(
@@ -180,11 +183,16 @@ export function DownloadButton({
           units,
           size: targetSize,
           isLight,
+          selectedYear,
         });
 
+        const yearTag = selectedYear ? `_${selectedYear}` : "";
         canvas.toBlob((blob) => {
           if (blob) {
-            downloadBlob(blob, `${base}_badge_${targetSize}x${targetSize}.png`);
+            downloadBlob(
+              blob,
+              `${base}${yearTag}_badge_${targetSize}x${targetSize}.png`,
+            );
           }
         }, "image/png");
       } catch (cause) {
@@ -194,7 +202,7 @@ export function DownloadButton({
         setBusy(false);
       }
     },
-    [historyYears, isLight, selection, units, values],
+    [historyYears, isLight, selectedYear, selection, units, values],
   );
 
   // Single PDF export
