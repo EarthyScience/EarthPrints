@@ -10,6 +10,7 @@ import { TimeSeriesPlotLoading } from "@/components/map/TimeSeriesPlotLoading";
 import { FingerprintPlot } from "@/components/map/FingerprintPlot";
 import { FingerprintPlotLoading } from "@/components/map/FingerprintPlotLoading";
 import { ProgressBar } from "@/components/ui/ProgressBar";
+import { DownloadButton } from "@/components/map/DownloadButton";
 
 type PlotView = "line" | "fingerprint";
 
@@ -94,11 +95,20 @@ export function MapReadout({
 
   const chart = (
     <section aria-live="polite">
-      <div className="mb-3 flex items-baseline justify-between gap-3">
-        <span className={SECTION_LABEL}>
-          {plotView === "line" ? "Daily mean" : "Diurnal fingerprint"}
-        </span>
+      <span className={`${SECTION_LABEL} block`}>
+        {plotView === "line" ? "Daily mean" : "Diurnal fingerprint"}
+      </span>
+
+      {/* View switch left, download right, on the row between title and plot. */}
+      <div className="mb-3 mt-2 flex items-center justify-between gap-3">
         <PlotViewToggle view={plotView} onChange={setPlotView} />
+        <DownloadButton
+          selection={selection}
+          gridSpec={gridSpec}
+          historyYears={historyYears}
+          values={loadingSeries ? null : seriesValues}
+          units={seriesUnits}
+        />
       </div>
 
       {loadingSeries ? (
@@ -151,13 +161,7 @@ export function MapReadout({
         </p>
       </section>
 
-      {/* History drives the chart, so they sit together with no divider. */}
-      <div className="grid gap-4 py-4">
-        {historyControl}
-        {chart}
-      </div>
-
-      <section className="pt-4">
+      <section className="py-4">
         <dl className="grid grid-cols-2 gap-x-4 gap-y-3">
           <Fact label="Grid cell" value={formatGeoPoint(selection.grid)} />
           <Fact
@@ -166,6 +170,12 @@ export function MapReadout({
           />
         </dl>
       </section>
+
+      {/* History drives the chart, so they sit together with no divider. */}
+      <div className="grid gap-4 py-4">
+        {historyControl}
+        {chart}
+      </div>
     </div>
   );
 }
