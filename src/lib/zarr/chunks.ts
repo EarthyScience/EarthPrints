@@ -203,3 +203,79 @@ export function stitchTimeSeriesForRange(
 
   return stitchTimeSeries(parts);
 }
+
+/** A rectangular lat/lon window inside one native chunk, in chunk-local coords. */
+export type LocalBlock = {
+  localLatStart: number;
+  localLatCount: number;
+  localLonStart: number;
+  localLonCount: number;
+};
+
+/** Cache key for one pixel's slice of one native time chunk. */
+export function pixelSeriesKey(
+  variable: string,
+  latIndex: number,
+  lonIndex: number,
+  timeChunkIdx: number,
+): string {
+  return `${variable}:${latIndex}:${lonIndex}:${timeChunkIdx}`;
+}
+
+/**
+ * Square window of `radius` pixels around a pixel, clamped to the decoded
+ * chunk's real lat/lon extent. Decoding a chunk is the expensive step, so we
+ * harvest the neighbours while we have it rather than re-fetching 182 MB when
+ * the user clicks one cell over.
+ */
+export function neighborhoodBlock(
+  localOffset: LocalOffset,
+  radius: number,
+  shape: readonly number[],
+): LocalBlock {
+  const [, , latCount, lonCount] = shape;
+  const latStart = Math.max(0, localOffset.localLat - radius);
+  const lonStart = Math.max(0, localOffset.localLon - radius);
+  const latStop = Math.min(latCount, localOffset.localLat + radius + 1);
+  const lonStop = Math.min(lonCount, localOffset.localLon + radius + 1);
+
+  return {
+    localLatStart: latStart,
+    localLatCount: Math.max(0, latStop - latStart),
+    localLonStart: lonStart,
+    localLonCount: Math.max(0, lonStop - lonStart),
+  };
+}
+
+/**
+ * Pull every pixel in `block` out of a decoded chunk as one contiguous buffer,
+ * laid out lat-major then lon, each pixel holding `timeCount * hourCount`
+ * values. Sized for transfer to the main thread; the chunk itself stays behind.
+ */
+export function extractBlockFromNativeChunk(
+  data: Float32Array,
+  shape: readonly number[],
+  block: LocalBlock,
+): Float32Array {
+  const [timeCount, hourCount] = shape;
+  const seriesLength = timeCount * hourCount;
+  const out = new Float32Array(
+    seriesLength * block.localLatCount * block.localLonCount,
+  );
+
+  let offset = 0;
+  for (let lat = 0; lat < block.localLatCount; lat++) {
+    for (let lon = 0; lon < block.localLonCount; lon++) {
+      out.set(
+        extractPixelFromNativeChunk(data, shape, {
+          localLat: block.localLatStart + lat,
+          localLon: block.localLonStart + lon,
+        }),
+        offset,
+      );
+      offset += seriesLength;
+    }
+  }
+
+  return out;
+}

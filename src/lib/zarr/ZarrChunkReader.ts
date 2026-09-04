@@ -2,15 +2,16 @@ import * as zarr from "zarrita";
 import { LRUCache } from "@/lib/cache/lru";
 import { ZARR_STORE } from "@/lib/constants/store";
 import {
-  extractPixelFromNativeChunk,
-  nativeChunkKey,
+  extractBlockFromNativeChunk,
+  neighborhoodBlock,
+  pixelSeriesKey,
   pixelToNativeChunkContext,
   stitchTimeSeriesForRange,
   type ArrayChunkSizes,
-  type AxisSlice,
-  type LocalOffset,
+  type LocalBlock,
   type PixelNativeChunkContext,
 } from "@/lib/zarr/chunks";
+import { ChunkWorkerClient, type DecodedBlock } from "@/lib/zarr/chunkWorkerClient";
 import {
   chunkIndexToStartDay,
   DEFAULT_HISTORY_YEARS,
@@ -18,19 +19,32 @@ import {
 } from "@/lib/zarr/timeRange";
 import {
   createByteProgressSink,
-  fetchPixelTimeSeries,
+  createSeriesProgressTracker,
   getActiveByteSink,
   setActiveByteSink,
+  type SeriesProgressTracker,
   type ZarrArrayHandle,
   type ZarrStore,
 } from "@/lib/zarr/store";
 import { deriveGridSpec } from "@/lib/zarr/gridSpec";
 import type { GridCell, GridSpec } from "@/types/map";
 
-type CachedNativeChunk = {
-  data: Float32Array;
-  shape: readonly number[];
+/**
+ * One pixel's values for one native time chunk: `chunkTime * hourCount`
+ * floats, ~140 KB here. The chunk it came from is ~224 MB and is never kept.
+ */
+type CachedPixelSeries = {
+  values: Float32Array;
+  chunkStartDay: number;
 };
+
+/**
+ * Pixels within this many cells of the requested one are harvested from the
+ * same decoded chunk. Decoding is the expensive step, so a 5x5 window costs
+ * ~3.5 MB of extra transfer and saves a 182 MB refetch when the user explores
+ * neighbouring cells.
+ */
+const NEIGHBORHOOD_RADIUS = 2;
 
 /** Reports download progress as `loaded` of `total` bytes. */
 export type SeriesProgress = (loaded: number, total: number) => void;
@@ -43,14 +57,19 @@ type ZarrArray = ZarrArrayHandle & {
 
 export class ZarrChunkReader {
   private ds: ZarrStore;
-  private cache: LRUCache<string, CachedNativeChunk>;
+  private cache: LRUCache<string, CachedPixelSeries>;
   private arrayPromises = new Map<string, Promise<ZarrArray>>();
-  private chunkLoadsInFlight = new Map<string, Promise<CachedNativeChunk>>();
-  private prefetchInFlight = new Map<string, Promise<void>>();
+  private chunkLoadsInFlight = new Map<string, Promise<CachedPixelSeries>>();
   private gridSpecPromise?: Promise<GridSpec>;
+  private workerClient: ChunkWorkerClient | null = null;
+  private workerChecked = false;
 
-  /** Default holds ~8 pixels of full history (6 native chunks per pixel). */
-  constructor(ds: ZarrStore, maxCacheSize = 48) {
+  /**
+   * Entries are a fixed ~140 KB (one pixel, one native time chunk), so the
+   * default caps the decoded cache near 72 MB, and one full-history pixel
+   * occupies 6 of them.
+   */
+  constructor(ds: ZarrStore, maxCacheSize = 512) {
     this.ds = ds;
     this.cache = new LRUCache(maxCacheSize);
   }
@@ -67,6 +86,10 @@ export class ZarrChunkReader {
     return this.gridSpecPromise;
   }
 
+  /**
+   * Main-thread array handle. Used for metadata (shape, chunks, attrs) and,
+   * where no worker is available, for decoding too.
+   */
   private getArray(variable: string): Promise<ZarrArray> {
     const existing = this.arrayPromises.get(variable);
     if (existing) return existing;
@@ -83,146 +106,185 @@ export class ZarrChunkReader {
     return promise;
   }
 
+  private getWorker(): ChunkWorkerClient | null {
+    if (!this.workerChecked) {
+      this.workerClient = ChunkWorkerClient.create();
+      this.workerChecked = true;
+    }
+    return this.workerClient;
+  }
+
   private getChunkSizes(array: ZarrArray): ArrayChunkSizes {
     const [time, hour, lat, lon] = array.chunks;
     return { time, hour, lat, lon };
   }
 
-  private nativeCoords(
-    context: PixelNativeChunkContext,
-    timeChunkIdx: number,
-  ) {
-    return {
-      timeChunkIdx,
-      hourChunkIdx: 0,
-      latChunkIdx: context.chunkLatIdx,
-      lonChunkIdx: context.chunkLonIdx,
-    };
+  /** Release the decode worker; the reader falls back to inline decoding. */
+  dispose(): void {
+    this.workerClient?.terminate();
+    this.workerClient = null;
+    this.workerChecked = true;
   }
 
-  private hasAllNativeChunks(
-    variable: string,
-    context: PixelNativeChunkContext,
-  ): boolean {
-    return context.timeChunkIndices.every((timeChunkIdx) =>
-      this.cache.has(
-        nativeChunkKey(variable, this.nativeCoords(context, timeChunkIdx)),
-      ),
-    );
-  }
-
-  private loadNativeChunk(
+  /**
+   * Decode one native chunk, return the requested pixel's slice of it, and
+   * cache the surrounding neighbourhood on the way past.
+   *
+   * The requested pixel is read straight out of the decoded block rather than
+   * back out of the cache, so a request never depends on what the cache chose
+   * to retain. Deduping is keyed by pixel, not by chunk: two pixels share a
+   * chunk but not a neighbourhood, and awaiting a neighbour's load would leave
+   * this pixel unharvested.
+   */
+  private loadPixelSeries(
     array: ZarrArray,
     variable: string,
-    coords: {
-      timeChunkIdx: number;
-      hourChunkIdx: number;
-      latChunkIdx: number;
-      lonChunkIdx: number;
-    },
-  ): Promise<CachedNativeChunk> {
-    const key = nativeChunkKey(variable, coords);
-    const cached = this.cache.get(key);
-    if (cached) return Promise.resolve(cached);
-
-    const inFlight = this.chunkLoadsInFlight.get(key);
+    context: PixelNativeChunkContext,
+    timeChunkIdx: number,
+    chunkSizes: ArrayChunkSizes,
+    tracker: SeriesProgressTracker | null,
+  ): Promise<CachedPixelSeries> {
+    const loadKey = `${variable}:${timeChunkIdx}:${context.chunkLatIdx}:${context.chunkLonIdx}:${context.localLat}:${context.localLon}`;
+    const inFlight = this.chunkLoadsInFlight.get(loadKey);
     if (inFlight) return inFlight;
 
-    const promise = array
-      .getChunk([
-        coords.timeChunkIdx,
-        coords.hourChunkIdx,
-        coords.latChunkIdx,
-        coords.lonChunkIdx,
-      ])
-      .then((chunk: { data: Float32Array; shape: number[] }) => {
-        const entry: CachedNativeChunk = {
-          data: chunk.data as Float32Array,
-          shape: chunk.shape,
-        };
-        this.cache.set(key, entry);
-        return entry;
+    const chunkCoords = [
+      timeChunkIdx,
+      0,
+      context.chunkLatIdx,
+      context.chunkLonIdx,
+    ];
+
+    const promise = this.decodeBlock(
+      array,
+      variable,
+      chunkCoords,
+      context,
+      tracker,
+    )
+      .then((decoded) => {
+        this.storeNeighborhood(
+          variable,
+          context,
+          timeChunkIdx,
+          chunkSizes,
+          decoded,
+        );
+        return this.pixelFromBlock(decoded, context, timeChunkIdx, chunkSizes);
       })
       .finally(() => {
-        this.chunkLoadsInFlight.delete(key);
+        this.chunkLoadsInFlight.delete(loadKey);
       });
 
-    this.chunkLoadsInFlight.set(key, promise);
+    this.chunkLoadsInFlight.set(loadKey, promise);
     return promise;
   }
 
-  private buildFromNativeCache(
-    variable: string,
+  /** The requested pixel's own series, read out of the harvested block. */
+  private pixelFromBlock(
+    decoded: DecodedBlock,
     context: PixelNativeChunkContext,
-    timeRange: AxisSlice,
-    hourCount: number,
-    chunkTime: number,
-    units?: string,
-  ): { values: Float32Array; variable: string; units?: string } {
-    const localOffset: LocalOffset = {
-      localLat: context.localLat,
-      localLon: context.localLon,
-    };
-
-    const segments = context.timeChunkIndices.map((timeChunkIdx) => {
-      const key = nativeChunkKey(
-        variable,
-        this.nativeCoords(context, timeChunkIdx),
-      );
-      const chunk = this.cache.get(key)!;
-      return {
-        values: extractPixelFromNativeChunk(
-          chunk.data,
-          chunk.shape,
-          localOffset,
-        ),
-        chunkStartDay: chunkIndexToStartDay(timeChunkIdx, chunkTime),
-      };
-    });
+    timeChunkIdx: number,
+    chunkSizes: ArrayChunkSizes,
+  ): CachedPixelSeries {
+    const { block, seriesLength, values } = decoded;
+    const lat = context.localLat - block.localLatStart;
+    const lon = context.localLon - block.localLonStart;
+    const offset = (lat * block.localLonCount + lon) * seriesLength;
 
     return {
-      values: stitchTimeSeriesForRange(segments, timeRange, hourCount),
-      variable,
-      units,
+      values: values.slice(offset, offset + seriesLength),
+      chunkStartDay: chunkIndexToStartDay(timeChunkIdx, chunkSizes.time),
     };
   }
 
-  private prefetchNativeChunks(
+  /** Decode in the worker where possible, otherwise inline on this thread. */
+  private async decodeBlock(
     array: ZarrArray,
     variable: string,
+    chunkCoords: number[],
     context: PixelNativeChunkContext,
-  ): void {
-    const prefetchKey = `${variable}:${context.chunkLatIdx}:${context.chunkLonIdx}`;
-    if (this.prefetchInFlight.has(prefetchKey)) return;
+    tracker: SeriesProgressTracker | null,
+  ): Promise<DecodedBlock> {
+    const worker = this.getWorker();
 
-    const missing = context.timeChunkIndices.filter(
-      (timeChunkIdx) =>
-        !this.cache.has(
-          nativeChunkKey(variable, this.nativeCoords(context, timeChunkIdx)),
-        ) && !this.chunkLoadsInFlight.has(
-          nativeChunkKey(variable, this.nativeCoords(context, timeChunkIdx)),
-        ),
+    if (worker) {
+      try {
+        return await worker.decode(
+          {
+            storeUrl: this.ds.url,
+            variable,
+            chunkCoords,
+            localLat: context.localLat,
+            localLon: context.localLon,
+            radius: NEIGHBORHOOD_RADIUS,
+          },
+          tracker ? (loaded, total) => tracker.update(loaded, total) : undefined,
+        );
+      } catch {
+        // A worker that fails once (bad module resolution, a store it cannot
+        // reach) will keep failing, so retire it and decode inline instead.
+        // Slow beats broken.
+        this.dispose();
+      }
+    }
+
+    const sink = tracker
+      ? createByteProgressSink((loaded, total) => tracker.update(loaded, total))
+      : null;
+    if (sink) setActiveByteSink(sink);
+    let chunk: { data: Float32Array; shape: number[] };
+    try {
+      chunk = await array.getChunk(chunkCoords);
+    } finally {
+      // Only clear if a newer request has not already swapped in its own sink.
+      if (sink && getActiveByteSink() === sink) setActiveByteSink(null);
+    }
+
+    const block = neighborhoodBlock(
+      { localLat: context.localLat, localLon: context.localLon },
+      NEIGHBORHOOD_RADIUS,
+      chunk.shape,
     );
-    if (missing.length === 0) return;
 
-    const promise = Promise.all(
-      missing.map((timeChunkIdx) =>
-        this.loadNativeChunk(
-          array,
+    return {
+      block,
+      seriesLength: chunk.shape[0]! * chunk.shape[1]!,
+      values: extractBlockFromNativeChunk(chunk.data, chunk.shape, block),
+    };
+  }
+
+  /** Split a decoded neighbourhood into one cache entry per pixel. */
+  private storeNeighborhood(
+    variable: string,
+    context: PixelNativeChunkContext,
+    timeChunkIdx: number,
+    chunkSizes: ArrayChunkSizes,
+    decoded: DecodedBlock,
+  ): void {
+    const { block, seriesLength, values } = decoded;
+    const chunkStartDay = chunkIndexToStartDay(timeChunkIdx, chunkSizes.time);
+    const latOrigin = context.chunkLatIdx * chunkSizes.lat;
+    const lonOrigin = context.chunkLonIdx * chunkSizes.lon;
+
+    let offset = 0;
+    for (let lat = 0; lat < block.localLatCount; lat++) {
+      for (let lon = 0; lon < block.localLonCount; lon++) {
+        const key = pixelSeriesKey(
           variable,
-          this.nativeCoords(context, timeChunkIdx),
-        ),
-      ),
-    )
-      .then(() => undefined)
-      .catch(() => {
-        // Prefetch is best-effort; explicit requests retry failed chunks.
-      })
-      .finally(() => {
-        this.prefetchInFlight.delete(prefetchKey);
-      });
-
-    this.prefetchInFlight.set(prefetchKey, promise);
+          latOrigin + block.localLatStart + lat,
+          lonOrigin + block.localLonStart + lon,
+          timeChunkIdx,
+        );
+        this.cache.set(key, {
+          // slice(), not subarray(), so evicting one pixel frees its memory
+          // instead of pinning the whole neighbourhood buffer.
+          values: values.slice(offset, offset + seriesLength),
+          chunkStartDay,
+        });
+        offset += seriesLength;
+      }
+    }
   }
 
   async getTimeSeries(
@@ -234,7 +296,10 @@ export class ZarrChunkReader {
     const array = await this.getArray(variable);
     const chunkSizes = this.getChunkSizes(array);
     const [timeCount, hourCount] = array.shape;
-    const timeRange = yearsToDayRange(historyYears ?? DEFAULT_HISTORY_YEARS, timeCount);
+    const timeRange = yearsToDayRange(
+      historyYears ?? DEFAULT_HISTORY_YEARS,
+      timeCount,
+    );
     const context = pixelToNativeChunkContext(
       grid.latIndex,
       grid.lonIndex,
@@ -245,28 +310,48 @@ export class ZarrChunkReader {
     const units =
       typeof array.attrs.units === "string" ? array.attrs.units : undefined;
 
-    if (this.hasAllNativeChunks(variable, context)) {
-      onProgress?.(1, 1);
-      return this.buildFromNativeCache(
-        variable,
-        context,
-        timeRange,
-        hourCount,
-        chunkSizes.time,
-        units,
+    const keyFor = (timeChunkIdx: number) =>
+      pixelSeriesKey(variable, grid.latIndex, grid.lonIndex, timeChunkIdx);
+
+    const missingCount = context.timeChunkIndices.filter(
+      (timeChunkIdx) => !this.cache.has(keyFor(timeChunkIdx)),
+    ).length;
+
+    if (onProgress && missingCount === 0) onProgress(1, 1);
+    const tracker =
+      onProgress && missingCount > 0
+        ? createSeriesProgressTracker(missingCount, onProgress)
+        : null;
+
+    // Sequential on purpose: one decoded chunk resident at a time. Fetching
+    // all of them at once is what exhausted memory on mobile.
+    const segments: CachedPixelSeries[] = [];
+    for (const timeChunkIdx of context.timeChunkIndices) {
+      const cached = this.cache.get(keyFor(timeChunkIdx));
+      if (cached) {
+        segments.push(cached);
+        continue;
+      }
+
+      segments.push(
+        await this.loadPixelSeries(
+          array,
+          variable,
+          context,
+          timeChunkIdx,
+          chunkSizes,
+          tracker,
+        ),
       );
+      tracker?.complete();
     }
 
-    // Stream byte-level progress off the chunk requests this fetch triggers.
-    // Prefetch runs after the sink is cleared, so it is not counted.
-    const sink = onProgress ? createByteProgressSink(onProgress) : null;
-    if (sink) setActiveByteSink(sink);
-    try {
-      return await fetchPixelTimeSeries(array, grid, variable, timeRange);
-    } finally {
-      // Only clear if a newer request has not already swapped in its own sink.
-      if (sink && getActiveByteSink() === sink) setActiveByteSink(null);
-      this.prefetchNativeChunks(array, variable, context);
-    }
+    return {
+      values: stitchTimeSeriesForRange(segments, timeRange, hourCount),
+      variable,
+      units,
+    };
   }
 }
+
+export type { LocalBlock };

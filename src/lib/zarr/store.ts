@@ -149,15 +149,88 @@ async function progressFetch(request: Request): Promise<Response> {
   }
 }
 
-export async function openZarrStore(url = ZARR_STORE.url) {
+/**
+ * Cache metadata documents only. Chunk bodies are hundreds of MB each and are
+ * fetched exactly once per pixel neighbourhood by the decode worker, so
+ * retaining their compressed bytes buys nothing and previously grew without
+ * bound (the default policy caches every request into an unbounded Map).
+ */
+export function metadataOnlyKey(
+  path: `/${string}`,
+  range?: unknown,
+): string | undefined {
+  if (range !== undefined) return undefined;
+  return /\/(zarr\.json|\.zarray|\.zattrs|\.zgroup)$/.test(path)
+    ? path
+    : undefined;
+}
+
+export async function openZarrStore(url: string = ZARR_STORE.url) {
   const raw = new zarr.FetchStore(url, { fetch: progressFetch });
   const consolidated = await zarr.withConsolidatedMetadata(raw);
-  const store = zarr.withByteCaching(consolidated);
+  const store = zarr.withByteCaching(consolidated, { keyFor: metadataOnlyKey });
   return {
     store,
     root: zarr.root(store),
+    // The decode worker opens its own store against the same dataset.
+    url,
   };
 }
+
+/**
+ * Aggregate byte progress across the several native chunks one time series
+ * needs. Chunks download one at a time, so the denominator is extrapolated
+ * from the chunks already finished (they are near-identical in size), which
+ * keeps the bar moving forward instead of resetting per chunk.
+ */
+export function createSeriesProgressTracker(
+  chunkCount: number,
+  onProgress: (loaded: number, total: number) => void,
+) {
+  let completedBytes = 0;
+  let completedChunks = 0;
+  let inflightLoaded = 0;
+  let inflightTotal = 0;
+  let inflight = false;
+
+  function emit() {
+    const perChunk =
+      completedChunks > 0 ? completedBytes / completedChunks : inflightTotal;
+    // Only subtract a slot for the in-flight chunk while one is actually
+    // running, or the estimate dips every time a chunk lands.
+    const pending = Math.max(
+      0,
+      chunkCount - completedChunks - (inflight ? 1 : 0),
+    );
+    const loaded = completedBytes + inflightLoaded;
+    const total = completedBytes + inflightTotal + perChunk * pending;
+    // A response without a Content-Length contributes bytes but no total.
+    onProgress(loaded, Math.max(loaded, total));
+  }
+
+  return {
+    /** Latest byte counts for the chunk currently downloading. */
+    update(loaded: number, total: number) {
+      inflight = true;
+      inflightLoaded = loaded;
+      inflightTotal = total;
+      emit();
+    },
+    /** The in-flight chunk finished; fold its bytes into the completed total. */
+    complete() {
+      completedBytes += Math.max(inflightTotal, inflightLoaded);
+      completedChunks += 1;
+      inflightLoaded = 0;
+      inflightTotal = 0;
+      inflight = false;
+      emit();
+    },
+  };
+}
+
+export type SeriesProgressTracker = ReturnType<
+  typeof createSeriesProgressTracker
+>;
 
 /** One pixel, time × hour slice, via zarrita's built-in slice assembly. */
 export async function fetchPixelTimeSeries(
