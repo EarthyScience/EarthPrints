@@ -92,7 +92,7 @@ export function EarthMap() {
     getSidebarState,
     getServerSidebarState,
   );
-  const [selectedYear, setSelectedYear] = useState<number>(2021);
+  const [selectedYears, setSelectedYears] = useState<number[]>([2021]);
   const [cachedYears, setCachedYears] = useState<Set<number>>(new Set());
   const [loadingSeries, setLoadingSeries] = useState(false);
   const [seriesProgress, setSeriesProgress] = useState<{
@@ -170,8 +170,8 @@ export function EarthMap() {
     };
   }, [ensureReader]);
 
-  const loadTimeSeriesForYear = useCallback(
-    async (nextSelection: MapSelection, year: number) => {
+  const loadTimeSeriesForYears = useCallback(
+    async (nextSelection: MapSelection, years: number[]) => {
       const requestId = ++requestIdRef.current;
       setLoadingSeries(true);
       setSeriesProgress(null);
@@ -183,9 +183,9 @@ export function EarthMap() {
         const reader = await ensureReader();
         setCachedYears(new Set(reader.getCachedYears(nextSelection.grid)));
 
-        const { values, units } = await reader.getTimeSeriesForYear(
+        const { values, units } = await reader.getTimeSeriesForYears(
           nextSelection.grid,
-          year,
+          years,
           undefined,
           (loaded, total) => {
             if (requestId !== requestIdRef.current) return;
@@ -226,14 +226,14 @@ export function EarthMap() {
     setViewState(next);
   }, []);
 
-  const handleYearSelect = useCallback(
-    (year: number) => {
-      setSelectedYear(year);
+  const handleYearsSelect = useCallback(
+    (years: number[]) => {
+      setSelectedYears(years);
       if (selection) {
-        void loadTimeSeriesForYear(selection, year);
+        void loadTimeSeriesForYears(selection, years);
       }
     },
-    [selection, loadTimeSeriesForYear],
+    [selection, loadTimeSeriesForYears],
   );
 
   const handlePick = useCallback(
@@ -250,9 +250,9 @@ export function EarthMap() {
         viewMode,
       );
       flyToView(focused, SELECTION_FOCUS_TRANSITION_MS);
-      void loadTimeSeriesForYear(nextSelection, selectedYear);
+      void loadTimeSeriesForYears(nextSelection, selectedYears);
     },
-    [flyToView, gridSpec, selectedYear, loadTimeSeriesForYear, viewMode, viewState],
+    [flyToView, gridSpec, selectedYears, loadTimeSeriesForYears, viewMode, viewState],
   );
 
   const handleMapClick = useCallback(
@@ -349,9 +349,9 @@ export function EarthMap() {
         <MapReadout
           selection={selection}
           gridSpec={gridSpec}
-          selectedYear={selectedYear}
+          selectedYears={selectedYears}
           cachedYears={cachedYears}
-          onSelectYear={handleYearSelect}
+          onSelectYears={handleYearsSelect}
           loadingSeries={loadingSeries}
           seriesProgress={seriesProgress}
           seriesError={seriesError}

@@ -6,7 +6,10 @@ import {
 } from "@/lib/zarr/chunks";
 import {
   ALL_AVAILABLE_YEARS,
+  formatSelectedYearsLabel,
   timeChunkIndexToYears,
+  yearsToContiguousBlocks,
+  yearsToDateRange,
   yearsToDayRange,
   yearToDateRange,
   yearToTimeChunkIndex,
@@ -44,6 +47,19 @@ describe("yearToDateRange and chunk mapping", () => {
     expect(timeChunkIndexToYears(0)).toEqual([2001, 2002, 2003, 2004]);
     expect(timeChunkIndexToYears(4)).toEqual([2017, 2018, 2019, 2020]);
     expect(timeChunkIndexToYears(5)).toEqual([2021]);
+  });
+
+  it("calculates contiguous blocks and multi-year range slices", () => {
+    expect(yearsToContiguousBlocks([2018, 2019, 2020])).toEqual([[2018, 2019, 2020]]);
+    expect(yearsToContiguousBlocks([2002, 2003, 2005, 2007, 2008])).toEqual([
+      [2002, 2003],
+      [2005],
+      [2007, 2008],
+    ]);
+
+    expect(yearsToDateRange([2001, 2002])).toEqual([0, 730]);
+    expect(formatSelectedYearsLabel([2018, 2019, 2020])).toBe("2018–2020");
+    expect(formatSelectedYearsLabel([2005, 2018, 2019, 2020])).toBe("2005, 2018–2020");
   });
 });
 

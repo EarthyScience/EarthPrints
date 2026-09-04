@@ -1,4 +1,7 @@
-import { ZARR_TIME_ORIGIN_UTC } from "@/lib/zarr/timeRange";
+import {
+  ZARR_TIME_ORIGIN_UTC,
+  getSelectedYearsDayMapping,
+} from "@/lib/zarr/timeRange";
 import type { ExportProvenance } from "./provenance";
 
 export type SeriesRow = {
@@ -31,13 +34,21 @@ export function buildSeriesRows(
   values: Float32Array,
   prov: ExportProvenance,
 ): SeriesRow[] {
-  const { hoursPerDay, baseDay, dayCount } = prov;
+  const { hoursPerDay, baseDay, dayCount, selectedYears } = prov;
   const count = Math.min(values.length, dayCount * hoursPerDay);
   const rows: SeriesRow[] = new Array(count);
 
+  const dayMapping = getSelectedYearsDayMapping(
+    selectedYears,
+    undefined,
+    dayCount,
+  );
+
   for (let i = 0; i < count; i += 1) {
     const hour = i % hoursPerDay;
-    const dayIndex = baseDay + Math.floor(i / hoursPerDay);
+    const localDay = Math.floor(i / hoursPerDay);
+    const dayIndex =
+      dayMapping.absoluteDays[localDay] ?? (baseDay + localDay);
     const raw = values[i];
 
     rows[i] = {

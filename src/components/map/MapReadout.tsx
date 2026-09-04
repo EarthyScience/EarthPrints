@@ -21,9 +21,9 @@ type MapReadoutProps = {
   selection: MapSelection | null;
   gridSpec?: GridSpec;
   variable?: string;
-  selectedYear: number;
+  selectedYears: number[];
   cachedYears?: Set<number>;
-  onSelectYear: (year: number) => void;
+  onSelectYears: (years: number[]) => void;
   loadingSeries: boolean;
   seriesProgress: SeriesProgress | null;
   seriesError: string | null;
@@ -38,9 +38,9 @@ export function MapReadout({
   selection,
   gridSpec = DEFAULT_GRID_SPEC,
   variable = ZARR_STORE.defaultVariable,
-  selectedYear,
+  selectedYears,
   cachedYears = new Set(),
-  onSelectYear,
+  onSelectYears,
   loadingSeries,
   seriesProgress,
   seriesError,
@@ -75,10 +75,10 @@ export function MapReadout({
 
   const historyControl = (
     <YearSelector
-      selectedYear={selectedYear}
+      selectedYears={selectedYears}
       cachedYears={cachedYears}
       loading={loadingSeries}
-      onSelectYear={onSelectYear}
+      onSelectYears={onSelectYears}
     />
   );
 
@@ -107,10 +107,10 @@ export function MapReadout({
         <DownloadButton
           selection={selection}
           gridSpec={gridSpec}
-          historyYears={1}
+          historyYears={selectedYears.length}
           values={loadingSeries ? null : seriesValues}
           units={seriesUnits}
-          selectedYear={selectedYear}
+          selectedYears={selectedYears}
         />
       </div>
 
@@ -118,7 +118,7 @@ export function MapReadout({
         <div className="grid gap-3">
           <SeriesLoader progress={seriesProgress} />
           {plotView === "line" ? (
-            <TimeSeriesPlotLoading historyYears={1} />
+            <TimeSeriesPlotLoading historyYears={selectedYears.length} />
           ) : (
             <FingerprintPlotLoading transposed={fingerprintTransposed} />
           )}
@@ -139,7 +139,7 @@ export function MapReadout({
             values={seriesValues}
             units={seriesUnits}
             hoursPerDay={ZARR_TIME.hoursPerDay}
-            selectedYear={selectedYear}
+            selectedYears={selectedYears}
             transposed={fingerprintTransposed}
             onTransposedChange={setFingerprintTransposed}
           />

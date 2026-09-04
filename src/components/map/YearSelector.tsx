@@ -1,23 +1,72 @@
 "use client";
 
-import { ALL_AVAILABLE_YEARS } from "@/lib/zarr/timeRange";
+import { useMemo, useState } from "react";
+import {
+  ALL_AVAILABLE_YEARS,
+  formatSelectedYearsLabel,
+} from "@/lib/zarr/timeRange";
 
 type YearSelectorProps = {
-  selectedYear: number;
+  selectedYears?: number[];
+  selectedYear?: number;
   cachedYears?: Set<number>;
   loading?: boolean;
-  onSelectYear: (year: number) => void;
+  onSelectYears?: (years: number[]) => void;
+  onSelectYear?: (year: number) => void;
   className?: string;
 };
 
 export function YearSelector({
+  selectedYears,
   selectedYear,
   cachedYears = new Set(),
   loading = false,
+  onSelectYears,
   onSelectYear,
   className = "",
 }: YearSelectorProps) {
   const cachedCount = cachedYears.size;
+
+  const activeYears = useMemo(() => {
+    if (selectedYears && selectedYears.length > 0) return selectedYears;
+    if (selectedYear) return [selectedYear];
+    return [ALL_AVAILABLE_YEARS[ALL_AVAILABLE_YEARS.length - 1]!];
+  }, [selectedYears, selectedYear]);
+
+  const selectedSet = useMemo(() => new Set(activeYears), [activeYears]);
+  const [lastClickedYear, setLastClickedYear] = useState<number | null>(null);
+
+  const handleYearClick = (year: number, event: React.MouseEvent) => {
+    if (event.shiftKey && lastClickedYear !== null) {
+      const min = Math.min(lastClickedYear, year);
+      const max = Math.max(lastClickedYear, year);
+      const range = ALL_AVAILABLE_YEARS.filter((y) => y >= min && y <= max);
+      setLastClickedYear(year);
+      if (onSelectYears) {
+        onSelectYears(range);
+      } else if (onSelectYear) {
+        onSelectYear(year);
+      }
+      return;
+    }
+
+    setLastClickedYear(year);
+
+    if (onSelectYears) {
+      if (selectedSet.has(year)) {
+        if (activeYears.length > 1) {
+          onSelectYears(activeYears.filter((y) => y !== year));
+        }
+      } else {
+        const next = [...activeYears, year].sort((a, b) => a - b);
+        onSelectYears(next);
+      }
+    } else if (onSelectYear) {
+      onSelectYear(year);
+    }
+  };
+
+  const yearsLabel = formatSelectedYearsLabel(activeYears);
 
   return (
     <section aria-label="Year selection" className={className}>
@@ -38,7 +87,7 @@ export function YearSelector({
           ) : null}
         </div>
         <span className="font-mono text-[12.5px] font-semibold text-accent">
-          {selectedYear}
+          {yearsLabel}
         </span>
       </div>
 
@@ -48,7 +97,7 @@ export function YearSelector({
         aria-label="Select year"
       >
         {ALL_AVAILABLE_YEARS.map((year) => {
-          const isSelected = year === selectedYear;
+          const isSelected = selectedSet.has(year);
           const isCached = cachedYears.has(year);
           const isLoading = isSelected && loading;
 
@@ -56,15 +105,15 @@ export function YearSelector({
             <button
               key={year}
               type="button"
-              onClick={() => onSelectYear(year)}
+              onClick={(e) => handleYearClick(year, e)}
               aria-pressed={isSelected}
               disabled={isLoading}
               title={
                 isSelected
-                  ? `Year ${year} (Selected)`
+                  ? `Year ${year} (Selected · Shift+click for range)`
                   : isCached
-                    ? `Year ${year} (Cached in memory)`
-                    : `Year ${year} (Click to fetch 4-year block)`
+                    ? `Year ${year} (Cached in memory · Shift+click for range)`
+                    : `Year ${year} (Click to select · Shift+click for range)`
               }
               className={`relative flex items-center justify-center rounded-[5px] py-1 font-mono text-[11px] tabular-nums transition-all ${
                 isSelected

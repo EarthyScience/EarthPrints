@@ -15,7 +15,12 @@ import {
   formatIsoDate,
   symmetricAbsMax,
 } from "@/lib/map/fingerprintScale";
-import { ZARR_TIME, yearToDateRange } from "@/lib/zarr/timeRange";
+import {
+  ZARR_TIME,
+  getSelectedYearsDayMapping,
+  yearsToDateRange,
+  yearToDateRange,
+} from "@/lib/zarr/timeRange";
 import { useTheme } from "@/providers/ThemeProvider";
 
 type FingerprintPlotProps = {
@@ -31,6 +36,7 @@ type FingerprintPlotProps = {
    */
   pixelRatio?: number;
   selectedYear?: number | null;
+  selectedYears?: number[] | null;
   transposed?: boolean;
   onTransposedChange?: (transposed: boolean) => void;
 };
@@ -71,6 +77,7 @@ export function FingerprintPlot({
   height: heightProp,
   pixelRatio,
   selectedYear = null,
+  selectedYears = null,
   transposed: controlledTransposed,
   onTransposedChange,
 }: FingerprintPlotProps) {
@@ -99,22 +106,37 @@ export function FingerprintPlot({
   const nDays = Math.floor(values.length / hoursPerDay);
   const absMax = useMemo(() => symmetricAbsMax(values), [values]);
 
-  // If a calendar year is specified, baseDay is the start day of that year.
-  // Otherwise, default to the archive's trailing window.
-  const baseDay = selectedYear
-    ? yearToDateRange(selectedYear)[0]
-    : ZARR_TIME.totalDays - nDays;
+  const years =
+    selectedYears && selectedYears.length > 0
+      ? selectedYears
+      : selectedYear
+        ? [selectedYear]
+        : null;
+
+  const dayMapping = useMemo(
+    () => getSelectedYearsDayMapping(years, undefined, nDays),
+    [years, nDays],
+  );
 
   const dayLo = 0;
   const dayHi = Math.max(0, nDays - 1);
   const nSel = Math.max(1, nDays);
 
   const dayAxisTicks = useMemo<{ dayLocal: number; label: string }[]>(() => {
+    if (dayMapping.yearIntervals.length > 1) {
+      return dayMapping.yearIntervals.map((interval) => ({
+        dayLocal: Math.round(
+          (interval.startDayLocal + interval.endDayLocal) / 2,
+        ),
+        label: `${interval.year}`,
+      }));
+    }
+
     return dayIndexTicks(nSel).map((offset) => ({
       dayLocal: offset,
-      label: formatDayTick(baseDay + offset),
+      label: formatDayTick(dayMapping.absoluteDays[offset] ?? offset),
     }));
-  }, [nSel, baseDay]);
+  }, [dayMapping, nSel]);
 
   useEffect(() => {
     const node = wrapperRef.current;
@@ -180,6 +202,26 @@ export function FingerprintPlot({
           ctx.fillRect(axisLeft + px, yTop, 1, Math.max(1, yBot - yTop));
         }
       }
+
+      // Vertical dividing lines between year intervals
+      if (dayMapping.yearIntervals.length > 1) {
+        ctx.save();
+        ctx.strokeStyle = isLight
+          ? "rgba(0, 0, 0, 0.25)"
+          : "rgba(255, 255, 255, 0.25)";
+        ctx.lineWidth = 1;
+        for (const interval of dayMapping.yearIntervals) {
+          if (interval.startDayLocal > 0) {
+            const bx =
+              axisLeft + Math.floor((interval.startDayLocal / nSel) * plotW);
+            ctx.beginPath();
+            ctx.moveTo(bx, AXIS_TOP);
+            ctx.lineTo(bx, AXIS_TOP + plotH);
+            ctx.stroke();
+          }
+        }
+        ctx.restore();
+      }
     } else {
       // x = hour (0 at the left), y = day (first day at the top).
       const colX = (hour: number) =>
@@ -194,6 +236,26 @@ export function FingerprintPlot({
           ctx.fillStyle = color;
           ctx.fillRect(xLeft, AXIS_TOP + py, Math.max(1, xRight - xLeft), 1);
         }
+      }
+
+      // Horizontal dividing lines between year intervals
+      if (dayMapping.yearIntervals.length > 1) {
+        ctx.save();
+        ctx.strokeStyle = isLight
+          ? "rgba(0, 0, 0, 0.25)"
+          : "rgba(255, 255, 255, 0.25)";
+        ctx.lineWidth = 1;
+        for (const interval of dayMapping.yearIntervals) {
+          if (interval.startDayLocal > 0) {
+            const by =
+              AXIS_TOP + Math.floor((interval.startDayLocal / nSel) * plotH);
+            ctx.beginPath();
+            ctx.moveTo(axisLeft, by);
+            ctx.lineTo(axisLeft + plotW, by);
+            ctx.stroke();
+          }
+        }
+        ctx.restore();
       }
     }
 
@@ -286,13 +348,16 @@ export function FingerprintPlot({
       dayLocal = Math.min(dayHi, dayLo + Math.floor((inY / plotH) * nSel));
     }
 
+    const absoluteDay =
+      dayMapping.absoluteDays[dayLocal] ?? dayLocal;
+
     setHover({
       left: x,
       top: y,
       day: dayLocal,
       hour,
       value: values[dayLocal * hoursPerDay + hour] as number,
-      absoluteDay: baseDay + dayLocal,
+      absoluteDay,
     });
   };
 

@@ -15,6 +15,7 @@ import {
   chunkIndexToStartDay,
   DEFAULT_HISTORY_YEARS,
   timeChunkIndexToYears,
+  yearsToContiguousBlocks,
   yearsToDayRange,
   yearToDateRange,
 } from "@/lib/zarr/timeRange";
@@ -303,6 +304,52 @@ export class ZarrChunkReader {
   ): Promise<{ values: Float32Array; variable: string; units?: string }> {
     const timeRange = yearToDateRange(year);
     return this.getTimeSeriesForRange(grid, timeRange, variable, onProgress);
+  }
+
+  async getTimeSeriesForYears(
+    grid: GridCell,
+    years: number[],
+    variable = ZARR_STORE.defaultVariable,
+    onProgress?: SeriesProgress,
+  ): Promise<{ values: Float32Array; variable: string; units?: string }> {
+    if (years.length === 0) {
+      return { values: new Float32Array(0), variable };
+    }
+    const blocks = yearsToContiguousBlocks(years);
+    if (blocks.length === 1) {
+      const block = blocks[0]!;
+      const timeRange: AxisSlice = [
+        yearToDateRange(block[0]!)[0],
+        yearToDateRange(block[block.length - 1]!)[1],
+      ];
+      return this.getTimeSeriesForRange(grid, timeRange, variable, onProgress);
+    }
+
+    let totalLen = 0;
+    const results: Float32Array[] = [];
+    let resolvedUnits: string | undefined;
+
+    for (let i = 0; i < blocks.length; i++) {
+      const block = blocks[i]!;
+      const timeRange: AxisSlice = [
+        yearToDateRange(block[0]!)[0],
+        yearToDateRange(block[block.length - 1]!)[1],
+      ];
+      const res = await this.getTimeSeriesForRange(grid, timeRange, variable);
+      results.push(res.values);
+      totalLen += res.values.length;
+      if (res.units) resolvedUnits = res.units;
+    }
+
+    const merged = new Float32Array(totalLen);
+    let offset = 0;
+    for (const arr of results) {
+      merged.set(arr, offset);
+      offset += arr.length;
+    }
+
+    onProgress?.(1, 1);
+    return { values: merged, variable, units: resolvedUnits };
   }
 
   async getTimeSeries(

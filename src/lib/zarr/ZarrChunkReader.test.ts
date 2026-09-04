@@ -195,4 +195,19 @@ describe("ZarrChunkReader", () => {
     const cachedYears = reader.getCachedYears(grid);
     expect(cachedYears.size).toBeGreaterThan(0);
   });
+
+  it("fetches multiple years and returns concatenated time series", async () => {
+    mockFetchPixelTimeSeries.mockResolvedValue({
+      values: new Float32Array([1, 2, 3, 4]),
+      variable: "NEE",
+      units: "gC m-2 h-1",
+    });
+
+    const reader = new ZarrChunkReader(ds);
+    const grid = makeGrid(50, 50);
+
+    const result = await reader.getTimeSeriesForYears(grid, [2018, 2019]);
+    expect(result.values).toBeInstanceOf(Float32Array);
+    expect(result.variable).toBe("NEE");
+  });
 });

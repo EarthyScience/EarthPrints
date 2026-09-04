@@ -25,6 +25,7 @@ type DownloadButtonProps = {
   values: Float32Array | null;
   units: string | null;
   selectedYear?: number | null;
+  selectedYears?: number[] | null;
 };
 
 export function DownloadButton({
@@ -34,6 +35,7 @@ export function DownloadButton({
   values,
   units,
   selectedYear = null,
+  selectedYears = null,
 }: DownloadButtonProps) {
   const { isLight } = useTheme();
   const [busy, setBusy] = useState(false);
@@ -81,6 +83,7 @@ export function DownloadButton({
         selection,
         historyYears,
         selectedYear,
+        selectedYears,
         valueCount: values.length,
         units,
       });
@@ -92,6 +95,8 @@ export function DownloadButton({
           values,
           units,
           hoursPerDay: prov.hoursPerDay,
+          selectedYear,
+          selectedYears,
         }),
       ]);
 
@@ -102,6 +107,7 @@ export function DownloadButton({
         size: 1024,
         isLight: false,
         selectedYear,
+        selectedYears,
       });
       const squareDataUrl = squareCanvas.toDataURL("image/png");
 
@@ -152,16 +158,45 @@ export function DownloadButton({
 
       downloadBlob(archive, `${base}.zip`);
     } catch (cause) {
-      console.error("Export failed", cause);
-      setError("Export failed. Try again.");
+      console.error("ZIP export failed", cause);
+      setError("ZIP export failed. Please try again.");
     } finally {
       setBusy(false);
     }
-  }, [gridSpec, historyYears, selectedYear, selection, units, values]);
+  }, [gridSpec, historyYears, selectedYear, selectedYears, selection, units, values]);
 
-  // Single square logo badge export with selectable resolution
+  // Single Workbook export
+  const runWorkbookExport = useCallback(async () => {
+    if (!values) return;
+
+    setError(null);
+    setBusy(true);
+    setBusyLabel("Building XLSX…");
+    setMenuOpen(false);
+    try {
+      const prov = buildProvenance({
+        selection,
+        historyYears,
+        selectedYear,
+        selectedYears,
+        valueCount: values.length,
+        units,
+      });
+      const base = exportFileBaseName(prov);
+      const rows = buildSeriesRows(values, prov);
+      const workbook = await buildSeriesWorkbook(rows, prov);
+      downloadBlob(workbook, `${base}.xlsx`);
+    } catch (cause) {
+      console.error("Workbook export failed", cause);
+      setError("Excel export failed.");
+    } finally {
+      setBusy(false);
+    }
+  }, [historyYears, selectedYear, selectedYears, selection, units, values]);
+
+  // Standalone Square Badge export
   const runSquareBadgeExport = useCallback(
-    async (targetSize: number) => {
+    (targetSize: number) => {
       if (!values) return;
 
       setError(null);
@@ -169,11 +204,13 @@ export function DownloadButton({
       setBusyLabel("Generating badge…");
       setMenuOpen(false);
       setShowBadgeSizes(false);
+
       try {
         const prov = buildProvenance({
           selection,
           historyYears,
           selectedYear,
+          selectedYears,
           valueCount: values.length,
           units,
         });
@@ -186,9 +223,15 @@ export function DownloadButton({
           size: targetSize,
           isLight,
           selectedYear,
+          selectedYears,
         });
 
-        const yearTag = selectedYear ? `_${selectedYear}` : "";
+        const yearTag =
+          selectedYears && selectedYears.length > 0
+            ? `_${selectedYears.join("-")}`
+            : selectedYear
+              ? `_${selectedYear}`
+              : "";
         canvas.toBlob((blob) => {
           if (blob) {
             downloadBlob(
@@ -204,7 +247,7 @@ export function DownloadButton({
         setBusy(false);
       }
     },
-    [historyYears, isLight, selectedYear, selection, units, values],
+    [historyYears, isLight, selectedYear, selectedYears, selection, units, values],
   );
 
   // Single PDF export
@@ -220,6 +263,7 @@ export function DownloadButton({
         selection,
         historyYears,
         selectedYear,
+        selectedYears,
         valueCount: values.length,
         units,
       });
@@ -231,6 +275,8 @@ export function DownloadButton({
           values,
           units,
           hoursPerDay: prov.hoursPerDay,
+          selectedYear,
+          selectedYears,
         }),
       ]);
       const assets: ReportAssets = {
@@ -253,7 +299,7 @@ export function DownloadButton({
     } finally {
       setBusy(false);
     }
-  }, [gridSpec, historyYears, selectedYear, selection, units, values]);
+  }, [gridSpec, historyYears, selectedYear, selectedYears, selection, units, values]);
 
   // Single CSV export
   const runCsvExport = useCallback(() => {
@@ -263,6 +309,7 @@ export function DownloadButton({
       selection,
       historyYears,
       selectedYear,
+      selectedYears,
       valueCount: values.length,
       units,
     });
@@ -271,7 +318,7 @@ export function DownloadButton({
     const csv = buildSeriesCsv(rows, prov);
     const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
     downloadBlob(blob, `${base}.csv`);
-  }, [historyYears, selectedYear, selection, units, values]);
+  }, [historyYears, selectedYear, selectedYears, selection, units, values]);
 
   return (
     <div ref={containerRef} className="relative inline-flex items-center">

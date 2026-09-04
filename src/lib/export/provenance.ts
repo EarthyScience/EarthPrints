@@ -1,5 +1,9 @@
 import { ZARR_STORE } from "@/lib/constants/store";
-import { ZARR_TIME, dayIndexToUTCDate, yearToDateRange } from "@/lib/zarr/timeRange";
+import {
+  ZARR_TIME,
+  dayIndexToUTCDate,
+  yearsToDateRange,
+} from "@/lib/zarr/timeRange";
 import type { GeoPoint, GridCell, MapSelection } from "@/types/map";
 
 /**
@@ -18,6 +22,7 @@ export type ExportProvenance = {
   cell: GridCell;
   historyYears: number;
   selectedYear: number | null;
+  selectedYears: number[] | null;
   hoursPerDay: number;
   /** Days covered by the loaded window. */
   dayCount: number;
@@ -32,6 +37,7 @@ type BuildInput = {
   selection: MapSelection;
   historyYears?: number;
   selectedYear?: number | null;
+  selectedYears?: number[] | null;
   /** Length of the loaded `Float32Array`, i.e. days x hours. */
   valueCount: number;
   units?: string | null;
@@ -43,8 +49,9 @@ type BuildInput = {
 
 export function buildProvenance({
   selection,
-  historyYears = 1,
+  historyYears,
   selectedYear = null,
+  selectedYears = null,
   valueCount,
   units = null,
   variable = ZARR_STORE.defaultVariable,
@@ -54,11 +61,24 @@ export function buildProvenance({
 }: BuildInput): ExportProvenance {
   const dayCount = Math.floor(valueCount / hoursPerDay);
 
-  // If a specific calendar year is selected, the window starts at the first day
-  // of that year. Otherwise, it defaults to the trailing end of the archive.
-  const baseDay = selectedYear
-    ? yearToDateRange(selectedYear, totalDays)[0]
-    : totalDays - dayCount;
+  const years =
+    selectedYears && selectedYears.length > 0
+      ? selectedYears
+      : selectedYear
+        ? [selectedYear]
+        : null;
+
+  const resolvedHistoryYears = historyYears ?? (years ? years.length : 1);
+  const fallbackBaseDay = Math.max(0, totalDays - dayCount);
+
+  // If calendar year(s) are selected, the window starts at the first day
+  // of that span. Otherwise, it defaults to the trailing end of the archive.
+  const [startDay, stopDay] = years
+    ? yearsToDateRange(years, totalDays)
+    : [fallbackBaseDay, fallbackBaseDay + Math.max(1, dayCount)];
+
+  const windowStart = dayIndexToUTCDate(startDay);
+  const windowEnd = dayIndexToUTCDate(Math.max(startDay, stopDay - 1));
 
   return {
     generatedAt,
@@ -69,13 +89,14 @@ export function buildProvenance({
     resolutionDeg: ZARR_STORE.spatialResolutionDeg,
     click: selection.click,
     cell: selection.grid,
-    historyYears,
-    selectedYear,
+    historyYears: resolvedHistoryYears,
+    selectedYear: years && years.length === 1 ? years[0]! : null,
+    selectedYears: years,
     hoursPerDay,
     dayCount,
-    baseDay,
-    windowStart: dayIndexToUTCDate(baseDay),
-    windowEnd: dayIndexToUTCDate(baseDay + Math.max(0, dayCount - 1)),
+    baseDay: startDay,
+    windowStart,
+    windowEnd,
   };
 }
 
