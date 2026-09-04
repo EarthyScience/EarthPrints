@@ -1,7 +1,7 @@
 import { isoDate, type ExportProvenance } from "./provenance";
 import type { SeriesRow } from "./rows";
 
-export const CSV_COLUMNS = "timestamp_utc,day_index,hour,value";
+export const CSV_COLUMNS = "timestamp_utc,year,date,hour,day_index,value";
 
 /**
  * Provenance rides along as `#` comment lines. A file of bare numbers is
@@ -9,7 +9,7 @@ export const CSV_COLUMNS = "timestamp_utc,day_index,hour,value";
  * `pandas.read_csv(path, comment="#")`, `readr::read_csv(comment = "#")`.
  */
 function buildHeader(rowCount: number, prov: ExportProvenance): string[] {
-  return [
+  const lines = [
     "EarthPrints export",
     `generated: ${prov.generatedAt.toISOString()}`,
     `dataset: ${prov.dataset}`,
@@ -24,10 +24,16 @@ function buildHeader(rowCount: number, prov: ExportProvenance): string[] {
     `lat_index: ${prov.cell.latIndex}`,
     `lon_index: ${prov.cell.lonIndex}`,
     `history_years: ${prov.historyYears}`,
+    ...(prov.selectedYears && prov.selectedYears.length > 0
+      ? [`selected_years: ${prov.selectedYears.join(", ")}`]
+      : prov.selectedYear
+        ? [`selected_year: ${prov.selectedYear}`]
+        : []),
     `window_start: ${isoDate(prov.windowStart)}`,
     `window_end: ${isoDate(prov.windowEnd)}`,
     `rows: ${rowCount}`,
-  ].map((line) => `# ${line}`);
+  ];
+  return lines.map((line) => `# ${line}`);
 }
 
 /**
@@ -44,7 +50,7 @@ export function buildSeriesCsv(
 
   for (const row of rows) {
     lines.push(
-      `${row.timestamp.toISOString()},${row.dayIndex},${row.hour},${
+      `${row.timestamp.toISOString()},${row.year},${row.date},${row.hour},${row.dayIndex},${
         row.value ?? ""
       }`,
     );

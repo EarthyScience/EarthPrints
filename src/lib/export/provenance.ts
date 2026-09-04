@@ -2,6 +2,7 @@ import { ZARR_STORE } from "@/lib/constants/store";
 import {
   ZARR_TIME,
   dayIndexToUTCDate,
+  yearsToContiguousBlocks,
   yearsToDateRange,
 } from "@/lib/zarr/timeRange";
 import type { GeoPoint, GridCell, MapSelection } from "@/types/map";
@@ -115,12 +116,19 @@ function coordinateTag(value: number, positive: string, negative: string): strin
  * `earthprints_NEE_50.913N_11.567E_2025-01-01_2025-12-31`.
  */
 export function exportFileBaseName(prov: ExportProvenance): string {
+  let timeTag = `${isoDate(prov.windowStart)}_${isoDate(prov.windowEnd)}`;
+  if (prov.selectedYears && prov.selectedYears.length > 1) {
+    const blocks = yearsToContiguousBlocks(prov.selectedYears);
+    if (blocks.length > 1) {
+      timeTag = `years_${prov.selectedYears.join("_")}`;
+    }
+  }
+
   return [
     "earthprints",
     prov.variable,
     coordinateTag(prov.cell.lat, "N", "S"),
     coordinateTag(prov.cell.lon, "E", "W"),
-    isoDate(prov.windowStart),
-    isoDate(prov.windowEnd),
+    timeTag,
   ].join("_");
 }

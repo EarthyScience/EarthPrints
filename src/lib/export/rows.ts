@@ -6,6 +6,8 @@ import type { ExportProvenance } from "./provenance";
 
 export type SeriesRow = {
   timestamp: Date;
+  year: number;
+  date: string;
   /** Absolute day index in the archive (0 = origin). */
   dayIndex: number;
   hour: number;
@@ -50,11 +52,14 @@ export function buildSeriesRows(
     const dayIndex =
       dayMapping.absoluteDays[localDay] ?? (baseDay + localDay);
     const raw = values[i];
+    const timestamp = new Date(
+      ZARR_TIME_ORIGIN_UTC + dayIndex * MS_PER_DAY + hour * MS_PER_HOUR,
+    );
 
     rows[i] = {
-      timestamp: new Date(
-        ZARR_TIME_ORIGIN_UTC + dayIndex * MS_PER_DAY + hour * MS_PER_HOUR,
-      ),
+      timestamp,
+      year: timestamp.getUTCFullYear(),
+      date: timestamp.toISOString().slice(0, 10),
       dayIndex,
       hour,
       value: Number.isFinite(raw) ? roundFloat32(raw) : null,

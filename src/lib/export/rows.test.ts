@@ -127,4 +127,76 @@ describe("buildProvenance", () => {
     const last2018 = rows[rows.length - 1];
     expect(last2018.timestamp.toISOString()).toBe("2018-12-31T23:00:00.000Z");
   });
+
+  it("handles [2001, 2004, 2021] including leap year with exact year and date fields", () => {
+    // 2001 (365d), 2004 (366d), 2021 (365d) = 1096 days
+    const totalDays = 365 + 366 + 365;
+    const prov = buildProvenance({
+      selection: SELECTION,
+      selectedYears: [2001, 2004, 2021],
+      valueCount: totalDays * ZARR_TIME.hoursPerDay,
+    });
+
+    const values = new Float32Array(totalDays * ZARR_TIME.hoursPerDay).fill(0.8);
+    const rows = buildSeriesRows(values, prov);
+
+    expect(rows).toHaveLength(totalDays * 24);
+
+    // First row: 2001-01-01
+    expect(rows[0]).toMatchObject({
+      year: 2001,
+      date: "2001-01-01",
+      dayIndex: 0,
+      hour: 0,
+    });
+
+    // Last row of 2001: index 365 * 24 - 1
+    expect(rows[365 * 24 - 1]).toMatchObject({
+      year: 2001,
+      date: "2001-12-31",
+      dayIndex: 364,
+      hour: 23,
+    });
+
+    // First row of 2004: index 365 * 24
+    expect(rows[365 * 24]).toMatchObject({
+      year: 2004,
+      date: "2004-01-01",
+      dayIndex: 1095,
+      hour: 0,
+    });
+
+    // Leap day in 2004 (2004-02-29): day offset 31 (Jan) + 28 = 59
+    const leapDayRow = rows[(365 + 59) * 24];
+    expect(leapDayRow).toMatchObject({
+      year: 2004,
+      date: "2004-02-29",
+      dayIndex: 1095 + 59,
+      hour: 0,
+    });
+
+    // Last row of 2004: index (365 + 366) * 24 - 1
+    expect(rows[(365 + 366) * 24 - 1]).toMatchObject({
+      year: 2004,
+      date: "2004-12-31",
+      dayIndex: 1460,
+      hour: 23,
+    });
+
+    // First row of 2021: index (365 + 366) * 24
+    expect(rows[(365 + 366) * 24]).toMatchObject({
+      year: 2021,
+      date: "2021-01-01",
+      dayIndex: 7305,
+      hour: 0,
+    });
+
+    // Last row of 2021: index rows.length - 1
+    expect(rows[rows.length - 1]).toMatchObject({
+      year: 2021,
+      date: "2021-12-31",
+      dayIndex: 7669,
+      hour: 23,
+    });
+  });
 });

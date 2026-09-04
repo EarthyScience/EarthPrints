@@ -105,7 +105,7 @@ export function DownloadButton({
         prov,
         units,
         size: 1024,
-        isLight: false,
+        isLight: true,
         selectedYear,
         selectedYears,
       });
