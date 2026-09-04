@@ -99,13 +99,13 @@ export function MapReadout({
   );
 
   const chart = (
-    <section aria-live="polite">
-      <span className={`${SECTION_LABEL} block`}>
+    <section aria-live="polite" className="flex flex-col flex-1 min-h-0">
+      <span className={`${SECTION_LABEL} block shrink-0`}>
         {plotView === "line" ? "Daily mean" : "Diurnal fingerprint"}
       </span>
 
       {/* View switch left, download right, on the row between title and plot. */}
-      <div className="mb-3 mt-2 flex items-center justify-between gap-3">
+      <div className="mb-3 mt-2 flex items-center justify-between gap-3 shrink-0">
         <PlotViewToggle view={plotView} onChange={setPlotView} />
         <DownloadButton
           selection={selection}
@@ -151,8 +151,8 @@ export function MapReadout({
   );
 
   return (
-    <div className="flex flex-col divide-y divide-editor-border">
-      <section className="pb-4">
+    <div className="flex flex-col divide-y divide-editor-border min-h-full">
+      <section className="pb-4 shrink-0">
         <h2 className="font-mono text-[15px] font-semibold leading-none tracking-tight tabular-nums text-editor-fg-primary">
           {formatLongitude(selection.grid.lon)}
           <span className="text-editor-fg-tertiary">, </span>
@@ -169,8 +169,8 @@ export function MapReadout({
       </section>
 
       {/* History drives the chart, so they sit together with no divider. */}
-      <div className="grid gap-4 py-4">
-        {historyControl}
+      <div className="flex flex-col flex-1 min-h-0 gap-4 py-4">
+        <div className="shrink-0">{historyControl}</div>
         {chart}
       </div>
     </div>

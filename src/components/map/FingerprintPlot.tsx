@@ -70,7 +70,7 @@ export function FingerprintPlot({
   values,
   units,
   hoursPerDay = 24,
-  height = TIME_SERIES_PLOT_HEIGHT,
+  height: heightProp,
   pixelRatio,
   selectedYear: controlledSelectedYear,
   onSelectedYearChange,
@@ -78,7 +78,10 @@ export function FingerprintPlot({
   const { isLight } = useTheme();
   const wrapperRef = useRef<HTMLDivElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  const [width, setWidth] = useState(0);
+  const [containerSize, setContainerSize] = useState<{
+    width: number;
+    height: number;
+  }>({ width: 0, height: 0 });
   const [transposed, setTransposed] = useState(false);
   const [internalSelectedYear, setInternalSelectedYear] = useState<
     number | null
@@ -133,11 +136,25 @@ export function FingerprintPlot({
     const node = wrapperRef.current;
     if (!node) return;
     const observer = new ResizeObserver((entries) => {
-      setWidth(Math.floor(entries[0]?.contentRect.width ?? 0));
+      const entry = entries[0];
+      if (!entry) return;
+      const w = Math.floor(entry.contentRect.width);
+      const h = Math.floor(entry.contentRect.height);
+      setContainerSize((prev) => {
+        if (prev.width === w && prev.height === h) return prev;
+        return { width: w, height: h };
+      });
     });
     observer.observe(node);
     return () => observer.disconnect();
   }, []);
+
+  const width = containerSize.width;
+  const height =
+    heightProp ??
+    (transposed
+      ? Math.max(380, containerSize.height || 480)
+      : TIME_SERIES_PLOT_HEIGHT);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -148,8 +165,6 @@ export function FingerprintPlot({
       (typeof window === "undefined" ? 1 : window.devicePixelRatio || 1);
     canvas.width = Math.round(width * dpr);
     canvas.height = Math.round(height * dpr);
-    canvas.style.width = `${width}px`;
-    canvas.style.height = `${height}px`;
 
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
@@ -298,8 +313,8 @@ export function FingerprintPlot({
   };
 
   return (
-    <div className="w-full min-w-0">
-      <div className="mb-2 flex flex-wrap items-center gap-2">
+    <div className="flex w-full min-w-0 flex-1 flex-col min-h-0">
+      <div className="mb-2 flex shrink-0 flex-wrap items-center gap-2">
         <button
           type="button"
           onClick={() => setTransposed((prev) => !prev)}
@@ -328,10 +343,20 @@ export function FingerprintPlot({
         ) : null}
       </div>
 
-      <div ref={wrapperRef} className="relative w-full min-w-0">
+      <div
+        ref={wrapperRef}
+        className={`relative w-full min-w-0 ${
+          transposed && !heightProp ? "flex-1 min-h-[380px]" : ""
+        }`}
+        style={
+          transposed && !heightProp
+            ? undefined
+            : { height: `${height}px` }
+        }
+      >
         <canvas
           ref={canvasRef}
-          className="w-full"
+          className="block w-full h-full"
           role="img"
           aria-label="Diurnal fingerprint heatmap"
           onMouseMove={handleMove}
@@ -357,7 +382,7 @@ export function FingerprintPlot({
         ) : null}
       </div>
 
-      <div className="mt-3 flex items-center gap-2">
+      <div className="mt-3 shrink-0 flex items-center gap-2">
         <span className="font-mono text-[11px] tabular-nums text-editor-fg-tertiary">
           {formatSeriesValue(-absMax)}
         </span>
@@ -372,7 +397,7 @@ export function FingerprintPlot({
           {formatSeriesValue(absMax)}
         </span>
       </div>
-      <p className="mt-2 font-mono text-xs leading-normal text-editor-fg-tertiary">
+      <p className="mt-2 shrink-0 font-mono text-xs leading-normal text-editor-fg-tertiary">
         {nSel.toLocaleString()} days × {hoursPerDay} hours
         {units ? ` · ${units}` : ""}
       </p>
