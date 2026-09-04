@@ -55,6 +55,28 @@
   --editor-radius-md: 16px;
   --editor-radius-lg: 16px; /* Lovable rounded-4 on preview frame */
   --editor-shadow: 0 18px 40px -24px rgba(0, 0, 0, 0.65);
+
+  /* Width of the open left panel, matching SIDEBAR_DEFAULT_WIDTH in
+     src/lib/sidebar.ts. The drag handle overwrites this inline on the root
+     element, and the boot script restores the stored value before first
+     paint. */
+  --editor-sidebar-width: 400px;
+  /* What the layout actually reserves: zero once the panel is collapsed, so
+     the panel keeps its own width and slides out from under the map. */
+  --editor-sidebar-track: var(--editor-sidebar-width);
+}
+
+:root[data-sidebar-collapsed="true"] {
+  --editor-sidebar-track: 0px;
+}
+
+/* A panel clipped to zero width still holds its tab stops, so fold it out of
+   the document too. visibility flips discretely at the ends of a transition,
+   which leaves the slide-out itself visible on the way. */
+@media (min-width: 901px) {
+  :root[data-sidebar-collapsed="true"] .editor-sidebar {
+    visibility: hidden;
+  }
 }
 
 :root.light {
@@ -185,6 +207,24 @@
   -webkit-mask-size: contain;
   -webkit-mask-repeat: no-repeat;
   -webkit-mask-position: center;
+}
+
+/* While the seam is being dragged the pointer is captured, so the col-resize
+   cursor has to be forced across the whole document and text selection
+   suppressed or the drag paints a blue smear over the panel. */
+:root[data-sidebar-resizing="true"] {
+  cursor: col-resize;
+}
+
+:root[data-sidebar-resizing="true"] * {
+  cursor: col-resize !important;
+  user-select: none !important;
+}
+
+/* Collapsing eases; dragging must not, or the panel lags a frame behind the
+   seam the whole way across. */
+:root[data-sidebar-resizing="true"] .editor-sidebar {
+  transition: none;
 }
 
 .theme-icon-moon {
