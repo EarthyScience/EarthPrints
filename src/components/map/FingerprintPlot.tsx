@@ -31,6 +31,8 @@ type FingerprintPlotProps = {
    */
   pixelRatio?: number;
   selectedYear?: number | null;
+  transposed?: boolean;
+  onTransposedChange?: (transposed: boolean) => void;
 };
 
 /**
@@ -69,6 +71,8 @@ export function FingerprintPlot({
   height: heightProp,
   pixelRatio,
   selectedYear = null,
+  transposed: controlledTransposed,
+  onTransposedChange,
 }: FingerprintPlotProps) {
   const { isLight } = useTheme();
   const wrapperRef = useRef<HTMLDivElement | null>(null);
@@ -77,7 +81,19 @@ export function FingerprintPlot({
     width: number;
     height: number;
   }>({ width: 0, height: 0 });
-  const [transposed, setTransposed] = useState(false);
+  const [uncontrolledTransposed, setUncontrolledTransposed] = useState(false);
+  const transposed =
+    controlledTransposed !== undefined
+      ? controlledTransposed
+      : uncontrolledTransposed;
+  const setTransposed = (update: boolean | ((prev: boolean) => boolean)) => {
+    const next = typeof update === "function" ? update(transposed) : update;
+    if (onTransposedChange) {
+      onTransposedChange(next);
+    } else {
+      setUncontrolledTransposed(next);
+    }
+  };
   const [hover, setHover] = useState<HoverCell | null>(null);
 
   const nDays = Math.floor(values.length / hoursPerDay);

@@ -48,6 +48,7 @@ export function MapReadout({
   seriesUnits,
 }: MapReadoutProps) {
   const [plotView, setPlotView] = useState<PlotView>("line");
+  const [fingerprintTransposed, setFingerprintTransposed] = useState(false);
 
   if (!selection) {
     return (
@@ -106,7 +107,7 @@ export function MapReadout({
           {plotView === "line" ? (
             <TimeSeriesPlotLoading historyYears={1} />
           ) : (
-            <FingerprintPlotLoading />
+            <FingerprintPlotLoading transposed={fingerprintTransposed} />
           )}
         </div>
       ) : seriesError ? (
@@ -126,7 +127,8 @@ export function MapReadout({
             units={seriesUnits}
             hoursPerDay={ZARR_TIME.hoursPerDay}
             selectedYear={selectedYear}
-            onSelectedYearChange={onSelectYear}
+            transposed={fingerprintTransposed}
+            onTransposedChange={setFingerprintTransposed}
           />
         )
       ) : null}
