@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import type { GridSpec, MapSelection } from "@/types/map";
-import { formatCoordinate, formatGeoPoint } from "@/lib/map/geogrid";
+import { formatLatitude, formatLongitude } from "@/lib/map/geogrid";
 import { DEFAULT_GRID_SPEC, ZARR_STORE } from "@/lib/constants/store";
 import { ZARR_TIME } from "@/lib/zarr/timeRange";
 import { TimeSeriesPlot } from "@/components/map/TimeSeriesPlot";
@@ -19,6 +19,7 @@ type SeriesProgress = { loaded: number; total: number };
 type MapReadoutProps = {
   selection: MapSelection | null;
   gridSpec?: GridSpec;
+  variable?: string;
   historyYears: number;
   onHistoryYearsChange: (years: number) => void;
   loadingSeries: boolean;
@@ -34,6 +35,7 @@ const META = "font-mono text-[11px] text-editor-fg-tertiary";
 export function MapReadout({
   selection,
   gridSpec = DEFAULT_GRID_SPEC,
+  variable = ZARR_STORE.defaultVariable,
   historyYears,
   onHistoryYearsChange,
   loadingSeries,
@@ -67,7 +69,8 @@ export function MapReadout({
   }
 
   const patchCells = gridSpec.nativeChunks.lon;
-  const patchDeg = patchCells * gridSpec.spatialResolutionDeg;
+  const patchDeg = Number((patchCells * gridSpec.spatialResolutionDeg).toFixed(2));
+  const gridResolution = Number(gridSpec.spatialResolutionDeg.toFixed(2));
 
   const historyControl = (
     <section>
@@ -150,30 +153,19 @@ export function MapReadout({
   return (
     <div className="flex flex-col divide-y divide-editor-border">
       <section className="pb-4">
-        <h2 className="font-mono text-[20px] leading-none tracking-tight tabular-nums text-editor-fg-primary">
-          {formatCoordinate(selection.click.lat)}
+        <h2 className="font-mono text-[15px] font-semibold leading-none tracking-tight tabular-nums text-editor-fg-primary">
+          {formatLongitude(selection.grid.lon)}
           <span className="text-editor-fg-tertiary">, </span>
-          {formatCoordinate(selection.click.lon)}
+          {formatLatitude(selection.grid.lat)}
         </h2>
         <p className="mt-2 text-[12.5px] leading-[1.5] text-editor-fg-tertiary">
-          {ZARR_STORE.kicker} · snapped to the nearest{" "}
-          {gridSpec.spatialResolutionDeg}° cell
+          {variable} · {ZARR_STORE.kicker} · snapped to the nearest {gridResolution}° cell
         </p>
         <p className="mt-2 text-[12.5px] leading-[1.5] text-editor-fg-tertiary">
           Each click downloads a {patchCells}×{patchCells} patch ({patchDeg}° ×{" "}
           {patchDeg}°), drawn as the dashed box. Toggle it with the patch
           button.
         </p>
-      </section>
-
-      <section className="py-4">
-        <dl className="grid grid-cols-2 gap-x-4 gap-y-3">
-          <Fact label="Grid cell" value={formatGeoPoint(selection.grid)} />
-          <Fact
-            label="Array index"
-            value={`lon ${selection.grid.lonIndex} · lat ${selection.grid.latIndex}`}
-          />
-        </dl>
       </section>
 
       {/* History drives the chart, so they sit together with no divider. */}
@@ -221,17 +213,6 @@ function PlotViewToggle({
           </button>
         );
       })}
-    </div>
-  );
-}
-
-function Fact({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="grid min-w-0 gap-0.5">
-      <dt className="text-[11.5px] text-editor-fg-tertiary">{label}</dt>
-      <dd className="font-mono text-[13px] tabular-nums text-editor-fg-secondary">
-        {value}
-      </dd>
     </div>
   );
 }

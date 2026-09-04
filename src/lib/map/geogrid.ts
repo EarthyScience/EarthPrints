@@ -232,11 +232,21 @@ export function selectionGuideGeoJson(
   };
 }
 
+export function formatLatitude(lat: number, digits = 3): string {
+  const dir = lat >= 0 ? "N" : "S";
+  return `${Math.abs(lat).toFixed(digits)}°${dir}`;
+}
+
+export function formatLongitude(lon: number, digits = 3): string {
+  const dir = lon >= 0 ? "E" : "W";
+  return `${Math.abs(lon).toFixed(digits)}°${dir}`;
+}
+
 export function formatCoordinate(value: number, digits = 3): string {
   const direction = value >= 0 ? "" : "-";
   return `${direction}${Math.abs(value).toFixed(digits)}°`;
 }
 
 export function formatGeoPoint(point: GeoPoint, digits = 3): string {
-  return `${formatCoordinate(point.lon, digits)}, ${formatCoordinate(point.lat, digits)}`;
+  return `${formatLongitude(point.lon, digits)}, ${formatLatitude(point.lat, digits)}`;
 }

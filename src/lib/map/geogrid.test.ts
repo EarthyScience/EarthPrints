@@ -7,6 +7,9 @@ import {
   gridCellToPolygon,
   densifyLonLatPath,
   selectionGuideGeoJson,
+  formatLatitude,
+  formatLongitude,
+  formatGeoPoint,
 } from "@/lib/map/geogrid";
 import { ZARR_STORE } from "@/lib/constants/store";
 
@@ -119,5 +122,24 @@ describe("selectionGuideGeoJson", () => {
     expect(geojson.features).toHaveLength(5);
     expect(geojson.features.filter((f) => f.properties.kind === "guide")).toHaveLength(4);
     expect(geojson.features.find((f) => f.properties.kind === "cell")).toBeDefined();
+  });
+});
+
+describe("coordinate formatting", () => {
+  it("formats latitude with N and S suffixes", () => {
+    expect(formatLatitude(50.925)).toBe("50.925°N");
+    expect(formatLatitude(-23.475)).toBe("23.475°S");
+    expect(formatLatitude(0)).toBe("0.000°N");
+  });
+
+  it("formats longitude with E and W suffixes", () => {
+    expect(formatLongitude(11.575)).toBe("11.575°E");
+    expect(formatLongitude(-75.125)).toBe("75.125°W");
+    expect(formatLongitude(0)).toBe("0.000°E");
+  });
+
+  it("formats geo points in (lon, lat) order with cardinal directions", () => {
+    expect(formatGeoPoint({ lon: 11.575, lat: 50.925 })).toBe("11.575°E, 50.925°N");
+    expect(formatGeoPoint({ lon: -75.125, lat: -23.475 })).toBe("75.125°W, 23.475°S");
   });
 });
