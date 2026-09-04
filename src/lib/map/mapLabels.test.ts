@@ -91,19 +91,24 @@ describe("patchDarkMapLabelStyle", () => {
       ],
     });
 
-    expect(style.layers?.[0]?.layout?.["text-field"]).toEqual(
+    const l0 = style.layers?.[0] as unknown as { layout?: Record<string, unknown>; paint?: Record<string, unknown> };
+    const l1 = style.layers?.[1] as unknown as { minzoom?: number; paint?: Record<string, unknown> };
+    const l2 = style.layers?.[2] as unknown as { paint?: Record<string, unknown> };
+    const l3 = style.layers?.[3] as unknown as { paint?: Record<string, unknown> };
+
+    expect(l0?.layout?.["text-field"]).toEqual(
       SINGLE_LINE_LABEL_TEXT_FIELD,
     );
-    expect(style.layers?.[0]?.paint?.["text-color"]).toBe("#ffffff");
-    expect(style.layers?.[0]?.paint?.["text-halo-color"]).toBe(
+    expect(l0?.paint?.["text-color"]).toBe("#ffffff");
+    expect(l0?.paint?.["text-halo-color"]).toBe(
       "rgba(0, 0, 0, 0.92)",
     );
-    expect(style.layers?.[0]?.paint?.["text-halo-width"]).toBe(1.6);
-    expect(style.layers?.[1]?.minzoom).toBe(5);
-    expect(style.layers?.[1]?.paint?.["text-color"]).toBe(
+    expect(l0?.paint?.["text-halo-width"]).toBe(1.6);
+    expect(l1?.minzoom).toBe(5);
+    expect(l1?.paint?.["text-color"]).toBe(
       "rgba(255, 255, 255, 0.9)",
     );
-    expect(style.layers?.[2]?.paint?.["text-color"]).toBe("#ffffff");
-    expect(style.layers?.[3]?.paint?.["text-color"]).toBe("rgba(80, 78, 78, 1)");
+    expect(l2?.paint?.["text-color"]).toBe("#ffffff");
+    expect(l3?.paint?.["text-color"]).toBe("rgba(80, 78, 78, 1)");
   });
 });

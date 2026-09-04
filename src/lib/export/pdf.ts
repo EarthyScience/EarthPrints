@@ -4,6 +4,7 @@ import {
   symmetricAbsMax,
 } from "@/lib/map/fingerprintScale";
 import { formatSeriesValue } from "@/components/map/timeSeriesChartConfig";
+import { formatSelectedYearsLabel } from "@/lib/zarr/timeRange";
 import type { CapturedImage } from "./capture";
 import { isoDate, type ExportProvenance } from "./provenance";
 
@@ -41,13 +42,13 @@ type BuildOptions = {
   assets: ReportAssets;
   values: Float32Array;
   /** Basemap credit, which the on-screen map hides but a distributed file must carry. */
-  attribution: string;
+  attribution?: string;
 };
 
 function formatLatLon(lat: number, lon: number): string {
-  const ns = `${Math.abs(lat).toFixed(3)} ${lat >= 0 ? "N" : "S"}`;
-  const ew = `${Math.abs(lon).toFixed(3)} ${lon >= 0 ? "E" : "W"}`;
-  return `${ns}, ${ew}`;
+  const ns = lat >= 0 ? "N" : "S";
+  const ew = lon >= 0 ? "E" : "W";
+  return `${Math.abs(lat).toFixed(3)}°${ns}, ${Math.abs(lon).toFixed(3)}°${ew}`;
 }
 
 /** Pull the channels back out of the `rgb(r, g, b)` strings the colour scale returns. */
@@ -94,12 +95,20 @@ function drawFacts(
   x: number,
   y: number,
 ) {
+  const yearsLabel =
+    prov.selectedYears && prov.selectedYears.length > 0
+      ? formatSelectedYearsLabel(prov.selectedYears)
+      : prov.selectedYear
+        ? String(prov.selectedYear)
+        : null;
+
   const rows: [string, string][] = [
     ["Cell centre", formatLatLon(prov.cell.lat, prov.cell.lon)],
     ["Clicked", formatLatLon(prov.click.lat, prov.click.lon)],
     ["Grid index", `lat ${prov.cell.latIndex}, lon ${prov.cell.lonIndex}`],
     ["Resolution", `${prov.resolutionDeg}deg, hourly`],
     ["Variable", `${prov.variable}${prov.units ? ` (${prov.units})` : ""}`],
+    ...(yearsLabel ? [["Years", yearsLabel] as [string, string]] : []),
     ["Window", `${isoDate(prov.windowStart)} to ${isoDate(prov.windowEnd)}`],
     ["Coverage", `${prov.dayCount} days, ${rowCount.toLocaleString()} hours`],
   ];
@@ -213,7 +222,7 @@ function drawLegend(doc: jsPDF, absMax: number, y: number): number {
   return y + barH + 4;
 }
 
-function drawFooter(doc: jsPDF, prov: ExportProvenance, attribution: string) {
+function drawFooter(doc: jsPDF, prov: ExportProvenance, attribution?: string) {
   const pageH = doc.internal.pageSize.getHeight();
   doc.setDrawColor(...BORDER);
   doc.setLineWidth(0.3);

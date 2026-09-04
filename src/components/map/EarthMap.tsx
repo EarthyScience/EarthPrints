@@ -92,7 +92,8 @@ export function EarthMap() {
     getSidebarState,
     getServerSidebarState,
   );
-  const [historyYears, setHistoryYears] = useState(DEFAULT_HISTORY_YEARS);
+  const [selectedYears, setSelectedYears] = useState<number[]>([2021]);
+  const [cachedYears, setCachedYears] = useState<Set<number>>(new Set());
   const [loadingSeries, setLoadingSeries] = useState(false);
   const [seriesProgress, setSeriesProgress] = useState<{
     loaded: number;
@@ -169,8 +170,8 @@ export function EarthMap() {
     };
   }, [ensureReader]);
 
-  const loadTimeSeries = useCallback(
-    async (nextSelection: MapSelection, years: number) => {
+  const loadTimeSeriesForYears = useCallback(
+    async (nextSelection: MapSelection, years: number[]) => {
       const requestId = ++requestIdRef.current;
       setLoadingSeries(true);
       setSeriesProgress(null);
@@ -180,11 +181,12 @@ export function EarthMap() {
 
       try {
         const reader = await ensureReader();
+        setCachedYears(new Set(reader.getCachedYears(nextSelection.grid)));
 
-        const { values, units } = await reader.getTimeSeries(
+        const { values, units } = await reader.getTimeSeriesForYears(
           nextSelection.grid,
-          undefined,
           years,
+          undefined,
           (loaded, total) => {
             if (requestId !== requestIdRef.current) return;
             setSeriesProgress({ loaded, total });
@@ -195,6 +197,7 @@ export function EarthMap() {
 
         setSeriesValues(values);
         setSeriesUnits(units ?? null);
+        setCachedYears(new Set(reader.getCachedYears(nextSelection.grid)));
       } catch (error) {
         if (requestId !== requestIdRef.current) return;
         setSeriesError(
@@ -223,14 +226,14 @@ export function EarthMap() {
     setViewState(next);
   }, []);
 
-  const handleHistoryYearsChange = useCallback(
-    (years: number) => {
-      setHistoryYears(years);
+  const handleYearsSelect = useCallback(
+    (years: number[]) => {
+      setSelectedYears(years);
       if (selection) {
-        void loadTimeSeries(selection, years);
+        void loadTimeSeriesForYears(selection, years);
       }
     },
-    [selection, loadTimeSeries],
+    [selection, loadTimeSeriesForYears],
   );
 
   const handlePick = useCallback(
@@ -247,9 +250,9 @@ export function EarthMap() {
         viewMode,
       );
       flyToView(focused, SELECTION_FOCUS_TRANSITION_MS);
-      void loadTimeSeries(nextSelection, historyYears);
+      void loadTimeSeriesForYears(nextSelection, selectedYears);
     },
-    [flyToView, gridSpec, historyYears, loadTimeSeries, viewMode, viewState],
+    [flyToView, gridSpec, selectedYears, loadTimeSeriesForYears, viewMode, viewState],
   );
 
   const handleMapClick = useCallback(
@@ -346,8 +349,9 @@ export function EarthMap() {
         <MapReadout
           selection={selection}
           gridSpec={gridSpec}
-          historyYears={historyYears}
-          onHistoryYearsChange={handleHistoryYearsChange}
+          selectedYears={selectedYears}
+          cachedYears={cachedYears}
+          onSelectYears={handleYearsSelect}
           loadingSeries={loadingSeries}
           seriesProgress={seriesProgress}
           seriesError={seriesError}

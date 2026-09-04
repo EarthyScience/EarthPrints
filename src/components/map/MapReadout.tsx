@@ -11,6 +11,7 @@ import { FingerprintPlot } from "@/components/map/FingerprintPlot";
 import { FingerprintPlotLoading } from "@/components/map/FingerprintPlotLoading";
 import { ProgressBar } from "@/components/ui/ProgressBar";
 import { DownloadButton } from "@/components/map/DownloadButton";
+import { YearSelector } from "@/components/map/YearSelector";
 
 type PlotView = "line" | "fingerprint";
 
@@ -20,8 +21,9 @@ type MapReadoutProps = {
   selection: MapSelection | null;
   gridSpec?: GridSpec;
   variable?: string;
-  historyYears: number;
-  onHistoryYearsChange: (years: number) => void;
+  selectedYears: number[];
+  cachedYears?: Set<number>;
+  onSelectYears: (years: number[]) => void;
   loadingSeries: boolean;
   seriesProgress: SeriesProgress | null;
   seriesError: string | null;
@@ -36,8 +38,9 @@ export function MapReadout({
   selection,
   gridSpec = DEFAULT_GRID_SPEC,
   variable = ZARR_STORE.defaultVariable,
-  historyYears,
-  onHistoryYearsChange,
+  selectedYears,
+  cachedYears = new Set(),
+  onSelectYears,
   loadingSeries,
   seriesProgress,
   seriesError,
@@ -45,9 +48,7 @@ export function MapReadout({
   seriesUnits,
 }: MapReadoutProps) {
   const [plotView, setPlotView] = useState<PlotView>("line");
-  const [selectedYear, setSelectedYear] = useState<number | null>(null);
-  const historyLabel =
-    historyYears === 1 ? "Last 1 year" : `Last ${historyYears} years`;
+  const [fingerprintTransposed, setFingerprintTransposed] = useState(false);
 
   if (!selection) {
     return (
@@ -73,29 +74,12 @@ export function MapReadout({
   const gridResolution = Number(gridSpec.spatialResolutionDeg.toFixed(2));
 
   const historyControl = (
-    <section>
-      <div className="mb-3 flex items-baseline justify-between gap-3">
-        <label className={SECTION_LABEL} htmlFor="history-years">
-          History window
-        </label>
-        <span className="font-mono text-[12.5px] font-semibold text-accent">
-          {historyLabel}
-        </span>
-      </div>
-      <input
-        id="history-years"
-        className="w-full cursor-pointer [accent-color:var(--accent)]"
-        type="range"
-        min={ZARR_TIME.defaultHistoryYears}
-        max={ZARR_TIME.maxHistoryYears}
-        step={1}
-        value={historyYears}
-        onChange={(event) => {
-          setSelectedYear(null);
-          onHistoryYearsChange(Number(event.currentTarget.value));
-        }}
-      />
-    </section>
+    <YearSelector
+      selectedYears={selectedYears}
+      cachedYears={cachedYears}
+      loading={loadingSeries}
+      onSelectYears={onSelectYears}
+    />
   );
 
   const chart = (
@@ -106,14 +90,27 @@ export function MapReadout({
 
       {/* View switch left, download right, on the row between title and plot. */}
       <div className="mb-3 mt-2 flex items-center justify-between gap-3 shrink-0">
-        <PlotViewToggle view={plotView} onChange={setPlotView} />
+        <div className="flex items-center gap-2">
+          <PlotViewToggle view={plotView} onChange={setPlotView} />
+          {plotView === "fingerprint" ? (
+            <button
+              type="button"
+              onClick={() => setFingerprintTransposed((prev) => !prev)}
+              className="rounded-md border border-editor-border px-2 py-0.5 text-[11.5px] font-semibold text-editor-fg-secondary transition-colors hover:border-editor-border-strong hover:text-editor-fg-primary"
+              aria-pressed={fingerprintTransposed}
+              title="Swap the hour and day axes"
+            >
+              ⇄ Flip axes
+            </button>
+          ) : null}
+        </div>
         <DownloadButton
           selection={selection}
           gridSpec={gridSpec}
-          historyYears={historyYears}
+          historyYears={selectedYears.length}
           values={loadingSeries ? null : seriesValues}
           units={seriesUnits}
-          selectedYear={selectedYear}
+          selectedYears={selectedYears}
         />
       </div>
 
@@ -121,9 +118,9 @@ export function MapReadout({
         <div className="grid gap-3">
           <SeriesLoader progress={seriesProgress} />
           {plotView === "line" ? (
-            <TimeSeriesPlotLoading historyYears={historyYears} />
+            <TimeSeriesPlotLoading historyYears={selectedYears.length} />
           ) : (
-            <FingerprintPlotLoading />
+            <FingerprintPlotLoading transposed={fingerprintTransposed} />
           )}
         </div>
       ) : seriesError ? (
@@ -142,8 +139,9 @@ export function MapReadout({
             values={seriesValues}
             units={seriesUnits}
             hoursPerDay={ZARR_TIME.hoursPerDay}
-            selectedYear={selectedYear}
-            onSelectedYearChange={setSelectedYear}
+            selectedYears={selectedYears}
+            transposed={fingerprintTransposed}
+            onTransposedChange={setFingerprintTransposed}
           />
         )
       ) : null}

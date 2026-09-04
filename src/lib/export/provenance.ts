@@ -1,5 +1,10 @@
 import { ZARR_STORE } from "@/lib/constants/store";
-import { ZARR_TIME, dayIndexToUTCDate } from "@/lib/zarr/timeRange";
+import {
+  ZARR_TIME,
+  dayIndexToUTCDate,
+  yearsToContiguousBlocks,
+  yearsToDateRange,
+} from "@/lib/zarr/timeRange";
 import type { GeoPoint, GridCell, MapSelection } from "@/types/map";
 
 /**
@@ -17,6 +22,8 @@ export type ExportProvenance = {
   click: GeoPoint;
   cell: GridCell;
   historyYears: number;
+  selectedYear: number | null;
+  selectedYears: number[] | null;
   hoursPerDay: number;
   /** Days covered by the loaded window. */
   dayCount: number;
@@ -29,7 +36,9 @@ export type ExportProvenance = {
 
 type BuildInput = {
   selection: MapSelection;
-  historyYears: number;
+  historyYears?: number;
+  selectedYear?: number | null;
+  selectedYears?: number[] | null;
   /** Length of the loaded `Float32Array`, i.e. days x hours. */
   valueCount: number;
   units?: string | null;
@@ -42,6 +51,8 @@ type BuildInput = {
 export function buildProvenance({
   selection,
   historyYears,
+  selectedYear = null,
+  selectedYears = null,
   valueCount,
   units = null,
   variable = ZARR_STORE.defaultVariable,
@@ -51,10 +62,24 @@ export function buildProvenance({
 }: BuildInput): ExportProvenance {
   const dayCount = Math.floor(valueCount / hoursPerDay);
 
-  // The loaded window always ends at the last day of the archive, so its first
-  // day sits `totalDays - dayCount` into the absolute axis. Mirrors the same
-  // derivation in `FingerprintPlot`.
-  const baseDay = totalDays - dayCount;
+  const years =
+    selectedYears && selectedYears.length > 0
+      ? selectedYears
+      : selectedYear
+        ? [selectedYear]
+        : null;
+
+  const resolvedHistoryYears = historyYears ?? (years ? years.length : 1);
+  const fallbackBaseDay = Math.max(0, totalDays - dayCount);
+
+  // If calendar year(s) are selected, the window starts at the first day
+  // of that span. Otherwise, it defaults to the trailing end of the archive.
+  const [startDay, stopDay] = years
+    ? yearsToDateRange(years, totalDays)
+    : [fallbackBaseDay, fallbackBaseDay + Math.max(1, dayCount)];
+
+  const windowStart = dayIndexToUTCDate(startDay);
+  const windowEnd = dayIndexToUTCDate(Math.max(startDay, stopDay - 1));
 
   return {
     generatedAt,
@@ -65,12 +90,14 @@ export function buildProvenance({
     resolutionDeg: ZARR_STORE.spatialResolutionDeg,
     click: selection.click,
     cell: selection.grid,
-    historyYears,
+    historyYears: resolvedHistoryYears,
+    selectedYear: years && years.length === 1 ? years[0]! : null,
+    selectedYears: years,
     hoursPerDay,
     dayCount,
-    baseDay,
-    windowStart: dayIndexToUTCDate(baseDay),
-    windowEnd: dayIndexToUTCDate(baseDay + Math.max(0, dayCount - 1)),
+    baseDay: startDay,
+    windowStart,
+    windowEnd,
   };
 }
 
@@ -89,12 +116,19 @@ function coordinateTag(value: number, positive: string, negative: string): strin
  * `earthprints_NEE_50.913N_11.567E_2025-01-01_2025-12-31`.
  */
 export function exportFileBaseName(prov: ExportProvenance): string {
+  let timeTag = `${isoDate(prov.windowStart)}_${isoDate(prov.windowEnd)}`;
+  if (prov.selectedYears && prov.selectedYears.length > 1) {
+    const blocks = yearsToContiguousBlocks(prov.selectedYears);
+    if (blocks.length > 1) {
+      timeTag = `years_${prov.selectedYears.join("_")}`;
+    }
+  }
+
   return [
     "earthprints",
     prov.variable,
     coordinateTag(prov.cell.lat, "N", "S"),
     coordinateTag(prov.cell.lon, "E", "W"),
-    isoDate(prov.windowStart),
-    isoDate(prov.windowEnd),
+    timeTag,
   ].join("_");
 }
