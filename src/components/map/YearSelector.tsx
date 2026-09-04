@@ -7,6 +7,7 @@ type YearSelectorProps = {
   cachedYears?: Set<number>;
   loading?: boolean;
   onSelectYear: (year: number) => void;
+  className?: string;
 };
 
 export function YearSelector({
@@ -14,16 +15,22 @@ export function YearSelector({
   cachedYears = new Set(),
   loading = false,
   onSelectYear,
+  className = "",
 }: YearSelectorProps) {
   const cachedCount = cachedYears.size;
 
   return (
-    <section aria-label="Year selection">
+    <section aria-label="Year selection" className={className}>
       <div className="mb-2 flex items-baseline justify-between gap-2">
         <div className="flex items-center gap-1.5">
           <label className="text-[13px] font-semibold text-editor-fg-primary">
             Year
           </label>
+          <span
+            className="h-1.5 w-1.5 rounded-full bg-emerald-500/80"
+            title="Cached in memory"
+            aria-hidden="true"
+          />
           {cachedCount > 0 ? (
             <span className="font-mono text-[10.5px] text-editor-fg-tertiary">
               ({cachedCount} cached)
@@ -36,7 +43,7 @@ export function YearSelector({
       </div>
 
       <div
-        className="grid grid-cols-7 gap-1"
+        className="grid grid-cols-[repeat(auto-fill,minmax(48px,1fr))] gap-1"
         role="group"
         aria-label="Select year"
       >
@@ -78,14 +85,6 @@ export function YearSelector({
             </button>
           );
         })}
-      </div>
-      <div className="mt-1.5 flex items-center justify-between px-0.5 font-mono text-[10px] text-editor-fg-tertiary">
-        <span>&apos;01</span>
-        <span className="flex items-center gap-1">
-          <span className="h-1 w-1 rounded-full bg-emerald-500/80" />
-          <span>cached</span>
-        </span>
-        <span>&apos;21</span>
       </div>
     </section>
   );
