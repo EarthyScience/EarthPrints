@@ -90,7 +90,20 @@ export function MapReadout({
 
       {/* View switch left, download right, on the row between title and plot. */}
       <div className="mb-3 mt-2 flex items-center justify-between gap-3 shrink-0">
-        <PlotViewToggle view={plotView} onChange={setPlotView} />
+        <div className="flex items-center gap-2">
+          <PlotViewToggle view={plotView} onChange={setPlotView} />
+          {plotView === "fingerprint" ? (
+            <button
+              type="button"
+              onClick={() => setFingerprintTransposed((prev) => !prev)}
+              className="rounded-md border border-editor-border px-2 py-0.5 text-[11.5px] font-semibold text-editor-fg-secondary transition-colors hover:border-editor-border-strong hover:text-editor-fg-primary"
+              aria-pressed={fingerprintTransposed}
+              title="Swap the hour and day axes"
+            >
+              ⇄ Flip axes
+            </button>
+          ) : null}
+        </div>
         <DownloadButton
           selection={selection}
           gridSpec={gridSpec}

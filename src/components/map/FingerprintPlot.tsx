@@ -298,18 +298,6 @@ export function FingerprintPlot({
 
   return (
     <div className="flex w-full min-w-0 flex-1 flex-col min-h-0">
-      <div className="mb-2 flex shrink-0 flex-wrap items-center gap-2">
-        <button
-          type="button"
-          onClick={() => setTransposed((prev) => !prev)}
-          className="rounded-md border border-editor-border px-2 py-0.5 text-[11.5px] font-semibold text-editor-fg-secondary transition-colors hover:text-editor-fg-primary"
-          aria-pressed={transposed}
-          title="Swap the hour and day axes"
-        >
-          ⇄ Flip axes
-        </button>
-      </div>
-
       <div
         ref={wrapperRef}
         className={`relative w-full min-w-0 ${
