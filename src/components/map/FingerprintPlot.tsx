@@ -31,6 +31,8 @@ type FingerprintPlotProps = {
    * depending on whose laptop drew it, so the export pins its own.
    */
   pixelRatio?: number;
+  selectedYear?: number | null;
+  onSelectedYearChange?: (year: number | null) => void;
 };
 
 /**
@@ -70,13 +72,22 @@ export function FingerprintPlot({
   hoursPerDay = 24,
   height = TIME_SERIES_PLOT_HEIGHT,
   pixelRatio,
+  selectedYear: controlledSelectedYear,
+  onSelectedYearChange,
 }: FingerprintPlotProps) {
   const { isLight } = useTheme();
   const wrapperRef = useRef<HTMLDivElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [width, setWidth] = useState(0);
   const [transposed, setTransposed] = useState(false);
-  const [selectedYear, setSelectedYear] = useState<number | null>(null);
+  const [internalSelectedYear, setInternalSelectedYear] = useState<
+    number | null
+  >(null);
+  const selectedYear =
+    controlledSelectedYear !== undefined
+      ? controlledSelectedYear
+      : internalSelectedYear;
+  const setSelectedYear = onSelectedYearChange ?? setInternalSelectedYear;
   const [hover, setHover] = useState<HoverCell | null>(null);
 
   const nDays = Math.floor(values.length / hoursPerDay);
