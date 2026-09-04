@@ -40,6 +40,46 @@ export function yearsToDayRange(
   return [start, stop];
 }
 
+export const ALL_AVAILABLE_YEARS = Array.from(
+  { length: 2021 - 2001 + 1 },
+  (_, index) => 2001 + index,
+);
+
+/** Convert a calendar year into an absolute `[startDay, stopDay)` slice. */
+export function yearToDateRange(
+  year: number,
+  totalDays: number = ZARR_TIME.totalDays,
+): AxisSlice {
+  const start = Math.max(
+    0,
+    Math.round((Date.UTC(year, 0, 1) - ZARR_TIME_ORIGIN_UTC) / MS_PER_DAY),
+  );
+  const stop = Math.min(
+    totalDays,
+    Math.round((Date.UTC(year + 1, 0, 1) - ZARR_TIME_ORIGIN_UTC) / MS_PER_DAY),
+  );
+  return [start, stop];
+}
+
+/** Get the native temporal chunk index (0..N) containing the given year. */
+export function yearToTimeChunkIndex(
+  year: number,
+  chunkTime = 1461,
+): number {
+  const [start] = yearToDateRange(year);
+  return Math.floor(start / chunkTime);
+}
+
+/** Get all available calendar years that fall into a specific time chunk index. */
+export function timeChunkIndexToYears(
+  chunkIdx: number,
+  chunkTime = 1461,
+): number[] {
+  return ALL_AVAILABLE_YEARS.filter(
+    (year) => yearToTimeChunkIndex(year, chunkTime) === chunkIdx,
+  );
+}
+
 export function chunkIndexToStartDay(chunkIdx: number, chunkTime: number): number {
   return chunkIdx * chunkTime;
 }

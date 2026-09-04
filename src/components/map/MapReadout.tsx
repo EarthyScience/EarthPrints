@@ -11,6 +11,7 @@ import { FingerprintPlot } from "@/components/map/FingerprintPlot";
 import { FingerprintPlotLoading } from "@/components/map/FingerprintPlotLoading";
 import { ProgressBar } from "@/components/ui/ProgressBar";
 import { DownloadButton } from "@/components/map/DownloadButton";
+import { YearSelector } from "@/components/map/YearSelector";
 
 type PlotView = "line" | "fingerprint";
 
@@ -20,8 +21,9 @@ type MapReadoutProps = {
   selection: MapSelection | null;
   gridSpec?: GridSpec;
   variable?: string;
-  historyYears: number;
-  onHistoryYearsChange: (years: number) => void;
+  selectedYear: number;
+  cachedYears?: Set<number>;
+  onSelectYear: (year: number) => void;
   loadingSeries: boolean;
   seriesProgress: SeriesProgress | null;
   seriesError: string | null;
@@ -36,8 +38,9 @@ export function MapReadout({
   selection,
   gridSpec = DEFAULT_GRID_SPEC,
   variable = ZARR_STORE.defaultVariable,
-  historyYears,
-  onHistoryYearsChange,
+  selectedYear,
+  cachedYears = new Set(),
+  onSelectYear,
   loadingSeries,
   seriesProgress,
   seriesError,
@@ -45,9 +48,6 @@ export function MapReadout({
   seriesUnits,
 }: MapReadoutProps) {
   const [plotView, setPlotView] = useState<PlotView>("line");
-  const [selectedYear, setSelectedYear] = useState<number | null>(null);
-  const historyLabel =
-    historyYears === 1 ? "Last 1 year" : `Last ${historyYears} years`;
 
   if (!selection) {
     return (
@@ -73,29 +73,12 @@ export function MapReadout({
   const gridResolution = Number(gridSpec.spatialResolutionDeg.toFixed(2));
 
   const historyControl = (
-    <section>
-      <div className="mb-3 flex items-baseline justify-between gap-3">
-        <label className={SECTION_LABEL} htmlFor="history-years">
-          History window
-        </label>
-        <span className="font-mono text-[12.5px] font-semibold text-accent">
-          {historyLabel}
-        </span>
-      </div>
-      <input
-        id="history-years"
-        className="w-full cursor-pointer [accent-color:var(--accent)]"
-        type="range"
-        min={ZARR_TIME.defaultHistoryYears}
-        max={ZARR_TIME.maxHistoryYears}
-        step={1}
-        value={historyYears}
-        onChange={(event) => {
-          setSelectedYear(null);
-          onHistoryYearsChange(Number(event.currentTarget.value));
-        }}
-      />
-    </section>
+    <YearSelector
+      selectedYear={selectedYear}
+      cachedYears={cachedYears}
+      loading={loadingSeries}
+      onSelectYear={onSelectYear}
+    />
   );
 
   const chart = (
@@ -110,7 +93,7 @@ export function MapReadout({
         <DownloadButton
           selection={selection}
           gridSpec={gridSpec}
-          historyYears={historyYears}
+          historyYears={1}
           values={loadingSeries ? null : seriesValues}
           units={seriesUnits}
           selectedYear={selectedYear}
@@ -121,7 +104,7 @@ export function MapReadout({
         <div className="grid gap-3">
           <SeriesLoader progress={seriesProgress} />
           {plotView === "line" ? (
-            <TimeSeriesPlotLoading historyYears={historyYears} />
+            <TimeSeriesPlotLoading historyYears={1} />
           ) : (
             <FingerprintPlotLoading />
           )}
@@ -143,7 +126,7 @@ export function MapReadout({
             units={seriesUnits}
             hoursPerDay={ZARR_TIME.hoursPerDay}
             selectedYear={selectedYear}
-            onSelectedYearChange={setSelectedYear}
+            onSelectedYearChange={onSelectYear}
           />
         )
       ) : null}

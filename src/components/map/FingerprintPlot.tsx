@@ -14,9 +14,8 @@ import {
   formatDayTick,
   formatIsoDate,
   symmetricAbsMax,
-  yearRangesInWindow,
 } from "@/lib/map/fingerprintScale";
-import { ZARR_TIME } from "@/lib/zarr/timeRange";
+import { ZARR_TIME, yearToDateRange } from "@/lib/zarr/timeRange";
 import { useTheme } from "@/providers/ThemeProvider";
 
 type FingerprintPlotProps = {
@@ -32,7 +31,6 @@ type FingerprintPlotProps = {
    */
   pixelRatio?: number;
   selectedYear?: number | null;
-  onSelectedYearChange?: (year: number | null) => void;
 };
 
 /**
@@ -59,12 +57,10 @@ type HoverCell = {
 
 /**
  * Fingerprint plot: an hour-of-day by day heatmap of the pixel's flux, colored by
- * a diverging scale centered on zero. Consumes the same flat
- * `[day x hoursPerDay]` `Float32Array` the line chart receives and indexes
- * `values[day * hoursPerDay + hour]` instead of averaging over the hour axis.
+ * a diverging scale centered on zero. Consumes the flat `[day x hoursPerDay]`
+ * `Float32Array` and indexes `values[day * hoursPerDay + hour]`.
  *
- * Controls: flip the axes (hour<->day), single out one calendar year of the
- * loaded window, and hover a cell to read its date/hour/value.
+ * Controls: flip the axes (hour<->day), and hover a cell to read its date/hour/value.
  */
 export function FingerprintPlot({
   values,
@@ -72,8 +68,7 @@ export function FingerprintPlot({
   hoursPerDay = 24,
   height: heightProp,
   pixelRatio,
-  selectedYear: controlledSelectedYear,
-  onSelectedYearChange,
+  selectedYear = null,
 }: FingerprintPlotProps) {
   const { isLight } = useTheme();
   const wrapperRef = useRef<HTMLDivElement | null>(null);
@@ -83,54 +78,27 @@ export function FingerprintPlot({
     height: number;
   }>({ width: 0, height: 0 });
   const [transposed, setTransposed] = useState(false);
-  const [internalSelectedYear, setInternalSelectedYear] = useState<
-    number | null
-  >(null);
-  const selectedYear =
-    controlledSelectedYear !== undefined
-      ? controlledSelectedYear
-      : internalSelectedYear;
-  const setSelectedYear = onSelectedYearChange ?? setInternalSelectedYear;
   const [hover, setHover] = useState<HoverCell | null>(null);
 
   const nDays = Math.floor(values.length / hoursPerDay);
   const absMax = useMemo(() => symmetricAbsMax(values), [values]);
 
-  // The window always ends at the last day of the archive, so its first day sits
-  // `totalDays - nDays` into the absolute time axis.
-  const baseDay = ZARR_TIME.totalDays - nDays;
-  const years = useMemo(
-    () => yearRangesInWindow(baseDay, nDays),
-    [baseDay, nDays],
-  );
+  // If a calendar year is specified, baseDay is the start day of that year.
+  // Otherwise, default to the archive's trailing window.
+  const baseDay = selectedYear
+    ? yearToDateRange(selectedYear)[0]
+    : ZARR_TIME.totalDays - nDays;
 
-  // Local day range currently in view: the whole window, or one selected year.
-  // Derived defensively, so a selection that falls outside the current window
-  // simply reads as "All" without needing an effect to reset the stored value.
-  const activeYear = years.find((range) => range.year === selectedYear) ?? null;
-  const dayLo = activeYear ? activeYear.startDay : 0;
-  const dayHi = activeYear ? activeYear.endDay : nDays - 1;
-  const nSel = Math.max(1, dayHi - dayLo + 1);
+  const dayLo = 0;
+  const dayHi = Math.max(0, nDays - 1);
+  const nSel = Math.max(1, nDays);
 
-  // Day-axis ticks. When several calendar years are in view the months live
-  // inside each year band, so a month label per tick reads as noise; label each
-  // year once instead (thinned to keep at most ~6 on the axis). A single year in
-  // view keeps the month labels.
   const dayAxisTicks = useMemo<{ dayLocal: number; label: string }[]>(() => {
-    if (!activeYear && years.length > 1) {
-      const step = Math.ceil(years.length / 6);
-      return years
-        .filter((_, index) => index % step === 0)
-        .map((range) => ({
-          dayLocal: Math.round((range.startDay + range.endDay) / 2),
-          label: String(range.year),
-        }));
-    }
     return dayIndexTicks(nSel).map((offset) => ({
-      dayLocal: dayLo + offset,
-      label: formatDayTick(baseDay + dayLo + offset),
+      dayLocal: offset,
+      label: formatDayTick(baseDay + offset),
     }));
-  }, [activeYear, years, nSel, dayLo, baseDay]);
+  }, [nSel, baseDay]);
 
   useEffect(() => {
     const node = wrapperRef.current;
@@ -324,23 +292,6 @@ export function FingerprintPlot({
         >
           ⇄ Flip axes
         </button>
-        {years.length > 1 ? (
-          <div className="flex flex-wrap items-center gap-1" role="group" aria-label="Year">
-            <YearChip
-              label="All"
-              active={selectedYear === null}
-              onClick={() => setSelectedYear(null)}
-            />
-            {years.map((range) => (
-              <YearChip
-                key={range.year}
-                label={String(range.year)}
-                active={selectedYear === range.year}
-                onClick={() => setSelectedYear(range.year)}
-              />
-            ))}
-          </div>
-        ) : null}
       </div>
 
       <div
@@ -408,29 +359,4 @@ export function FingerprintPlot({
 /** Keep a bottom-axis date label inside the plot width. */
 function clampLabelX(x: number, plotW: number, axisLeft: number): number {
   return Math.max(axisLeft + 12, Math.min(axisLeft + plotW - 12, x));
-}
-
-function YearChip({
-  label,
-  active,
-  onClick,
-}: {
-  label: string;
-  active: boolean;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      aria-pressed={active}
-      className={`rounded px-1.5 py-0.5 font-mono text-[11px] tabular-nums transition-colors ${
-        active
-          ? "bg-accent text-white"
-          : "text-editor-fg-tertiary hover:text-editor-fg-secondary"
-      }`}
-    >
-      {label}
-    </button>
-  );
 }

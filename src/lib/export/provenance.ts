@@ -1,5 +1,5 @@
 import { ZARR_STORE } from "@/lib/constants/store";
-import { ZARR_TIME, dayIndexToUTCDate } from "@/lib/zarr/timeRange";
+import { ZARR_TIME, dayIndexToUTCDate, yearToDateRange } from "@/lib/zarr/timeRange";
 import type { GeoPoint, GridCell, MapSelection } from "@/types/map";
 
 /**
@@ -17,6 +17,7 @@ export type ExportProvenance = {
   click: GeoPoint;
   cell: GridCell;
   historyYears: number;
+  selectedYear: number | null;
   hoursPerDay: number;
   /** Days covered by the loaded window. */
   dayCount: number;
@@ -29,7 +30,8 @@ export type ExportProvenance = {
 
 type BuildInput = {
   selection: MapSelection;
-  historyYears: number;
+  historyYears?: number;
+  selectedYear?: number | null;
   /** Length of the loaded `Float32Array`, i.e. days x hours. */
   valueCount: number;
   units?: string | null;
@@ -41,7 +43,8 @@ type BuildInput = {
 
 export function buildProvenance({
   selection,
-  historyYears,
+  historyYears = 1,
+  selectedYear = null,
   valueCount,
   units = null,
   variable = ZARR_STORE.defaultVariable,
@@ -51,10 +54,11 @@ export function buildProvenance({
 }: BuildInput): ExportProvenance {
   const dayCount = Math.floor(valueCount / hoursPerDay);
 
-  // The loaded window always ends at the last day of the archive, so its first
-  // day sits `totalDays - dayCount` into the absolute axis. Mirrors the same
-  // derivation in `FingerprintPlot`.
-  const baseDay = totalDays - dayCount;
+  // If a specific calendar year is selected, the window starts at the first day
+  // of that year. Otherwise, it defaults to the trailing end of the archive.
+  const baseDay = selectedYear
+    ? yearToDateRange(selectedYear, totalDays)[0]
+    : totalDays - dayCount;
 
   return {
     generatedAt,
@@ -66,6 +70,7 @@ export function buildProvenance({
     click: selection.click,
     cell: selection.grid,
     historyYears,
+    selectedYear,
     hoursPerDay,
     dayCount,
     baseDay,

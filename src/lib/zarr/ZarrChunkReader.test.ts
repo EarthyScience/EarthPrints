@@ -176,4 +176,23 @@ describe("ZarrChunkReader", () => {
 
     expect(mockGetChunk).toHaveBeenCalledTimes(2);
   });
+
+  it("reports cached years when native chunks are loaded", async () => {
+    mockFetchPixelTimeSeries.mockResolvedValue({
+      values: new Float32Array([1, 2, 3, 4]),
+      variable: "NEE",
+      units: "gC m-2 h-1",
+    });
+
+    const reader = new ZarrChunkReader(ds);
+    const grid = makeGrid(50, 50);
+
+    expect(reader.getCachedYears(grid).size).toBe(0);
+
+    await reader.getTimeSeries(grid);
+
+    // After prefetch completes, chunks for this block are in cache.
+    const cachedYears = reader.getCachedYears(grid);
+    expect(cachedYears.size).toBeGreaterThan(0);
+  });
 });

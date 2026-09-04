@@ -80,6 +80,7 @@ export function DownloadButton({
       const prov = buildProvenance({
         selection,
         historyYears,
+        selectedYear,
         valueCount: values.length,
         units,
       });
@@ -172,6 +173,7 @@ export function DownloadButton({
         const prov = buildProvenance({
           selection,
           historyYears,
+          selectedYear,
           valueCount: values.length,
           units,
         });
@@ -217,6 +219,7 @@ export function DownloadButton({
       const prov = buildProvenance({
         selection,
         historyYears,
+        selectedYear,
         valueCount: values.length,
         units,
       });
@@ -250,7 +253,7 @@ export function DownloadButton({
     } finally {
       setBusy(false);
     }
-  }, [gridSpec, historyYears, selection, units, values]);
+  }, [gridSpec, historyYears, selectedYear, selection, units, values]);
 
   // Single CSV export
   const runCsvExport = useCallback(() => {
@@ -259,6 +262,7 @@ export function DownloadButton({
     const prov = buildProvenance({
       selection,
       historyYears,
+      selectedYear,
       valueCount: values.length,
       units,
     });
@@ -267,7 +271,7 @@ export function DownloadButton({
     const csv = buildSeriesCsv(rows, prov);
     const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
     downloadBlob(blob, `${base}.csv`);
-  }, [historyYears, selection, units, values]);
+  }, [historyYears, selectedYear, selection, units, values]);
 
   return (
     <div ref={containerRef} className="relative inline-flex items-center">

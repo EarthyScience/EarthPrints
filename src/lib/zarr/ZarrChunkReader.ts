@@ -14,7 +14,9 @@ import {
 import {
   chunkIndexToStartDay,
   DEFAULT_HISTORY_YEARS,
+  timeChunkIndexToYears,
   yearsToDayRange,
+  yearToDateRange,
 } from "@/lib/zarr/timeRange";
 import {
   createByteProgressSink,
@@ -225,16 +227,42 @@ export class ZarrChunkReader {
     this.prefetchInFlight.set(prefetchKey, promise);
   }
 
-  async getTimeSeries(
+  /** Return set of calendar years currently present in the native cache for this spatial cell. */
+  getCachedYears(
     grid: GridCell,
     variable = ZARR_STORE.defaultVariable,
-    historyYears?: number,
+    chunkSizes: ArrayChunkSizes = {
+      time: 1461,
+      hour: ZARR_STORE.dimensions.hour,
+      lat: ZARR_STORE.nativeChunks.lat,
+      lon: ZARR_STORE.nativeChunks.lon,
+    },
+  ): Set<number> {
+    const cachedYears = new Set<number>();
+    const chunkLatIdx = Math.floor(grid.latIndex / chunkSizes.lat);
+    const chunkLonIdx = Math.floor(grid.lonIndex / chunkSizes.lon);
+
+    for (let chunkIdx = 0; chunkIdx <= 5; chunkIdx++) {
+      const key = `${variable}:${chunkIdx}:0:${chunkLatIdx}:${chunkLonIdx}`;
+      if (this.cache.has(key)) {
+        for (const yr of timeChunkIndexToYears(chunkIdx, chunkSizes.time)) {
+          cachedYears.add(yr);
+        }
+      }
+    }
+    return cachedYears;
+  }
+
+  async getTimeSeriesForRange(
+    grid: GridCell,
+    timeRange: AxisSlice,
+    variable = ZARR_STORE.defaultVariable,
     onProgress?: SeriesProgress,
   ): Promise<{ values: Float32Array; variable: string; units?: string }> {
     const array = await this.getArray(variable);
     const chunkSizes = this.getChunkSizes(array);
-    const [timeCount, hourCount] = array.shape;
-    const timeRange = yearsToDayRange(historyYears ?? DEFAULT_HISTORY_YEARS, timeCount);
+    const [, hourCount] = array.shape;
+    const [timeCount] = array.shape;
     const context = pixelToNativeChunkContext(
       grid.latIndex,
       grid.lonIndex,
@@ -257,16 +285,35 @@ export class ZarrChunkReader {
       );
     }
 
-    // Stream byte-level progress off the chunk requests this fetch triggers.
-    // Prefetch runs after the sink is cleared, so it is not counted.
     const sink = onProgress ? createByteProgressSink(onProgress) : null;
     if (sink) setActiveByteSink(sink);
     try {
       return await fetchPixelTimeSeries(array, grid, variable, timeRange);
     } finally {
-      // Only clear if a newer request has not already swapped in its own sink.
       if (sink && getActiveByteSink() === sink) setActiveByteSink(null);
       this.prefetchNativeChunks(array, variable, context);
     }
+  }
+
+  async getTimeSeriesForYear(
+    grid: GridCell,
+    year: number,
+    variable = ZARR_STORE.defaultVariable,
+    onProgress?: SeriesProgress,
+  ): Promise<{ values: Float32Array; variable: string; units?: string }> {
+    const timeRange = yearToDateRange(year);
+    return this.getTimeSeriesForRange(grid, timeRange, variable, onProgress);
+  }
+
+  async getTimeSeries(
+    grid: GridCell,
+    variable = ZARR_STORE.defaultVariable,
+    historyYears?: number,
+    onProgress?: SeriesProgress,
+  ): Promise<{ values: Float32Array; variable: string; units?: string }> {
+    const array = await this.getArray(variable);
+    const [timeCount] = array.shape;
+    const timeRange = yearsToDayRange(historyYears ?? DEFAULT_HISTORY_YEARS, timeCount);
+    return this.getTimeSeriesForRange(grid, timeRange, variable, onProgress);
   }
 }
