@@ -71,6 +71,19 @@ function toMapViewState(
   };
 }
 
+const AUTO_ZOOM_STORAGE_KEY = "earthprints:auto_zoom";
+
+function getInitialAutoZoom(): boolean {
+  if (typeof window === "undefined") return true;
+  try {
+    const stored = window.localStorage.getItem(AUTO_ZOOM_STORAGE_KEY);
+    if (stored !== null) return stored === "true";
+  } catch {
+    // Ignore storage errors (e.g. private browsing)
+  }
+  return true;
+}
+
 export function EarthMap() {
   const { isLight } = useTheme();
   const readerPromiseRef = useRef<Promise<ZarrChunkReader> | null>(null);
@@ -82,6 +95,7 @@ export function EarthMap() {
   const [viewMode, setViewMode] = useState<MapViewMode>("2d");
   const [mapSize, setMapSize] = useState({ width: 0, height: 0 });
   const [selection, setSelection] = useState<MapSelection | null>(null);
+  const [autoZoom, setAutoZoom] = useState<boolean>(getInitialAutoZoom);
   const [showPatch, setShowPatch] = useState(true);
   const [controlsOpen, setControlsOpen] = useState(false);
   // The boot script has already painted the stored layout onto the root
@@ -244,15 +258,17 @@ export function EarthMap() {
       };
 
       setSelection(nextSelection);
-      const focused = viewStateFocusedOnCell(
-        viewState,
-        nextSelection.grid,
-        viewMode,
-      );
-      flyToView(focused, SELECTION_FOCUS_TRANSITION_MS);
+      if (autoZoom) {
+        const focused = viewStateFocusedOnCell(
+          viewState,
+          nextSelection.grid,
+          viewMode,
+        );
+        flyToView(focused, SELECTION_FOCUS_TRANSITION_MS);
+      }
       void loadTimeSeriesForYears(nextSelection, selectedYears);
     },
-    [flyToView, gridSpec, selectedYears, loadTimeSeriesForYears, viewMode, viewState],
+    [autoZoom, flyToView, gridSpec, selectedYears, loadTimeSeriesForYears, viewMode, viewState],
   );
 
   const handleMapClick = useCallback(
@@ -276,6 +292,18 @@ export function EarthMap() {
     const focused = viewStateFocusedOnCell(viewState, selection.grid, viewMode);
     flyToView(focused, SELECTION_FOCUS_TRANSITION_MS);
   }, [flyToView, selection, viewMode, viewState]);
+
+  const handleToggleAutoZoom = useCallback(() => {
+    setAutoZoom((previous) => {
+      const next = !previous;
+      try {
+        window.localStorage.setItem(AUTO_ZOOM_STORAGE_KEY, String(next));
+      } catch {
+        // Ignore storage errors
+      }
+      return next;
+    });
+  }, []);
 
   const handleTogglePatch = useCallback(() => {
     setShowPatch((previous) => !previous);
@@ -339,6 +367,8 @@ export function EarthMap() {
           onViewModeChange={handleViewModeChange}
           hasSelection={selection !== null}
           onZoomToSelection={handleZoomToSelection}
+          autoZoom={autoZoom}
+          onToggleAutoZoom={handleToggleAutoZoom}
           showPatch={showPatch}
           onTogglePatch={handleTogglePatch}
           sidebarCollapsed={sidebar.collapsed}
@@ -412,6 +442,8 @@ export function EarthMap() {
             onViewModeChange={handleViewModeChange}
             hasSelection={selection !== null}
             onZoomToSelection={handleZoomToSelection}
+            autoZoom={autoZoom}
+            onToggleAutoZoom={handleToggleAutoZoom}
             showPatch={showPatch}
             onTogglePatch={handleTogglePatch}
             controlsOpen={controlsOpen}

@@ -1,6 +1,7 @@
 "use client";
 
 import { IconButton } from "@/components/ui/IconButton";
+import { AutoZoomIcon } from "@/icons/AutoZoomIcon";
 import { CrosshairIcon } from "@/icons/CrosshairIcon";
 import { FingerprintIcon } from "@/icons/FingerprintIcon";
 import { GlobeIcon } from "@/icons/GlobeIcon";
@@ -13,6 +14,8 @@ type MapSideControlsProps = {
   onViewModeChange: (mode: MapViewMode) => void;
   hasSelection: boolean;
   onZoomToSelection: () => void;
+  autoZoom?: boolean;
+  onToggleAutoZoom?: () => void;
   showPatch: boolean;
   onTogglePatch: () => void;
   controlsOpen: boolean;
@@ -36,6 +39,8 @@ export function MapSideControls({
   onViewModeChange,
   hasSelection,
   onZoomToSelection,
+  autoZoom = true,
+  onToggleAutoZoom,
   showPatch,
   onTogglePatch,
   controlsOpen,
@@ -76,6 +81,27 @@ export function MapSideControls({
             >
               <CrosshairIcon />
             </IconButton>
+            {onToggleAutoZoom ? (
+              <IconButton
+                variant="plain"
+                tooltipPlacement="left"
+                className="animate-[zoomToSelectionIn_0.18s_cubic-bezier(0.16,1,0.3,1)]"
+                aria-label={
+                  autoZoom
+                    ? "Disable auto-zoom on selection"
+                    : "Enable auto-zoom on selection"
+                }
+                tooltip={
+                  autoZoom
+                    ? "Auto-zoom on select: On"
+                    : "Auto-zoom on select: Off"
+                }
+                aria-pressed={autoZoom}
+                onClick={onToggleAutoZoom}
+              >
+                <AutoZoomIcon />
+              </IconButton>
+            ) : null}
             <IconButton
               variant="plain"
               tooltipPlacement="left"
