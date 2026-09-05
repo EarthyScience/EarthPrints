@@ -388,4 +388,35 @@ describe("ZarrChunkReader", () => {
       110, 210, 1110, 1210, 10_110, 10_210, 11_110, 11_210,
     ]);
   });
+
+  it("reports cached years for the picked cell", async () => {
+    const reader = new ZarrChunkReader(ds);
+    const grid = makeGrid(50, 50);
+
+    expect(reader.getCachedYears(grid).size).toBe(0);
+
+    await reader.getTimeSeries(grid);
+
+    // The cache is keyed per pixel, so this reports the picked cell itself.
+    expect(reader.getCachedYears(grid).size).toBeGreaterThan(0);
+  });
+
+  it("does not report a neighbour's harvested years as its own", async () => {
+    const reader = new ZarrChunkReader(ds);
+    await reader.getTimeSeries(makeGrid(50, 50));
+
+    // Harvested into the cache alongside the picked cell.
+    expect(reader.getCachedYears(makeGrid(51, 51)).size).toBeGreaterThan(0);
+    // Outside the 5x5 block, so nothing is held for it.
+    expect(reader.getCachedYears(makeGrid(60, 60)).size).toBe(0);
+  });
+
+  it("fetches multiple years and returns concatenated time series", async () => {
+    const reader = new ZarrChunkReader(ds);
+    const grid = makeGrid(50, 50);
+
+    const result = await reader.getTimeSeriesForYears(grid, [2018, 2019]);
+    expect(result.values).toBeInstanceOf(Float32Array);
+    expect(result.variable).toBe("NEE");
+  });
 });

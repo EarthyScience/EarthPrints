@@ -45,14 +45,22 @@ type StageProps = {
   values: Float32Array;
   units?: string | null;
   hoursPerDay?: number;
+  selectedYear?: number | null;
+  selectedYears?: number[] | null;
 };
 
 /**
  * Both plots at export size. The fingerprint mounts fresh, so it captures in its
  * default state (whole window, hour on the y axis) rather than mirroring any
- * flip or year the user has selected on screen.
+ * flip on screen.
  */
-function ExportStage({ values, units, hoursPerDay }: StageProps) {
+function ExportStage({
+  values,
+  units,
+  hoursPerDay,
+  selectedYear,
+  selectedYears,
+}: StageProps) {
   return (
     <FixedThemeProvider theme="light">
       <div style={{ width: EXPORT_STAGE_WIDTH }}>
@@ -71,6 +79,8 @@ function ExportStage({ values, units, hoursPerDay }: StageProps) {
             hoursPerDay={hoursPerDay}
             height={EXPORT_PLOT_HEIGHT}
             pixelRatio={EXPORT_PIXEL_RATIO}
+            selectedYear={selectedYear}
+            selectedYears={selectedYears}
           />
         </div>
       </div>

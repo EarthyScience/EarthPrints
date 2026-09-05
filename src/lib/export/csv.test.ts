@@ -68,7 +68,7 @@ describe("buildSeriesCsv", () => {
     const dataLines = text.split("\n").slice(-25, -1);
 
     expect(dataLines[3].endsWith(",")).toBe(true);
-    expect(dataLines[3].split(",")).toHaveLength(4);
+    expect(dataLines[3].split(",")).toHaveLength(6);
   });
 
   it("says unspecified rather than null when units are absent", () => {
@@ -79,6 +79,28 @@ describe("buildSeriesCsv", () => {
     });
 
     expect(buildSeriesCsv([], prov)).toContain("# units: unspecified");
+  });
+
+  it("includes all selected years up to the last day of the last year", () => {
+    const prov = buildProvenance({
+      selection: SELECTION,
+      selectedYears: [2002, 2018],
+      valueCount: (365 + 365) * ZARR_TIME.hoursPerDay,
+    });
+    const values = new Float32Array((365 + 365) * ZARR_TIME.hoursPerDay).fill(0.1);
+    const rows = buildSeriesRows(values, prov);
+    const text = buildSeriesCsv(rows, prov);
+
+    expect(text).toContain("# selected_years: 2002, 2018");
+    expect(text).toContain("# window_start: 2002-01-01");
+    expect(text).toContain("# window_end: 2018-12-31");
+
+    const lines = text.trim().split("\n");
+    const firstDataLine = lines[lines.indexOf(CSV_COLUMNS) + 1]!;
+    const lastDataLine = lines[lines.length - 1]!;
+
+    expect(firstDataLine.startsWith("2002-01-01T00:00:00.000Z")).toBe(true);
+    expect(lastDataLine.startsWith("2018-12-31T23:00:00.000Z")).toBe(true);
   });
 });
 
@@ -102,5 +124,15 @@ describe("exportFileBaseName", () => {
     });
 
     expect(exportFileBaseName(prov)).toContain("3.225S_60.125W");
+  });
+
+  it("names non-contiguous year selections with explicit year tags", () => {
+    const prov = buildProvenance({
+      selection: SELECTION,
+      selectedYears: [2001, 2004, 2021],
+      valueCount: (365 + 366 + 365) * ZARR_TIME.hoursPerDay,
+    });
+
+    expect(exportFileBaseName(prov)).toContain("years_2001_2004_2021");
   });
 });

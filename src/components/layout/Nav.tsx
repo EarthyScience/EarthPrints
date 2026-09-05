@@ -5,6 +5,7 @@ import { EDITOR_CONTROLS_ID } from "@/components/layout/EditorShell";
 import { EditorViewTabs } from "@/components/layout/EditorViewTabs";
 import { NavActions } from "@/components/nav/NavActions";
 import { IconButton } from "@/components/ui/IconButton";
+import { AutoZoomIcon } from "@/icons/AutoZoomIcon";
 import { CrosshairIcon } from "@/icons/CrosshairIcon";
 import { PanelLeftIcon } from "@/icons/PanelLeftIcon";
 import { PatchIcon } from "@/icons/PatchIcon";
@@ -15,6 +16,8 @@ type NavProps = {
   onViewModeChange?: (mode: MapViewMode) => void;
   hasSelection?: boolean;
   onZoomToSelection?: () => void;
+  autoZoom?: boolean;
+  onToggleAutoZoom?: () => void;
   showPatch?: boolean;
   onTogglePatch?: () => void;
   /** Desktop side panel state (>=901px only). */
@@ -27,6 +30,8 @@ export function Nav({
   onViewModeChange,
   hasSelection = false,
   onZoomToSelection,
+  autoZoom = true,
+  onToggleAutoZoom,
   showPatch = false,
   onTogglePatch,
   sidebarCollapsed = false,
@@ -66,6 +71,24 @@ export function Nav({
                   onClick={onZoomToSelection}
                 >
                   <CrosshairIcon />
+                </IconButton>
+              ) : null}
+              {onToggleAutoZoom ? (
+                <IconButton
+                  aria-label={
+                    autoZoom
+                      ? "Disable auto-zoom on selection"
+                      : "Enable auto-zoom on selection"
+                  }
+                  tooltip={
+                    autoZoom
+                      ? "Auto-zoom on select: On"
+                      : "Auto-zoom on select: Off"
+                  }
+                  aria-pressed={autoZoom}
+                  onClick={onToggleAutoZoom}
+                >
+                  <AutoZoomIcon />
                 </IconButton>
               ) : null}
               {hasSelection && onTogglePatch ? (

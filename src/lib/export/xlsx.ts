@@ -22,14 +22,18 @@ export function buildWorkbookSheets(
   const data: SheetData = [
     [
       { value: "timestamp_utc", ...BOLD },
-      { value: "day_index", ...BOLD },
+      { value: "year", ...BOLD },
+      { value: "date", ...BOLD },
       { value: "hour", ...BOLD },
+      { value: "day_index", ...BOLD },
       { value: `value (${prov.units ?? "unspecified"})`, ...BOLD },
     ],
     ...rows.map((row) => [
       { value: row.timestamp, type: Date },
-      row.dayIndex,
+      row.year,
+      row.date,
       row.hour,
+      row.dayIndex,
       row.value,
     ]),
   ];
@@ -48,6 +52,11 @@ export function buildWorkbookSheets(
     ["lat_index", prov.cell.latIndex],
     ["lon_index", prov.cell.lonIndex],
     ["history_years", prov.historyYears],
+    ...(prov.selectedYears && prov.selectedYears.length > 0
+      ? [["selected_years", prov.selectedYears.join(", ")] as [string, string]]
+      : prov.selectedYear
+        ? [["selected_year", prov.selectedYear] as [string, number]]
+        : []),
     ["window_start", isoDate(prov.windowStart)],
     ["window_end", isoDate(prov.windowEnd)],
     ["rows", rows.length],
@@ -77,7 +86,14 @@ export async function buildSeriesWorkbook(
       data,
       sheet: XLSX_DATA_SHEET,
       dateFormat: "yyyy-mm-dd hh:mm:ss",
-      columns: [{ width: 22 }, { width: 12 }, { width: 8 }, { width: 16 }],
+      columns: [
+        { width: 22 },
+        { width: 8 },
+        { width: 14 },
+        { width: 8 },
+        { width: 12 },
+        { width: 16 },
+      ],
     },
     {
       data: metadata,

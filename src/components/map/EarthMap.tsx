@@ -71,6 +71,19 @@ function toMapViewState(
   };
 }
 
+const AUTO_ZOOM_STORAGE_KEY = "earthprints:auto_zoom";
+
+function getInitialAutoZoom(): boolean {
+  if (typeof window === "undefined") return true;
+  try {
+    const stored = window.localStorage.getItem(AUTO_ZOOM_STORAGE_KEY);
+    if (stored !== null) return stored === "true";
+  } catch {
+    // Ignore storage errors (e.g. private browsing)
+  }
+  return true;
+}
+
 export function EarthMap() {
   const { isLight } = useTheme();
   const readerPromiseRef = useRef<Promise<ZarrChunkReader> | null>(null);
@@ -85,6 +98,7 @@ export function EarthMap() {
   const [viewMode, setViewMode] = useState<MapViewMode>("2d");
   const [mapSize, setMapSize] = useState({ width: 0, height: 0 });
   const [selection, setSelection] = useState<MapSelection | null>(null);
+  const [autoZoom, setAutoZoom] = useState<boolean>(getInitialAutoZoom);
   const [showPatch, setShowPatch] = useState(true);
   const [controlsOpen, setControlsOpen] = useState(false);
   // The boot script has already painted the stored layout onto the root
@@ -95,7 +109,8 @@ export function EarthMap() {
     getSidebarState,
     getServerSidebarState,
   );
-  const [historyYears, setHistoryYears] = useState(DEFAULT_HISTORY_YEARS);
+  const [selectedYears, setSelectedYears] = useState<number[]>([2021]);
+  const [cachedYears, setCachedYears] = useState<Set<number>>(new Set());
   const [loadingSeries, setLoadingSeries] = useState(false);
   const [seriesProgress, setSeriesProgress] = useState<{
     loaded: number;
@@ -172,8 +187,8 @@ export function EarthMap() {
     };
   }, [ensureReader]);
 
-  const loadTimeSeries = useCallback(
-    async (nextSelection: MapSelection, years: number) => {
+  const loadTimeSeriesForYears = useCallback(
+    async (nextSelection: MapSelection, years: number[]) => {
       const requestId = ++requestIdRef.current;
       seriesAbortRef.current?.abort();
       const abort = new AbortController();
@@ -186,11 +201,12 @@ export function EarthMap() {
 
       try {
         const reader = await ensureReader();
+        setCachedYears(new Set(reader.getCachedYears(nextSelection.grid)));
 
-        const { values, units } = await reader.getTimeSeries(
+        const { values, units } = await reader.getTimeSeriesForYears(
           nextSelection.grid,
-          undefined,
           years,
+          undefined,
           (loaded, total) => {
             if (requestId !== requestIdRef.current) return;
             setSeriesProgress({ loaded, total });
@@ -202,6 +218,7 @@ export function EarthMap() {
 
         setSeriesValues(values);
         setSeriesUnits(units ?? null);
+        setCachedYears(new Set(reader.getCachedYears(nextSelection.grid)));
       } catch (error) {
         if (requestId !== requestIdRef.current) return;
         // A newer pick already took over; its own load owns the panel.
@@ -232,14 +249,14 @@ export function EarthMap() {
     setViewState(next);
   }, []);
 
-  const handleHistoryYearsChange = useCallback(
-    (years: number) => {
-      setHistoryYears(years);
+  const handleYearsSelect = useCallback(
+    (years: number[]) => {
+      setSelectedYears(years);
       if (selection) {
-        void loadTimeSeries(selection, years);
+        void loadTimeSeriesForYears(selection, years);
       }
     },
-    [selection, loadTimeSeries],
+    [selection, loadTimeSeriesForYears],
   );
 
   const handlePick = useCallback(
@@ -250,15 +267,17 @@ export function EarthMap() {
       };
 
       setSelection(nextSelection);
-      const focused = viewStateFocusedOnCell(
-        viewState,
-        nextSelection.grid,
-        viewMode,
-      );
-      flyToView(focused, SELECTION_FOCUS_TRANSITION_MS);
-      void loadTimeSeries(nextSelection, historyYears);
+      if (autoZoom) {
+        const focused = viewStateFocusedOnCell(
+          viewState,
+          nextSelection.grid,
+          viewMode,
+        );
+        flyToView(focused, SELECTION_FOCUS_TRANSITION_MS);
+      }
+      void loadTimeSeriesForYears(nextSelection, selectedYears);
     },
-    [flyToView, gridSpec, historyYears, loadTimeSeries, viewMode, viewState],
+    [autoZoom, flyToView, gridSpec, selectedYears, loadTimeSeriesForYears, viewMode, viewState],
   );
 
   const handleMapClick = useCallback(
@@ -282,6 +301,18 @@ export function EarthMap() {
     const focused = viewStateFocusedOnCell(viewState, selection.grid, viewMode);
     flyToView(focused, SELECTION_FOCUS_TRANSITION_MS);
   }, [flyToView, selection, viewMode, viewState]);
+
+  const handleToggleAutoZoom = useCallback(() => {
+    setAutoZoom((previous) => {
+      const next = !previous;
+      try {
+        window.localStorage.setItem(AUTO_ZOOM_STORAGE_KEY, String(next));
+      } catch {
+        // Ignore storage errors
+      }
+      return next;
+    });
+  }, []);
 
   const handleTogglePatch = useCallback(() => {
     setShowPatch((previous) => !previous);
@@ -345,6 +376,8 @@ export function EarthMap() {
           onViewModeChange={handleViewModeChange}
           hasSelection={selection !== null}
           onZoomToSelection={handleZoomToSelection}
+          autoZoom={autoZoom}
+          onToggleAutoZoom={handleToggleAutoZoom}
           showPatch={showPatch}
           onTogglePatch={handleTogglePatch}
           sidebarCollapsed={sidebar.collapsed}
@@ -355,8 +388,9 @@ export function EarthMap() {
         <MapReadout
           selection={selection}
           gridSpec={gridSpec}
-          historyYears={historyYears}
-          onHistoryYearsChange={handleHistoryYearsChange}
+          selectedYears={selectedYears}
+          cachedYears={cachedYears}
+          onSelectYears={handleYearsSelect}
           loadingSeries={loadingSeries}
           seriesProgress={seriesProgress}
           seriesError={seriesError}
@@ -417,6 +451,8 @@ export function EarthMap() {
             onViewModeChange={handleViewModeChange}
             hasSelection={selection !== null}
             onZoomToSelection={handleZoomToSelection}
+            autoZoom={autoZoom}
+            onToggleAutoZoom={handleToggleAutoZoom}
             showPatch={showPatch}
             onTogglePatch={handleTogglePatch}
             controlsOpen={controlsOpen}

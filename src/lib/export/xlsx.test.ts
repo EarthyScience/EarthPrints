@@ -30,8 +30,10 @@ describe("buildWorkbookSheets", () => {
     expect(data).toHaveLength(2 * ZARR_TIME.hoursPerDay + 1);
     expect(data[0].map((cell) => (cell as { value: string }).value)).toEqual([
       "timestamp_utc",
-      "day_index",
+      "year",
+      "date",
       "hour",
+      "day_index",
       "value (gC m-2 d-1)",
     ]);
   });
@@ -47,8 +49,8 @@ describe("buildWorkbookSheets", () => {
   it("leaves missing values null so Excel shows a blank, not a zero", () => {
     const { data } = sheetsForDays(1);
 
-    expect(data[3][3]).toBeNull();
-    expect(data[2][3]).toBe(1.5);
+    expect(data[3][5]).toBeNull();
+    expect(data[2][5]).toBe(1.5);
   });
 
   it("carries the provenance facts on its own sheet", () => {
