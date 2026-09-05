@@ -83,7 +83,11 @@ export function MapReadout({
   );
 
   const chart = (
-    <section aria-live="polite" className="flex flex-col flex-1 min-h-0">
+    <section
+      aria-live="polite"
+      className="flex flex-col flex-1 min-h-0"
+      data-tour="plot"
+    >
       <span className={`${SECTION_LABEL} block shrink-0`}>
         {plotView === "line" ? "Daily mean" : "Diurnal fingerprint"}
       </span>
@@ -150,7 +154,7 @@ export function MapReadout({
 
   return (
     <div className="flex flex-col divide-y divide-editor-border min-h-full">
-      <section className="pb-4 shrink-0">
+      <section className="pb-4 shrink-0" data-tour="record">
         <h2 className="font-mono text-[15px] font-semibold leading-none tracking-tight tabular-nums text-editor-fg-primary">
           {formatLongitude(selection.grid.lon)}
           <span className="text-editor-fg-tertiary">, </span>

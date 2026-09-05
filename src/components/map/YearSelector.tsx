@@ -69,7 +69,7 @@ export function YearSelector({
   const yearsLabel = formatSelectedYearsLabel(activeYears);
 
   return (
-    <section aria-label="Year selection" className={className}>
+    <section aria-label="Year selection" className={className} data-tour="years">
       <div className="mb-2 flex items-baseline justify-between gap-2">
         <div className="flex items-center gap-1.5">
           <label className="text-[13px] font-semibold text-editor-fg-primary">

@@ -53,6 +53,7 @@ import {
 } from "@/lib/sidebar";
 import { MapSideControls } from "@/components/map/MapSideControls";
 import { MapSearch } from "@/components/map/MapSearch";
+import { MapTour } from "@/components/map/MapTour";
 import { MapReadout } from "@/components/map/MapReadout";
 import { GlobeSelectionOverlay } from "@/components/map/GlobeSelectionOverlay";
 
@@ -417,6 +418,7 @@ export function EarthMap() {
       preview={
         <div
           className="map-stage absolute inset-0 overflow-hidden rounded-[inherit]"
+          data-tour="map"
           ref={mapStageRef}
         >
           <Map
@@ -456,6 +458,11 @@ export function EarthMap() {
               />
             ) : null}
           </Map>
+          <MapTour
+            hasSelection={selection !== null}
+            loadingSeries={loadingSeries}
+            seriesValues={seriesValues}
+          />
           <div className="pointer-events-none absolute inset-x-0 top-2 z-30 flex justify-center px-2">
             <MapSearch
               onSelect={handlePick}

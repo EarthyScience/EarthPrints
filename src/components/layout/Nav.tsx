@@ -44,7 +44,10 @@ export function Nav({
           <Brand />
         </div>
         <div className="box-border flex min-w-0 items-center bg-editor-bg-base py-2 pl-0 pr-2">
-          <div className="mr-auto flex flex-shrink-0 items-center gap-1.5">
+          <div
+            className="mr-auto flex flex-shrink-0 items-center gap-1.5"
+            data-tour="controls"
+          >
             {/* On mobile (<=900px) the view toggle and these controls move to
                 the map's floating side panels. */}
             {onToggleSidebar ? (
