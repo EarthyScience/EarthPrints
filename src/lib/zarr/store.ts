@@ -51,6 +51,53 @@ export function getActiveByteSink(): ByteSink | null {
 }
 
 /**
+ * Attempts per request, the first included. A picked coordinate fans out into
+ * one request per native chunk, and a single flaky one fails the whole series,
+ * so a transient error is retried here rather than bubbling up as "could not
+ * load" for the user to click through again.
+ */
+const FETCH_ATTEMPTS = 3;
+
+/** Doubles per retry: 400ms, then 800ms. */
+const RETRY_BASE_DELAY_MS = 400;
+
+/**
+ * Statuses worth a second look. 404 is deliberately absent: zarrita reads it as
+ * a missing chunk, which is a legitimate answer rather than a failure.
+ */
+function isRetryableStatus(status: number): boolean {
+  return status === 408 || status === 425 || status === 429 || status >= 500;
+}
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/**
+ * `fetch` with a couple of retries for the errors that clear on their own:
+ * dropped connections, and the throttling and gateway statuses the store
+ * would otherwise throw on.
+ */
+export async function fetchWithRetry(request: Request): Promise<Response> {
+  for (let attempt = 1; ; attempt += 1) {
+    const last = attempt === FETCH_ATTEMPTS;
+
+    try {
+      // A Request can only be sent once, so each attempt gets its own copy.
+      const response = await fetch(last ? request : request.clone());
+      if (last || !isRetryableStatus(response.status)) return response;
+      // Nothing will read this body; release the connection before retrying.
+      await response.body?.cancel();
+    } catch (error) {
+      // An abort is the caller's decision, not a transient failure.
+      if (last || request.signal?.aborted) throw error;
+    }
+
+    await delay(RETRY_BASE_DELAY_MS * 2 ** (attempt - 1));
+  }
+}
+
+/**
  * A `fetch` for zarrita's store that tees each chunk response through a
  * counting stream so callers can show real download progress. Anything it
  * can't measure (no body, no length, non-GET, errors) passes through
@@ -61,7 +108,7 @@ async function progressFetch(request: Request): Promise<Response> {
   // the request that was active when it started even if another request swaps
   // the global sink in while we await the response.
   const sink = activeByteSink;
-  const response = await fetch(request);
+  const response = await fetchWithRetry(request);
   const total = Number(response.headers.get("content-length"));
 
   if (

@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import type { GridSpec, MapSelection } from "@/types/map";
-import { formatCoordinate, formatGeoPoint } from "@/lib/map/geogrid";
+import { formatLatitude, formatLongitude } from "@/lib/map/geogrid";
 import { DEFAULT_GRID_SPEC, ZARR_STORE } from "@/lib/constants/store";
 import { ZARR_TIME } from "@/lib/zarr/timeRange";
 import { TimeSeriesPlot } from "@/components/map/TimeSeriesPlot";
@@ -10,6 +10,8 @@ import { TimeSeriesPlotLoading } from "@/components/map/TimeSeriesPlotLoading";
 import { FingerprintPlot } from "@/components/map/FingerprintPlot";
 import { FingerprintPlotLoading } from "@/components/map/FingerprintPlotLoading";
 import { ProgressBar } from "@/components/ui/ProgressBar";
+import { DownloadButton } from "@/components/map/DownloadButton";
+import { YearSelector } from "@/components/map/YearSelector";
 
 type PlotView = "line" | "fingerprint";
 
@@ -18,8 +20,10 @@ type SeriesProgress = { loaded: number; total: number };
 type MapReadoutProps = {
   selection: MapSelection | null;
   gridSpec?: GridSpec;
-  historyYears: number;
-  onHistoryYearsChange: (years: number) => void;
+  variable?: string;
+  selectedYears: number[];
+  cachedYears?: Set<number>;
+  onSelectYears: (years: number[]) => void;
   loadingSeries: boolean;
   seriesProgress: SeriesProgress | null;
   seriesError: string | null;
@@ -33,8 +37,10 @@ const META = "font-mono text-[11px] text-editor-fg-tertiary";
 export function MapReadout({
   selection,
   gridSpec = DEFAULT_GRID_SPEC,
-  historyYears,
-  onHistoryYearsChange,
+  variable = ZARR_STORE.defaultVariable,
+  selectedYears,
+  cachedYears = new Set(),
+  onSelectYears,
   loadingSeries,
   seriesProgress,
   seriesError,
@@ -42,8 +48,7 @@ export function MapReadout({
   seriesUnits,
 }: MapReadoutProps) {
   const [plotView, setPlotView] = useState<PlotView>("line");
-  const historyLabel =
-    historyYears === 1 ? "Last 1 year" : `Last ${historyYears} years`;
+  const [fingerprintTransposed, setFingerprintTransposed] = useState(false);
 
   if (!selection) {
     return (
@@ -65,49 +70,57 @@ export function MapReadout({
   }
 
   const patchCells = gridSpec.nativeChunks.lon;
-  const patchDeg = patchCells * gridSpec.spatialResolutionDeg;
+  const patchDeg = Number((patchCells * gridSpec.spatialResolutionDeg).toFixed(2));
+  const gridResolution = Number(gridSpec.spatialResolutionDeg.toFixed(2));
 
   const historyControl = (
-    <section>
-      <div className="mb-3 flex items-baseline justify-between gap-3">
-        <label className={SECTION_LABEL} htmlFor="history-years">
-          History window
-        </label>
-        <span className="font-mono text-[12.5px] font-semibold text-accent">
-          {historyLabel}
-        </span>
-      </div>
-      <input
-        id="history-years"
-        className="w-full cursor-pointer [accent-color:var(--accent)]"
-        type="range"
-        min={ZARR_TIME.defaultHistoryYears}
-        max={ZARR_TIME.maxHistoryYears}
-        step={1}
-        value={historyYears}
-        onChange={(event) =>
-          onHistoryYearsChange(Number(event.currentTarget.value))
-        }
-      />
-    </section>
+    <YearSelector
+      selectedYears={selectedYears}
+      cachedYears={cachedYears}
+      loading={loadingSeries}
+      onSelectYears={onSelectYears}
+    />
   );
 
   const chart = (
-    <section aria-live="polite">
-      <div className="mb-3 flex items-baseline justify-between gap-3">
-        <span className={SECTION_LABEL}>
-          {plotView === "line" ? "Daily mean" : "Diurnal fingerprint"}
-        </span>
-        <PlotViewToggle view={plotView} onChange={setPlotView} />
+    <section aria-live="polite" className="flex flex-col flex-1 min-h-0">
+      <span className={`${SECTION_LABEL} block shrink-0`}>
+        {plotView === "line" ? "Daily mean" : "Diurnal fingerprint"}
+      </span>
+
+      {/* View switch left, download right, on the row between title and plot. */}
+      <div className="mb-3 mt-2 flex items-center justify-between gap-3 shrink-0">
+        <div className="flex items-center gap-2">
+          <PlotViewToggle view={plotView} onChange={setPlotView} />
+          {plotView === "fingerprint" ? (
+            <button
+              type="button"
+              onClick={() => setFingerprintTransposed((prev) => !prev)}
+              className="rounded-md border border-editor-border px-2 py-0.5 text-[11.5px] font-semibold text-editor-fg-secondary transition-colors hover:border-editor-border-strong hover:text-editor-fg-primary"
+              aria-pressed={fingerprintTransposed}
+              title="Swap the hour and day axes"
+            >
+              ⇄ Flip axes
+            </button>
+          ) : null}
+        </div>
+        <DownloadButton
+          selection={selection}
+          gridSpec={gridSpec}
+          historyYears={selectedYears.length}
+          values={loadingSeries ? null : seriesValues}
+          units={seriesUnits}
+          selectedYears={selectedYears}
+        />
       </div>
 
       {loadingSeries ? (
         <div className="grid gap-3">
           <SeriesLoader progress={seriesProgress} />
           {plotView === "line" ? (
-            <TimeSeriesPlotLoading historyYears={historyYears} />
+            <TimeSeriesPlotLoading historyYears={selectedYears.length} />
           ) : (
-            <FingerprintPlotLoading />
+            <FingerprintPlotLoading transposed={fingerprintTransposed} />
           )}
         </div>
       ) : seriesError ? (
@@ -126,6 +139,9 @@ export function MapReadout({
             values={seriesValues}
             units={seriesUnits}
             hoursPerDay={ZARR_TIME.hoursPerDay}
+            selectedYears={selectedYears}
+            transposed={fingerprintTransposed}
+            onTransposedChange={setFingerprintTransposed}
           />
         )
       ) : null}
@@ -133,16 +149,15 @@ export function MapReadout({
   );
 
   return (
-    <div className="flex flex-col divide-y divide-editor-border">
-      <section className="pb-4">
-        <h2 className="font-mono text-[20px] leading-none tracking-tight tabular-nums text-editor-fg-primary">
-          {formatCoordinate(selection.click.lat)}
+    <div className="flex flex-col divide-y divide-editor-border min-h-full">
+      <section className="pb-4 shrink-0">
+        <h2 className="font-mono text-[15px] font-semibold leading-none tracking-tight tabular-nums text-editor-fg-primary">
+          {formatLongitude(selection.grid.lon)}
           <span className="text-editor-fg-tertiary">, </span>
-          {formatCoordinate(selection.click.lon)}
+          {formatLatitude(selection.grid.lat)}
         </h2>
         <p className="mt-2 text-[12.5px] leading-[1.5] text-editor-fg-tertiary">
-          {ZARR_STORE.kicker} · snapped to the nearest{" "}
-          {gridSpec.spatialResolutionDeg}° cell
+          {variable} · {ZARR_STORE.kicker} · snapped to the nearest {gridResolution}° cell
         </p>
         <p className="mt-2 text-[12.5px] leading-[1.5] text-editor-fg-tertiary">
           Each click downloads a {patchCells}×{patchCells} patch ({patchDeg}° ×{" "}
@@ -152,20 +167,10 @@ export function MapReadout({
       </section>
 
       {/* History drives the chart, so they sit together with no divider. */}
-      <div className="grid gap-4 py-4">
-        {historyControl}
+      <div className="flex flex-col flex-1 min-h-0 gap-4 py-4">
+        <div className="shrink-0">{historyControl}</div>
         {chart}
       </div>
-
-      <section className="pt-4">
-        <dl className="grid grid-cols-2 gap-x-4 gap-y-3">
-          <Fact label="Grid cell" value={formatGeoPoint(selection.grid)} />
-          <Fact
-            label="Array index"
-            value={`lon ${selection.grid.lonIndex} · lat ${selection.grid.latIndex}`}
-          />
-        </dl>
-      </section>
     </div>
   );
 }
@@ -206,17 +211,6 @@ function PlotViewToggle({
           </button>
         );
       })}
-    </div>
-  );
-}
-
-function Fact({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="grid min-w-0 gap-0.5">
-      <dt className="text-[11.5px] text-editor-fg-tertiary">{label}</dt>
-      <dd className="font-mono text-[13px] tabular-nums text-editor-fg-secondary">
-        {value}
-      </dd>
     </div>
   );
 }

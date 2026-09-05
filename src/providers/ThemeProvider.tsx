@@ -5,6 +5,7 @@ import {
   useCallback,
   useContext,
   useEffect,
+  useMemo,
   useState,
 } from "react";
 import {
@@ -58,6 +59,26 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
       {children}
     </ThemeContext.Provider>
   );
+}
+
+/**
+ * Pins a theme for one subtree, without touching the document class or storage
+ * the way {@link ThemeProvider} does. The PDF export stage renders under this so
+ * its plots come out light-on-white whatever theme the app is showing.
+ */
+export function FixedThemeProvider({
+  theme,
+  children,
+}: {
+  theme: Theme;
+  children: React.ReactNode;
+}) {
+  const value = useMemo(
+    () => ({ theme, isLight: theme === "light", toggleTheme: () => {} }),
+    [theme],
+  );
+
+  return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>;
 }
 
 export function useTheme() {

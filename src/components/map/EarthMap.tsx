@@ -1,6 +1,12 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from "react";
 import Map, {
   type MapMouseEvent,
   type MapRef,
@@ -33,6 +39,14 @@ import {
   EDITOR_CONTROLS_ID,
 } from "@/components/layout/EditorShell";
 import { Nav } from "@/components/layout/Nav";
+import {
+  applySidebarState,
+  clampSidebarWidth,
+  getServerSidebarState,
+  getSidebarState,
+  setSidebarState,
+  subscribeSidebarState,
+} from "@/lib/sidebar";
 import { MapSideControls } from "@/components/map/MapSideControls";
 import { MapSearch } from "@/components/map/MapSearch";
 import { MapReadout } from "@/components/map/MapReadout";
@@ -57,6 +71,19 @@ function toMapViewState(
   };
 }
 
+const AUTO_ZOOM_STORAGE_KEY = "earthprints:auto_zoom";
+
+function getInitialAutoZoom(): boolean {
+  if (typeof window === "undefined") return true;
+  try {
+    const stored = window.localStorage.getItem(AUTO_ZOOM_STORAGE_KEY);
+    if (stored !== null) return stored === "true";
+  } catch {
+    // Ignore storage errors (e.g. private browsing)
+  }
+  return true;
+}
+
 export function EarthMap() {
   const { isLight } = useTheme();
   const readerPromiseRef = useRef<Promise<ZarrChunkReader> | null>(null);
@@ -68,9 +95,19 @@ export function EarthMap() {
   const [viewMode, setViewMode] = useState<MapViewMode>("2d");
   const [mapSize, setMapSize] = useState({ width: 0, height: 0 });
   const [selection, setSelection] = useState<MapSelection | null>(null);
+  const [autoZoom, setAutoZoom] = useState<boolean>(getInitialAutoZoom);
   const [showPatch, setShowPatch] = useState(true);
   const [controlsOpen, setControlsOpen] = useState(false);
-  const [historyYears, setHistoryYears] = useState(DEFAULT_HISTORY_YEARS);
+  // The boot script has already painted the stored layout onto the root
+  // element; this subscribes React to the same source rather than re-reading
+  // localStorage in an effect after first paint.
+  const sidebar = useSyncExternalStore(
+    subscribeSidebarState,
+    getSidebarState,
+    getServerSidebarState,
+  );
+  const [selectedYears, setSelectedYears] = useState<number[]>([2021]);
+  const [cachedYears, setCachedYears] = useState<Set<number>>(new Set());
   const [loadingSeries, setLoadingSeries] = useState(false);
   const [seriesProgress, setSeriesProgress] = useState<{
     loaded: number;
@@ -96,6 +133,19 @@ export function EarthMap() {
     return readerPromiseRef.current;
   }, []);
 
+  // The stored width is what the reader asked for; a window too narrow to
+  // honour it borrows from the panel without forgetting the preference.
+  useEffect(() => {
+    const reclamp = () => {
+      applySidebarState({
+        width: clampSidebarWidth(sidebar.width, window.innerWidth),
+        collapsed: sidebar.collapsed,
+      });
+    };
+    window.addEventListener("resize", reclamp);
+    return () => window.removeEventListener("resize", reclamp);
+  }, [sidebar]);
+
   useEffect(() => {
     const node = mapStageRef.current;
     if (!node) return;
@@ -103,7 +153,16 @@ export function EarthMap() {
     const observer = new ResizeObserver(([entry]) => {
       const { width, height } = entry.contentRect;
       setMapSize({ width, height });
-      mapRef.current?.resize();
+      const map = mapRef.current;
+      if (!map) return;
+      // Resizing the drawing buffer clears it, and on its own maplibre only
+      // repaints on the next frame. Dragging the seam resizes the stage every
+      // frame, so every frame would paint an empty canvas: the map strobes.
+      // redraw() renders synchronously, filling the canvas in the same frame
+      // the observer runs in. This is the pairing maplibre uses internally for
+      // its own (50ms-throttled) container observer.
+      map.resize();
+      map.redraw();
     });
 
     observer.observe(node);
@@ -125,8 +184,8 @@ export function EarthMap() {
     };
   }, [ensureReader]);
 
-  const loadTimeSeries = useCallback(
-    async (nextSelection: MapSelection, years: number) => {
+  const loadTimeSeriesForYears = useCallback(
+    async (nextSelection: MapSelection, years: number[]) => {
       const requestId = ++requestIdRef.current;
       setLoadingSeries(true);
       setSeriesProgress(null);
@@ -136,11 +195,12 @@ export function EarthMap() {
 
       try {
         const reader = await ensureReader();
+        setCachedYears(new Set(reader.getCachedYears(nextSelection.grid)));
 
-        const { values, units } = await reader.getTimeSeries(
+        const { values, units } = await reader.getTimeSeriesForYears(
           nextSelection.grid,
-          undefined,
           years,
+          undefined,
           (loaded, total) => {
             if (requestId !== requestIdRef.current) return;
             setSeriesProgress({ loaded, total });
@@ -151,6 +211,7 @@ export function EarthMap() {
 
         setSeriesValues(values);
         setSeriesUnits(units ?? null);
+        setCachedYears(new Set(reader.getCachedYears(nextSelection.grid)));
       } catch (error) {
         if (requestId !== requestIdRef.current) return;
         setSeriesError(
@@ -179,14 +240,14 @@ export function EarthMap() {
     setViewState(next);
   }, []);
 
-  const handleHistoryYearsChange = useCallback(
-    (years: number) => {
-      setHistoryYears(years);
+  const handleYearsSelect = useCallback(
+    (years: number[]) => {
+      setSelectedYears(years);
       if (selection) {
-        void loadTimeSeries(selection, years);
+        void loadTimeSeriesForYears(selection, years);
       }
     },
-    [selection, loadTimeSeries],
+    [selection, loadTimeSeriesForYears],
   );
 
   const handlePick = useCallback(
@@ -197,15 +258,17 @@ export function EarthMap() {
       };
 
       setSelection(nextSelection);
-      const focused = viewStateFocusedOnCell(
-        viewState,
-        nextSelection.grid,
-        viewMode,
-      );
-      flyToView(focused, SELECTION_FOCUS_TRANSITION_MS);
-      void loadTimeSeries(nextSelection, historyYears);
+      if (autoZoom) {
+        const focused = viewStateFocusedOnCell(
+          viewState,
+          nextSelection.grid,
+          viewMode,
+        );
+        flyToView(focused, SELECTION_FOCUS_TRANSITION_MS);
+      }
+      void loadTimeSeriesForYears(nextSelection, selectedYears);
     },
-    [flyToView, gridSpec, historyYears, loadTimeSeries, viewMode, viewState],
+    [autoZoom, flyToView, gridSpec, selectedYears, loadTimeSeriesForYears, viewMode, viewState],
   );
 
   const handleMapClick = useCallback(
@@ -230,9 +293,32 @@ export function EarthMap() {
     flyToView(focused, SELECTION_FOCUS_TRANSITION_MS);
   }, [flyToView, selection, viewMode, viewState]);
 
+  const handleToggleAutoZoom = useCallback(() => {
+    setAutoZoom((previous) => {
+      const next = !previous;
+      try {
+        window.localStorage.setItem(AUTO_ZOOM_STORAGE_KEY, String(next));
+      } catch {
+        // Ignore storage errors
+      }
+      return next;
+    });
+  }, []);
+
   const handleTogglePatch = useCallback(() => {
     setShowPatch((previous) => !previous);
   }, []);
+
+  const handleSidebarWidthChange = useCallback(
+    (width: number) => {
+      setSidebarState({ width, collapsed: sidebar.collapsed });
+    },
+    [sidebar.collapsed],
+  );
+
+  const handleToggleSidebar = useCallback(() => {
+    setSidebarState({ width: sidebar.width, collapsed: !sidebar.collapsed });
+  }, [sidebar.collapsed, sidebar.width]);
 
   const handleMove = useCallback(
     (event: ViewStateChangeEvent) => {
@@ -272,22 +358,30 @@ export function EarthMap() {
     <EditorShell
       controlsOpen={controlsOpen}
       onCloseControls={() => setControlsOpen(false)}
+      sidebarWidth={sidebar.width}
+      sidebarCollapsed={sidebar.collapsed}
+      onSidebarWidthChange={handleSidebarWidthChange}
       header={
         <Nav
           viewMode={viewMode}
           onViewModeChange={handleViewModeChange}
           hasSelection={selection !== null}
           onZoomToSelection={handleZoomToSelection}
+          autoZoom={autoZoom}
+          onToggleAutoZoom={handleToggleAutoZoom}
           showPatch={showPatch}
           onTogglePatch={handleTogglePatch}
+          sidebarCollapsed={sidebar.collapsed}
+          onToggleSidebar={handleToggleSidebar}
         />
       }
       sidebar={
         <MapReadout
           selection={selection}
           gridSpec={gridSpec}
-          historyYears={historyYears}
-          onHistoryYearsChange={handleHistoryYearsChange}
+          selectedYears={selectedYears}
+          cachedYears={cachedYears}
+          onSelectYears={handleYearsSelect}
           loadingSeries={loadingSeries}
           seriesProgress={seriesProgress}
           seriesError={seriesError}
@@ -348,6 +442,8 @@ export function EarthMap() {
             onViewModeChange={handleViewModeChange}
             hasSelection={selection !== null}
             onZoomToSelection={handleZoomToSelection}
+            autoZoom={autoZoom}
+            onToggleAutoZoom={handleToggleAutoZoom}
             showPatch={showPatch}
             onTogglePatch={handleTogglePatch}
             controlsOpen={controlsOpen}
