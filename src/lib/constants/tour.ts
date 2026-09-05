@@ -13,6 +13,8 @@ export type TourStepSpec = {
   mobileSpotlightTarget?: string;
   /** Overrides automatic placement below the desktop breakpoint. */
   mobilePlacement?: "center" | "top";
+  /** Overrides the padding around the lit area below the desktop breakpoint. */
+  mobileSpotlightPadding?: SpotlightPadding | number;
   /** What the mobile sheet should be doing while this step is on screen. */
   mobilePanel?: "open" | "closed";
   /** Where the light falls, when that is a larger region than the anchor. */
@@ -55,6 +57,10 @@ export const TOUR_STEPS: TourStepSpec[] = [
     mobileTarget: '[data-tour="map-foot"]',
     mobileSpotlightTarget: '[data-tour="map"]',
     mobilePlacement: "top",
+    // The map runs to the edge of the screen, so the usual outward padding
+    // would push its lit border past the viewport, where the overlay clip
+    // trims it away. Hugging the map exactly keeps the border on screen.
+    mobileSpotlightPadding: 0,
     title: "Start with a place",
     body: [
       "Click anywhere on land, or search for a place or coordinates.",
@@ -134,6 +140,17 @@ export function tourStepsFor(isMobile: boolean): TourStepSpec[] {
 /** Where a step anchors in that arrangement. */
 export function tourTargetFor(spec: TourStepSpec, isMobile: boolean): string {
   return (isMobile && spec.mobileTarget) || spec.target;
+}
+
+/** The padding around the lit area for one arrangement. */
+export function tourSpotlightPaddingFor(
+  spec: TourStepSpec,
+  isMobile: boolean,
+): SpotlightPadding | number | undefined {
+  if (isMobile && spec.mobileSpotlightPadding !== undefined) {
+    return spec.mobileSpotlightPadding;
+  }
+  return spec.spotlightPadding;
 }
 
 /** What the light falls on, when that differs from the anchor. */

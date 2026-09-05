@@ -5,6 +5,7 @@ import { Joyride, type Step, type TooltipRenderProps } from "react-joyride";
 import {
   EMPTY_CELL_HINT,
   tourSpotlightFor,
+  tourSpotlightPaddingFor,
   tourStepsFor,
   tourTargetFor,
 } from "@/lib/constants/tour";
@@ -31,6 +32,16 @@ type MapTourProps = {
 
 /** Above the icon tooltips at z-200, which are the highest thing in the app. */
 const TOUR_Z_INDEX = 300;
+
+/**
+ * The mobile sheet's own transition, plus a frame. Nothing emits an event when
+ * it lands, so a step pointing into it waits this out before being measured.
+ */
+const SHEET_TRANSITION_MS = 420;
+
+function sheetSettled(): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, SHEET_TRANSITION_MS));
+}
 
 /** Breathing room between the target and the lit edge. */
 const SPOTLIGHT_PADDING = 8;
@@ -217,6 +228,9 @@ export function MapTour({
 
   if (!run) return null;
 
+  const paddingFor = (spec: (typeof activeSteps)[number]) =>
+    tourSpotlightPaddingFor(spec, isMobile);
+
   const steps: Step[] = activeSteps.map((spec, index) => {
     const emptyCell =
       spec.id === "pick" &&
@@ -231,8 +245,13 @@ export function MapTour({
       // Only when the step overrides it. Joyride picks this key off the step
       // and merges it over `options`, so passing `undefined` on the other
       // steps wiped out the shared padding instead of falling back to it.
-      ...(spec.spotlightPadding
-        ? { spotlightPadding: spec.spotlightPadding }
+      ...(paddingFor(spec) !== undefined
+        ? { spotlightPadding: paddingFor(spec) }
+        : {}),
+      // The sheet slides for 380ms and Joyride measures the target once, so a
+      // step entered mid-slide lights the wrong rectangle and stays wrong.
+      ...(isMobile && spec.mobilePanel
+        ? { before: () => sheetSettled() }
         : {}),
       title: spec.title,
       content: emptyCell ? [EMPTY_CELL_HINT] : spec.body,
