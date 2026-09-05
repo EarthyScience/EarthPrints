@@ -7,7 +7,9 @@ import {
 } from "@/lib/zarr/chunks";
 import {
   createByteProgressSink,
+  isAbortError,
   openZarrStore,
+  setActiveAbortSignal,
   setActiveByteSink,
   type ZarrStore,
 } from "@/lib/zarr/store";
@@ -26,6 +28,7 @@ import {
  */
 
 export type ChunkRequest = {
+  type: "decode";
   id: number;
   storeUrl: string;
   variable: string;
@@ -34,6 +37,14 @@ export type ChunkRequest = {
   localLon: number;
   radius: number;
 };
+
+/** Abandon a decode: drop it if queued, abort its download if running. */
+export type CancelRequest = {
+  type: "cancel";
+  id: number;
+};
+
+export type WorkerMessage = ChunkRequest | CancelRequest;
 
 export type ChunkResponse =
   | { id: number; type: "progress"; loaded: number; total: number }
@@ -58,6 +69,10 @@ let storePromise: Promise<ZarrStore> | null = null;
 const arrayPromises = new Map<string, Promise<ZarrArray>>();
 // Serialises decoding so only one chunk is ever resident.
 let queue: Promise<unknown> = Promise.resolve();
+// Abort handles for decodes that are running, and ids cancelled before their
+// turn in the queue came up.
+const running = new Map<number, AbortController>();
+const cancelledBeforeStart = new Set<number>();
 
 function getStore(url: string): Promise<ZarrStore> {
   if (!storePromise) {
@@ -86,6 +101,12 @@ function getArray(url: string, variable: string): Promise<ZarrArray> {
 }
 
 async function handle(request: ChunkRequest): Promise<void> {
+  // Cancelled while it sat in the queue: never start it.
+  if (cancelledBeforeStart.delete(request.id)) return;
+
+  const controller = new AbortController();
+  running.set(request.id, controller);
+
   try {
     const array = await getArray(request.storeUrl, request.variable);
     const sink = createByteProgressSink((loaded, total) => {
@@ -98,11 +119,13 @@ async function handle(request: ChunkRequest): Promise<void> {
     });
 
     setActiveByteSink(sink);
+    setActiveAbortSignal(controller.signal);
     let chunk: { data: Float32Array; shape: number[] };
     try {
       chunk = await array.getChunk(request.chunkCoords);
     } finally {
       setActiveByteSink(null);
+      setActiveAbortSignal(null);
     }
 
     const block = neighborhoodBlock(
@@ -124,15 +147,32 @@ async function handle(request: ChunkRequest): Promise<void> {
       [values.buffer],
     );
   } catch (error) {
+    // The caller that aborted has already settled its own promise; there is
+    // nobody left to tell.
+    if (isAbortError(error)) return;
     scope.postMessage({
       id: request.id,
       type: "error",
       message: error instanceof Error ? error.message : String(error),
     } satisfies ChunkResponse);
+  } finally {
+    running.delete(request.id);
   }
 }
 
-scope.onmessage = (event: MessageEvent<ChunkRequest>) => {
-  const request = event.data;
-  queue = queue.then(() => handle(request));
+scope.onmessage = (event: MessageEvent<WorkerMessage>) => {
+  const message = event.data;
+
+  if (message.type === "cancel") {
+    const controller = running.get(message.id);
+    if (controller) {
+      controller.abort();
+      running.delete(message.id);
+    } else {
+      cancelledBeforeStart.add(message.id);
+    }
+    return;
+  }
+
+  queue = queue.then(() => handle(message));
 };

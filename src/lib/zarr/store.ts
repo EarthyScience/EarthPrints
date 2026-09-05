@@ -50,6 +50,30 @@ export function getActiveByteSink(): ByteSink | null {
   return activeByteSink;
 }
 
+// Swapped in alongside the sink so an abandoned request stops downloading
+// instead of running to completion for a result nobody will read.
+let activeAbortSignal: AbortSignal | null = null;
+
+export function setActiveAbortSignal(signal: AbortSignal | null): void {
+  activeAbortSignal = signal;
+}
+
+export function getActiveAbortSignal(): AbortSignal | null {
+  return activeAbortSignal;
+}
+
+/** The rejection used when a caller abandons a decode. */
+export function abortError(): Error {
+  const error = new Error("Chunk decode aborted");
+  error.name = "AbortError";
+  return error;
+}
+
+/** True when the error is a fetch abort rather than a real failure. */
+export function isAbortError(error: unknown): boolean {
+  return error instanceof Error && error.name === "AbortError";
+}
+
 /**
  * Attempts per request, the first included. A picked coordinate fans out into
  * one request per native chunk, and a single flaky one fails the whole series,
@@ -108,7 +132,12 @@ async function progressFetch(request: Request): Promise<Response> {
   // the request that was active when it started even if another request swaps
   // the global sink in while we await the response.
   const sink = activeByteSink;
-  const response = await fetchWithRetry(request);
+  // Bind the signal onto the Request so fetchWithRetry's clones keep it and
+  // its own aborted check sees it.
+  const signal = activeAbortSignal;
+  const response = await fetchWithRetry(
+    signal ? new Request(request, { signal }) : request,
+  );
   const total = Number(response.headers.get("content-length"));
 
   if (

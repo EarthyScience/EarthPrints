@@ -18,9 +18,12 @@ import {
   yearsToDayRange,
 } from "@/lib/zarr/timeRange";
 import {
+  abortError,
   createByteProgressSink,
+  isAbortError,
   createSeriesProgressTracker,
   getActiveByteSink,
+  setActiveAbortSignal,
   setActiveByteSink,
   type SeriesProgressTracker,
   type ZarrArrayHandle,
@@ -46,6 +49,17 @@ type CachedPixelSeries = {
  */
 const NEIGHBORHOOD_RADIUS = 2;
 
+/**
+ * A decode several callers may be waiting on. The controller is only aborted
+ * once every waiter has dropped out, so one caller walking away does not
+ * cancel the chunk another still wants.
+ */
+type InFlightDecode = {
+  promise: Promise<CachedPixelSeries>;
+  controller: AbortController;
+  waiters: number;
+};
+
 /** Reports download progress as `loaded` of `total` bytes. */
 export type SeriesProgress = (loaded: number, total: number) => void;
 
@@ -59,7 +73,7 @@ export class ZarrChunkReader {
   private ds: ZarrStore;
   private cache: LRUCache<string, CachedPixelSeries>;
   private arrayPromises = new Map<string, Promise<ZarrArray>>();
-  private chunkLoadsInFlight = new Map<string, Promise<CachedPixelSeries>>();
+  private chunkLoadsInFlight = new Map<string, InFlightDecode>();
   private gridSpecPromise?: Promise<GridSpec>;
   private workerClient: ChunkWorkerClient | null = null;
   private workerChecked = false;
@@ -143,10 +157,12 @@ export class ZarrChunkReader {
     timeChunkIdx: number,
     chunkSizes: ArrayChunkSizes,
     tracker: SeriesProgressTracker | null,
+    signal: AbortSignal | undefined,
   ): Promise<CachedPixelSeries> {
     const loadKey = `${variable}:${timeChunkIdx}:${context.chunkLatIdx}:${context.chunkLonIdx}:${context.localLat}:${context.localLon}`;
-    const inFlight = this.chunkLoadsInFlight.get(loadKey);
-    if (inFlight) return inFlight;
+
+    const existing = this.chunkLoadsInFlight.get(loadKey);
+    if (existing) return this.join(existing, signal);
 
     const chunkCoords = [
       timeChunkIdx,
@@ -155,12 +171,14 @@ export class ZarrChunkReader {
       context.chunkLonIdx,
     ];
 
+    const controller = new AbortController();
     const promise = this.decodeBlock(
       array,
       variable,
       chunkCoords,
       context,
       tracker,
+      controller.signal,
     )
       .then((decoded) => {
         this.storeNeighborhood(
@@ -176,8 +194,51 @@ export class ZarrChunkReader {
         this.chunkLoadsInFlight.delete(loadKey);
       });
 
-    this.chunkLoadsInFlight.set(loadKey, promise);
-    return promise;
+    const entry: InFlightDecode = { promise, controller, waiters: 0 };
+    this.chunkLoadsInFlight.set(loadKey, entry);
+    return this.join(entry, signal);
+  }
+
+  /**
+   * Wait on a shared decode. The underlying download is only aborted once the
+   * last waiter has given up.
+   */
+  private join(
+    entry: InFlightDecode,
+    signal: AbortSignal | undefined,
+  ): Promise<CachedPixelSeries> {
+    if (!signal) return entry.promise;
+    if (signal.aborted) return Promise.reject(abortError());
+
+    entry.waiters += 1;
+    let released = false;
+    const release = () => {
+      if (released) return;
+      released = true;
+      entry.waiters -= 1;
+      if (entry.waiters <= 0) entry.controller.abort();
+    };
+
+    return new Promise<CachedPixelSeries>((resolve, reject) => {
+      const onAbort = () => {
+        release();
+        reject(abortError());
+      };
+      signal.addEventListener("abort", onAbort, { once: true });
+
+      entry.promise.then(
+        (value) => {
+          signal.removeEventListener("abort", onAbort);
+          entry.waiters -= 1;
+          resolve(value);
+        },
+        (error) => {
+          signal.removeEventListener("abort", onAbort);
+          entry.waiters -= 1;
+          reject(error);
+        },
+      );
+    });
   }
 
   /** The requested pixel's own series, read out of the harvested block. */
@@ -205,6 +266,7 @@ export class ZarrChunkReader {
     chunkCoords: number[],
     context: PixelNativeChunkContext,
     tracker: SeriesProgressTracker | null,
+    signal: AbortSignal,
   ): Promise<DecodedBlock> {
     const worker = this.getWorker();
 
@@ -220,8 +282,12 @@ export class ZarrChunkReader {
             radius: NEIGHBORHOOD_RADIUS,
           },
           tracker ? (loaded, total) => tracker.update(loaded, total) : undefined,
+          signal,
         );
-      } catch {
+      } catch (error) {
+        // An abort is the caller's own decision, not a broken worker: let it
+        // through rather than retiring the worker and re-fetching inline.
+        if (isAbortError(error)) throw error;
         // A worker that fails once (bad module resolution, a store it cannot
         // reach) will keep failing, so retire it and decode inline instead.
         // Slow beats broken.
@@ -233,12 +299,14 @@ export class ZarrChunkReader {
       ? createByteProgressSink((loaded, total) => tracker.update(loaded, total))
       : null;
     if (sink) setActiveByteSink(sink);
+    setActiveAbortSignal(signal);
     let chunk: { data: Float32Array; shape: number[] };
     try {
       chunk = await array.getChunk(chunkCoords);
     } finally {
       // Only clear if a newer request has not already swapped in its own sink.
       if (sink && getActiveByteSink() === sink) setActiveByteSink(null);
+      setActiveAbortSignal(null);
     }
 
     const block = neighborhoodBlock(
@@ -292,6 +360,7 @@ export class ZarrChunkReader {
     variable = ZARR_STORE.defaultVariable,
     historyYears?: number,
     onProgress?: SeriesProgress,
+    signal?: AbortSignal,
   ): Promise<{ values: Float32Array; variable: string; units?: string }> {
     const array = await this.getArray(variable);
     const chunkSizes = this.getChunkSizes(array);
@@ -327,6 +396,10 @@ export class ZarrChunkReader {
     // all of them at once is what exhausted memory on mobile.
     const segments: CachedPixelSeries[] = [];
     for (const timeChunkIdx of context.timeChunkIndices) {
+      // Stop between chunks too, so an abandoned request does not start the
+      // next download after the current one was already paid for.
+      if (signal?.aborted) throw abortError();
+
       const cached = this.cache.get(keyFor(timeChunkIdx));
       if (cached) {
         segments.push(cached);
@@ -341,6 +414,7 @@ export class ZarrChunkReader {
           timeChunkIdx,
           chunkSizes,
           tracker,
+          signal,
         ),
       );
       tracker?.complete();

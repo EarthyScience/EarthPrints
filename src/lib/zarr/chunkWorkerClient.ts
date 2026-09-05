@@ -1,8 +1,10 @@
 import type {
   ChunkRequest,
   ChunkResponse,
+  WorkerMessage,
 } from "@/lib/zarr/chunk.worker";
 import type { LocalBlock } from "@/lib/zarr/chunks";
+import { abortError } from "@/lib/zarr/store";
 
 export type DecodedBlock = {
   block: LocalBlock;
@@ -74,14 +76,41 @@ export class ChunkWorkerClient {
   }
 
   decode(
-    request: Omit<ChunkRequest, "id">,
+    request: Omit<ChunkRequest, "id" | "type">,
     onProgress?: (loaded: number, total: number) => void,
+    signal?: AbortSignal,
   ): Promise<DecodedBlock> {
     const id = ++this.nextId;
+
     return new Promise<DecodedBlock>((resolve, reject) => {
-      this.pending.set(id, { resolve, reject, onProgress });
-      this.worker.postMessage({ ...request, id } satisfies ChunkRequest);
+      if (signal?.aborted) {
+        reject(abortError());
+        return;
+      }
+
+      const onAbort = () => {
+        this.pending.delete(id);
+        this.post({ type: "cancel", id });
+        reject(abortError());
+      };
+      signal?.addEventListener("abort", onAbort, { once: true });
+
+      const settle = <T>(fn: (value: T) => void) => (value: T) => {
+        signal?.removeEventListener("abort", onAbort);
+        fn(value);
+      };
+
+      this.pending.set(id, {
+        resolve: settle(resolve),
+        reject: settle(reject),
+        onProgress,
+      });
+      this.post({ type: "decode", ...request, id });
     });
+  }
+
+  private post(message: WorkerMessage): void {
+    this.worker.postMessage(message);
   }
 
   terminate(): void {

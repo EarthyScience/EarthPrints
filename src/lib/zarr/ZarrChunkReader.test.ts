@@ -265,6 +265,106 @@ describe("ZarrChunkReader", () => {
     expect(Array.from(series.values)).toEqual([1, 2, 3, 4, 1, 2, 3, 4]);
   });
 
+  it("stops between chunks once the caller aborts", async () => {
+    const controller = new AbortController();
+    let calls = 0;
+    mockGetChunk.mockImplementation(async (coords: number[]) => {
+      calls += 1;
+      // Abandon the request while its first chunk is being decoded.
+      if (calls === 1) controller.abort();
+      const [timeChunkIdx] = coords;
+      const shape = [2, 2, 40, 40] as const;
+      const data = makeChunkData(shape);
+      for (let i = 0; i < data.length; i++) {
+        data[i] += timeChunkIdx * 10_000;
+      }
+      return { data, shape: [...shape] };
+    });
+
+    const reader = new ZarrChunkReader(ds);
+    await expect(
+      reader.getTimeSeries(makeGrid(50, 50), undefined, undefined, undefined, controller.signal),
+    ).rejects.toMatchObject({ name: "AbortError" });
+
+    // The second chunk was never started.
+    expect(mockGetChunk).toHaveBeenCalledTimes(1);
+  });
+
+  it("rejects immediately when handed an already-aborted signal", async () => {
+    const controller = new AbortController();
+    controller.abort();
+
+    const reader = new ZarrChunkReader(ds);
+    await expect(
+      reader.getTimeSeries(makeGrid(50, 50), undefined, undefined, undefined, controller.signal),
+    ).rejects.toMatchObject({ name: "AbortError" });
+
+    expect(mockGetChunk).not.toHaveBeenCalled();
+  });
+
+  it("keeps a shared decode alive for the callers still waiting", async () => {
+    const controller = new AbortController();
+    let release: (() => void) | undefined;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+
+    mockGetChunk.mockImplementation(async (coords: number[]) => {
+      await gate;
+      const [timeChunkIdx] = coords;
+      const shape = [2, 2, 40, 40] as const;
+      const data = makeChunkData(shape);
+      for (let i = 0; i < data.length; i++) {
+        data[i] += timeChunkIdx * 10_000;
+      }
+      return { data, shape: [...shape] };
+    });
+
+    const reader = new ZarrChunkReader(ds);
+    const abandoned = reader.getTimeSeries(
+      makeGrid(50, 50), undefined, undefined, undefined, controller.signal,
+    );
+    const kept = reader.getTimeSeries(makeGrid(50, 50));
+
+    // One caller walks away; the other must still get its data.
+    controller.abort();
+    await expect(abandoned).rejects.toMatchObject({ name: "AbortError" });
+    release!();
+
+    const series = await kept;
+    expect(Array.from(series.values)).toEqual([
+      110, 210, 1110, 1210, 10_110, 10_210, 11_110, 11_210,
+    ]);
+  });
+
+  it("hands the worker a signal so the download can be cancelled", async () => {
+    const decode = vi.fn<
+      (
+        request: DecodeRequest,
+        onProgress?: (loaded: number, total: number) => void,
+        signal?: AbortSignal,
+      ) => Promise<DecodedBlock>
+    >(async () => ({
+      block: {
+        localLatStart: 10,
+        localLatCount: 1,
+        localLonStart: 10,
+        localLonCount: 1,
+      },
+      seriesLength: 4,
+      values: new Float32Array([1, 2, 3, 4]),
+    }));
+    mockCreateWorker.mockReturnValue({
+      decode,
+      terminate: vi.fn(),
+    } as unknown as ChunkWorkerClient);
+
+    const reader = new ZarrChunkReader(ds);
+    await reader.getTimeSeries(makeGrid(50, 50));
+
+    expect(decode.mock.calls[0]![2]).toBeInstanceOf(AbortSignal);
+  });
+
   it("falls back to inline decoding when the worker fails", async () => {
     const decode = vi.fn<
       (request: DecodeRequest) => Promise<DecodedBlock>

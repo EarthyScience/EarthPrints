@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import type { GridSpec, MapSelection } from "@/types/map";
 import { formatLatitude, formatLongitude } from "@/lib/map/geogrid";
 import { DEFAULT_GRID_SPEC, ZARR_STORE } from "@/lib/constants/store";
@@ -49,6 +49,12 @@ export function MapReadout({
   const [selectedYear, setSelectedYear] = useState<number | null>(null);
   const historyLabel =
     historyYears === 1 ? "Last 1 year" : `Last ${historyYears} years`;
+  // An all-NaN cell has nothing to draw, download, or switch views on.
+  const hasPlottableData = useMemo(
+    () => seriesValues !== null && hasFiniteValues(seriesValues),
+    [seriesValues],
+  );
+  const isEmptyCell = !loadingSeries && seriesValues !== null && !hasPlottableData;
 
   if (!selection) {
     return (
@@ -107,12 +113,16 @@ export function MapReadout({
 
       {/* View switch left, download right, on the row between title and plot. */}
       <div className="mb-3 mt-2 flex items-center justify-between gap-3 shrink-0">
-        <PlotViewToggle view={plotView} onChange={setPlotView} />
+        <PlotViewToggle
+          view={plotView}
+          onChange={setPlotView}
+          disabled={isEmptyCell}
+        />
         <DownloadButton
           selection={selection}
           gridSpec={gridSpec}
           historyYears={historyYears}
-          values={loadingSeries ? null : seriesValues}
+          values={loadingSeries || !hasPlottableData ? null : seriesValues}
           units={seriesUnits}
           selectedYear={selectedYear}
         />
@@ -131,7 +141,7 @@ export function MapReadout({
         <p className="text-[13px] leading-[1.55] text-editor-fg-tertiary">
           {seriesError}
         </p>
-      ) : seriesValues && !hasFiniteValues(seriesValues) ? (
+      ) : isEmptyCell ? (
         <p className="text-[13px] leading-[1.55] text-editor-fg-tertiary">
           No data at this cell. NEE is estimated over vegetated land, so ocean
           and bare-ground cells are empty. Pick a cell over vegetation.
@@ -186,9 +196,11 @@ export function MapReadout({
 function PlotViewToggle({
   view,
   onChange,
+  disabled = false,
 }: {
   view: PlotView;
   onChange: (view: PlotView) => void;
+  disabled?: boolean;
 }) {
   const options: { id: PlotView; label: string }[] = [
     { id: "line", label: "Line" },
@@ -208,8 +220,9 @@ function PlotViewToggle({
             type="button"
             role="tab"
             aria-selected={active}
+            disabled={disabled}
             onClick={() => onChange(option.id)}
-            className={`rounded-[5px] px-2 py-0.5 text-[11.5px] font-semibold transition-colors ${
+            className={`rounded-[5px] px-2 py-0.5 text-[11.5px] font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${
               active
                 ? "bg-accent text-white"
                 : "text-editor-fg-tertiary hover:text-editor-fg-secondary"

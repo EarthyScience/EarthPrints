@@ -75,6 +75,9 @@ export function EarthMap() {
   const { isLight } = useTheme();
   const readerPromiseRef = useRef<Promise<ZarrChunkReader> | null>(null);
   const requestIdRef = useRef(0);
+  // Aborts the previous series load so a superseded pick stops downloading
+  // rather than finishing a chunk nobody will read.
+  const seriesAbortRef = useRef<AbortController | null>(null);
   const mapStageRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<MapRef>(null);
 
@@ -172,6 +175,9 @@ export function EarthMap() {
   const loadTimeSeries = useCallback(
     async (nextSelection: MapSelection, years: number) => {
       const requestId = ++requestIdRef.current;
+      seriesAbortRef.current?.abort();
+      const abort = new AbortController();
+      seriesAbortRef.current = abort;
       setLoadingSeries(true);
       setSeriesProgress(null);
       setSeriesError(null);
@@ -189,6 +195,7 @@ export function EarthMap() {
             if (requestId !== requestIdRef.current) return;
             setSeriesProgress({ loaded, total });
           },
+          abort.signal,
         );
 
         if (requestId !== requestIdRef.current) return;
@@ -197,6 +204,8 @@ export function EarthMap() {
         setSeriesUnits(units ?? null);
       } catch (error) {
         if (requestId !== requestIdRef.current) return;
+        // A newer pick already took over; its own load owns the panel.
+        if (error instanceof Error && error.name === "AbortError") return;
         setSeriesError(
           error instanceof Error
             ? error.message
