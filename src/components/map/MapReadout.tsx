@@ -12,7 +12,6 @@ import { FingerprintPlot } from "@/components/map/FingerprintPlot";
 import { FingerprintPlotLoading } from "@/components/map/FingerprintPlotLoading";
 import { ProgressBar } from "@/components/ui/ProgressBar";
 import { DownloadButton } from "@/components/map/DownloadButton";
-import { YearSelector } from "@/components/map/YearSelector";
 
 type PlotView = "line" | "fingerprint";
 
@@ -23,8 +22,8 @@ type MapReadoutProps = {
   gridSpec?: GridSpec;
   variable?: string;
   selectedYears: number[];
-  cachedYears?: Set<number>;
-  onSelectYears: (years: number[]) => void;
+  historyYears: number;
+  onHistoryYearsChange: (years: number) => void;
   loadingSeries: boolean;
   seriesProgress: SeriesProgress | null;
   seriesError: string | null;
@@ -40,8 +39,8 @@ export function MapReadout({
   gridSpec = DEFAULT_GRID_SPEC,
   variable = ZARR_STORE.defaultVariable,
   selectedYears,
-  cachedYears = new Set(),
-  onSelectYears,
+  historyYears,
+  onHistoryYearsChange,
   loadingSeries,
   seriesProgress,
   seriesError,
@@ -50,6 +49,8 @@ export function MapReadout({
 }: MapReadoutProps) {
   const [plotView, setPlotView] = useState<PlotView>("line");
   const [fingerprintTransposed, setFingerprintTransposed] = useState(false);
+  const historyLabel =
+    historyYears === 1 ? "Last 1 year" : `Last ${historyYears} years`;
   // An all-NaN cell has nothing to draw, download, or switch views on.
   const hasPlottableData = useMemo(
     () => seriesValues !== null && hasFiniteValues(seriesValues),
@@ -82,12 +83,28 @@ export function MapReadout({
   const gridResolution = Number(gridSpec.spatialResolutionDeg.toFixed(2));
 
   const historyControl = (
-    <YearSelector
-      selectedYears={selectedYears}
-      cachedYears={cachedYears}
-      loading={loadingSeries}
-      onSelectYears={onSelectYears}
-    />
+    <section>
+      <div className="mb-3 flex items-baseline justify-between gap-3">
+        <label className={SECTION_LABEL} htmlFor="history-years">
+          History window
+        </label>
+        <span className="font-mono text-[12.5px] font-semibold text-accent">
+          {historyLabel}
+        </span>
+      </div>
+      <input
+        id="history-years"
+        className="w-full cursor-pointer [accent-color:var(--accent)]"
+        type="range"
+        min={ZARR_TIME.defaultHistoryYears}
+        max={ZARR_TIME.maxHistoryYears}
+        step={1}
+        value={historyYears}
+        onChange={(event) =>
+          onHistoryYearsChange(Number(event.currentTarget.value))
+        }
+      />
+    </section>
   );
 
   const chart = (
