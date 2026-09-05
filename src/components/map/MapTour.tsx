@@ -72,10 +72,12 @@ function TourCard({
 }: TooltipRenderProps) {
   const waiting = Boolean((step.data as { waiting?: boolean } | undefined)?.waiting);
 
+  // A deep shadow would fall across the lit area, which on a phone is often
+  // directly below the card. The border and the dimmed page already lift it.
   return (
     <div
       {...tooltipProps}
-      className="w-[min(360px,calc(100vw-2rem))] rounded-editor-md border border-[color-mix(in_srgb,var(--accent)_40%,transparent)] bg-editor-bg-primary p-4 shadow-[0_16px_48px_rgba(0,0,0,0.45)]"
+      className="w-[min(360px,calc(100vw-2rem))] rounded-editor-md border border-[color-mix(in_srgb,var(--accent)_40%,transparent)] bg-editor-bg-primary p-4 shadow-[0_2px_12px_rgba(0,0,0,0.35)]"
     >
       <p className="text-[13.5px] font-semibold text-editor-fg-primary">
         {step.title}
