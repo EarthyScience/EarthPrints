@@ -99,7 +99,11 @@ export function YearSelector({
         {ALL_AVAILABLE_YEARS.map((year) => {
           const isSelected = selectedSet.has(year);
           const isCached = cachedYears.has(year);
-          const isLoading = isSelected && loading;
+          // A selected year stays clickable while its data loads, so it can
+          // be dropped again without waiting out a fetch that can run for
+          // tens of seconds; the superseded request is cancelled. Only the
+          // last remaining year locks, where the click is a no-op anyway.
+          const isLocked = isSelected && loading && activeYears.length === 1;
 
           return (
             <button
@@ -107,7 +111,7 @@ export function YearSelector({
               type="button"
               onClick={(e) => handleYearClick(year, e)}
               aria-pressed={isSelected}
-              disabled={isLoading}
+              disabled={isLocked}
               title={
                 isSelected
                   ? `Year ${year} (Selected · Shift+click for range)`
