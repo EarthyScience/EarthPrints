@@ -15,7 +15,11 @@ import Map, {
 import "maplibre-gl/dist/maplibre-gl.css";
 import { geoPointToZarrGrid } from "@/lib/map/geogrid";
 import { brightenDarkMapPlaceLabels } from "@/lib/map/mapLabels";
-import type { MapLibreEvent, MapStyleDataEvent } from "maplibre-gl";
+import type {
+  Map as MapLibreMap,
+  MapLibreEvent,
+  MapStyleDataEvent,
+} from "maplibre-gl";
 import {
   DEFAULT_MAP_VIEW,
   MAP_BASE_STYLES,
@@ -335,15 +339,36 @@ export function EarthMap() {
     [isLight],
   );
 
+  // `touchZoomRotate` is a single MapLibre handler covering both pinch-zoom
+  // and two-finger rotate. Disabling it to keep the flat map unrotated also
+  // removed pinch-zoom on touch devices, so it stays enabled and only its
+  // rotation half is toggled with the projection.
+  const applyTouchRotation = useCallback(
+    (map: MapLibreMap) => {
+      if (isSphere) {
+        map.touchZoomRotate.enableRotation();
+      } else {
+        map.touchZoomRotate.disableRotation();
+      }
+    },
+    [isSphere],
+  );
+
+  useEffect(() => {
+    const map = mapRef.current?.getMap();
+    if (map) applyTouchRotation(map);
+  }, [applyTouchRotation]);
+
   const handleMapLoad = useCallback(
     (event: MapLibreEvent) => {
       applyDarkMapLabelColors(event);
+      applyTouchRotation(event.target);
       if (isSphere) {
         event.target.setProjection({ type: "globe" });
       }
       event.target.resize();
     },
-    [applyDarkMapLabelColors, isSphere],
+    [applyDarkMapLabelColors, applyTouchRotation, isSphere],
   );
 
   const handleStyleData = useCallback(
@@ -408,7 +433,7 @@ export function EarthMap() {
             maxZoom={22}
             dragRotate={isSphere}
             pitchWithRotate={isSphere}
-            touchZoomRotate={isSphere}
+            touchZoomRotate
             touchPitch={isSphere}
             maxPitch={isSphere ? 85 : 0}
             onMove={handleMove}

@@ -82,7 +82,7 @@ export function EditorShell({
   };
 
   return (
-    <div className="editor-shell flex h-svh flex-col overflow-hidden bg-editor-bg-base text-editor-fg-primary">
+    <div className="editor-shell flex h-dvh flex-col overflow-hidden bg-editor-bg-base text-editor-fg-primary">
       <header className="relative z-[100] flex-shrink-0 overflow-visible bg-editor-bg-base">
         {header}
       </header>
