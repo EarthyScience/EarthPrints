@@ -3,7 +3,6 @@
 import {
   useCallback,
   useEffect,
-  useMemo,
   useRef,
   useState,
   useSyncExternalStore,
@@ -30,10 +29,6 @@ import {
 } from "@/lib/map/viewState";
 import { openZarrStore } from "@/lib/zarr/store";
 import { ZarrChunkReader } from "@/lib/zarr/ZarrChunkReader";
-import {
-  ALL_AVAILABLE_YEARS,
-  DEFAULT_HISTORY_YEARS,
-} from "@/lib/zarr/timeRange";
 import { DEFAULT_GRID_SPEC } from "@/lib/constants/store";
 import type {
   GridSpec,
@@ -117,14 +112,8 @@ export function EarthMap() {
     getSidebarState,
     getServerSidebarState,
   );
-  const [historyYears, setHistoryYears] = useState(DEFAULT_HISTORY_YEARS);
-  // The window is always the most recent N years, which is what the slider
-  // expresses. Kept as a year list because the fingerprint plot and the
-  // export path both label their output by calendar year.
-  const selectedYears = useMemo(
-    () => ALL_AVAILABLE_YEARS.slice(-historyYears),
-    [historyYears],
-  );
+  const [selectedYears, setSelectedYears] = useState<number[]>([2021]);
+  const [cachedYears, setCachedYears] = useState<Set<number>>(new Set());
   const [loadingSeries, setLoadingSeries] = useState(false);
   const [seriesProgress, setSeriesProgress] = useState<{
     loaded: number;
@@ -215,6 +204,8 @@ export function EarthMap() {
 
       try {
         const reader = await ensureReader();
+        setCachedYears(new Set(reader.getCachedYears(nextSelection.grid)));
+
         const { values, units } = await reader.getTimeSeriesForYears(
           nextSelection.grid,
           years,
@@ -230,6 +221,7 @@ export function EarthMap() {
 
         setSeriesValues(values);
         setSeriesUnits(units ?? null);
+        setCachedYears(new Set(reader.getCachedYears(nextSelection.grid)));
       } catch (error) {
         if (requestId !== requestIdRef.current) return;
         // A newer pick already took over; its own load owns the panel.
@@ -260,14 +252,11 @@ export function EarthMap() {
     setViewState(next);
   }, []);
 
-  const handleHistoryYearsChange = useCallback(
-    (years: number) => {
-      setHistoryYears(years);
+  const handleYearsSelect = useCallback(
+    (years: number[]) => {
+      setSelectedYears(years);
       if (selection) {
-        void loadTimeSeriesForYears(
-          selection,
-          ALL_AVAILABLE_YEARS.slice(-years),
-        );
+        void loadTimeSeriesForYears(selection, years);
       }
     },
     [selection, loadTimeSeriesForYears],
@@ -424,8 +413,8 @@ export function EarthMap() {
           selection={selection}
           gridSpec={gridSpec}
           selectedYears={selectedYears}
-          historyYears={historyYears}
-          onHistoryYearsChange={handleHistoryYearsChange}
+          cachedYears={cachedYears}
+          onSelectYears={handleYearsSelect}
           loadingSeries={loadingSeries}
           seriesProgress={seriesProgress}
           seriesError={seriesError}
