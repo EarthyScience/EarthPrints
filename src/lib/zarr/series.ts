@@ -36,3 +36,18 @@ export function dailyMeanSeries(
 
   return points;
 }
+
+/**
+ * Whether a series carries any usable number.
+ *
+ * FLUXCOM-X only estimates fluxes over vegetated land, so ocean and
+ * bare-ground cells come back as all-NaN. That is a legitimate answer rather
+ * than a failure, and the plots collapse to nothing when it happens, so
+ * callers use this to say so explicitly instead of rendering a blank panel.
+ */
+export function hasFiniteValues(values: ArrayLike<number>): boolean {
+  for (let i = 0; i < values.length; i++) {
+    if (Number.isFinite(values[i])) return true;
+  }
+  return false;
+}

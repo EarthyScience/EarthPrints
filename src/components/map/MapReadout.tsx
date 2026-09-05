@@ -5,6 +5,7 @@ import type { GridSpec, MapSelection } from "@/types/map";
 import { formatLatitude, formatLongitude } from "@/lib/map/geogrid";
 import { DEFAULT_GRID_SPEC, ZARR_STORE } from "@/lib/constants/store";
 import { ZARR_TIME } from "@/lib/zarr/timeRange";
+import { hasFiniteValues } from "@/lib/zarr/series";
 import { TimeSeriesPlot } from "@/components/map/TimeSeriesPlot";
 import { TimeSeriesPlotLoading } from "@/components/map/TimeSeriesPlotLoading";
 import { FingerprintPlot } from "@/components/map/FingerprintPlot";
@@ -129,6 +130,11 @@ export function MapReadout({
       ) : seriesError ? (
         <p className="text-[13px] leading-[1.55] text-editor-fg-tertiary">
           {seriesError}
+        </p>
+      ) : seriesValues && !hasFiniteValues(seriesValues) ? (
+        <p className="text-[13px] leading-[1.55] text-editor-fg-tertiary">
+          No data at this cell. NEE is estimated over vegetated land, so ocean
+          and bare-ground cells are empty. Pick a cell over vegetation.
         </p>
       ) : seriesValues ? (
         plotView === "line" ? (

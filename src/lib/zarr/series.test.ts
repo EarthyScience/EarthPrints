@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { dailyMeanSeries } from "@/lib/zarr/series";
+import { dailyMeanSeries, hasFiniteValues } from "@/lib/zarr/series";
 
 describe("dailyMeanSeries", () => {
   it("averages each block of hourly values", () => {
@@ -29,5 +29,27 @@ describe("dailyMeanSeries", () => {
     const hourly = new Float32Array([NaN, NaN, 10, 20]);
 
     expect(dailyMeanSeries(hourly, 2)).toEqual([{ day: 2, value: 15 }]);
+  });
+});
+
+describe("hasFiniteValues", () => {
+  it("finds a value among NaNs", () => {
+    expect(hasFiniteValues(new Float32Array([NaN, NaN, -1.5, NaN]))).toBe(true);
+  });
+
+  it("rejects an all-NaN series, as ocean and bare-ground cells return", () => {
+    expect(hasFiniteValues(new Float32Array([NaN, NaN, NaN]))).toBe(false);
+  });
+
+  it("rejects an empty series", () => {
+    expect(hasFiniteValues(new Float32Array())).toBe(false);
+  });
+
+  it("treats infinities as unusable", () => {
+    expect(hasFiniteValues(new Float32Array([Infinity, -Infinity]))).toBe(false);
+  });
+
+  it("accepts zero", () => {
+    expect(hasFiniteValues(new Float32Array([NaN, 0]))).toBe(true);
   });
 });
