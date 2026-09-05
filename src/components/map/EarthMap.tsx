@@ -3,6 +3,7 @@
 import {
   useCallback,
   useEffect,
+  useMemo,
   useRef,
   useState,
   useSyncExternalStore,
@@ -29,7 +30,10 @@ import {
 } from "@/lib/map/viewState";
 import { openZarrStore } from "@/lib/zarr/store";
 import { ZarrChunkReader } from "@/lib/zarr/ZarrChunkReader";
-import { DEFAULT_HISTORY_YEARS } from "@/lib/zarr/timeRange";
+import {
+  ALL_AVAILABLE_YEARS,
+  DEFAULT_HISTORY_YEARS,
+} from "@/lib/zarr/timeRange";
 import { DEFAULT_GRID_SPEC } from "@/lib/constants/store";
 import type {
   GridSpec,
@@ -92,6 +96,9 @@ export function EarthMap() {
   const { isLight } = useTheme();
   const readerPromiseRef = useRef<Promise<ZarrChunkReader> | null>(null);
   const requestIdRef = useRef(0);
+  // Aborts the previous series load so a superseded pick stops downloading
+  // rather than finishing a chunk nobody will read.
+  const seriesAbortRef = useRef<AbortController | null>(null);
   const mapStageRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<MapRef>(null);
 
@@ -110,8 +117,14 @@ export function EarthMap() {
     getSidebarState,
     getServerSidebarState,
   );
-  const [selectedYears, setSelectedYears] = useState<number[]>([2021]);
-  const [cachedYears, setCachedYears] = useState<Set<number>>(new Set());
+  const [historyYears, setHistoryYears] = useState(DEFAULT_HISTORY_YEARS);
+  // The window is always the most recent N years, which is what the slider
+  // expresses. Kept as a year list because the fingerprint plot and the
+  // export path both label their output by calendar year.
+  const selectedYears = useMemo(
+    () => ALL_AVAILABLE_YEARS.slice(-historyYears),
+    [historyYears],
+  );
   const [loadingSeries, setLoadingSeries] = useState(false);
   const [seriesProgress, setSeriesProgress] = useState<{
     loaded: number;
@@ -191,6 +204,9 @@ export function EarthMap() {
   const loadTimeSeriesForYears = useCallback(
     async (nextSelection: MapSelection, years: number[]) => {
       const requestId = ++requestIdRef.current;
+      seriesAbortRef.current?.abort();
+      const abort = new AbortController();
+      seriesAbortRef.current = abort;
       setLoadingSeries(true);
       setSeriesProgress(null);
       setSeriesError(null);
@@ -199,8 +215,6 @@ export function EarthMap() {
 
       try {
         const reader = await ensureReader();
-        setCachedYears(new Set(reader.getCachedYears(nextSelection.grid)));
-
         const { values, units } = await reader.getTimeSeriesForYears(
           nextSelection.grid,
           years,
@@ -209,15 +223,17 @@ export function EarthMap() {
             if (requestId !== requestIdRef.current) return;
             setSeriesProgress({ loaded, total });
           },
+          abort.signal,
         );
 
         if (requestId !== requestIdRef.current) return;
 
         setSeriesValues(values);
         setSeriesUnits(units ?? null);
-        setCachedYears(new Set(reader.getCachedYears(nextSelection.grid)));
       } catch (error) {
         if (requestId !== requestIdRef.current) return;
+        // A newer pick already took over; its own load owns the panel.
+        if (error instanceof Error && error.name === "AbortError") return;
         setSeriesError(
           error instanceof Error
             ? error.message
@@ -244,11 +260,14 @@ export function EarthMap() {
     setViewState(next);
   }, []);
 
-  const handleYearsSelect = useCallback(
-    (years: number[]) => {
-      setSelectedYears(years);
+  const handleHistoryYearsChange = useCallback(
+    (years: number) => {
+      setHistoryYears(years);
       if (selection) {
-        void loadTimeSeriesForYears(selection, years);
+        void loadTimeSeriesForYears(
+          selection,
+          ALL_AVAILABLE_YEARS.slice(-years),
+        );
       }
     },
     [selection, loadTimeSeriesForYears],
@@ -405,8 +424,8 @@ export function EarthMap() {
           selection={selection}
           gridSpec={gridSpec}
           selectedYears={selectedYears}
-          cachedYears={cachedYears}
-          onSelectYears={handleYearsSelect}
+          historyYears={historyYears}
+          onHistoryYearsChange={handleHistoryYearsChange}
           loadingSeries={loadingSeries}
           seriesProgress={seriesProgress}
           seriesError={seriesError}

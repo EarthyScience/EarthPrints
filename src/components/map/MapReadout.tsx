@@ -1,17 +1,17 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import type { GridSpec, MapSelection } from "@/types/map";
 import { formatLatitude, formatLongitude } from "@/lib/map/geogrid";
 import { DEFAULT_GRID_SPEC, ZARR_STORE } from "@/lib/constants/store";
 import { ZARR_TIME } from "@/lib/zarr/timeRange";
+import { hasFiniteValues } from "@/lib/zarr/series";
 import { TimeSeriesPlot } from "@/components/map/TimeSeriesPlot";
 import { TimeSeriesPlotLoading } from "@/components/map/TimeSeriesPlotLoading";
 import { FingerprintPlot } from "@/components/map/FingerprintPlot";
 import { FingerprintPlotLoading } from "@/components/map/FingerprintPlotLoading";
 import { ProgressBar } from "@/components/ui/ProgressBar";
 import { DownloadButton } from "@/components/map/DownloadButton";
-import { YearSelector } from "@/components/map/YearSelector";
 
 type PlotView = "line" | "fingerprint";
 
@@ -22,8 +22,8 @@ type MapReadoutProps = {
   gridSpec?: GridSpec;
   variable?: string;
   selectedYears: number[];
-  cachedYears?: Set<number>;
-  onSelectYears: (years: number[]) => void;
+  historyYears: number;
+  onHistoryYearsChange: (years: number) => void;
   loadingSeries: boolean;
   seriesProgress: SeriesProgress | null;
   seriesError: string | null;
@@ -39,8 +39,8 @@ export function MapReadout({
   gridSpec = DEFAULT_GRID_SPEC,
   variable = ZARR_STORE.defaultVariable,
   selectedYears,
-  cachedYears = new Set(),
-  onSelectYears,
+  historyYears,
+  onHistoryYearsChange,
   loadingSeries,
   seriesProgress,
   seriesError,
@@ -49,6 +49,15 @@ export function MapReadout({
 }: MapReadoutProps) {
   const [plotView, setPlotView] = useState<PlotView>("line");
   const [fingerprintTransposed, setFingerprintTransposed] = useState(false);
+  const historyLabel =
+    historyYears === 1 ? "Last 1 year" : `Last ${historyYears} years`;
+  // An all-NaN cell has nothing to draw, download, or switch views on.
+  const hasPlottableData = useMemo(
+    () => seriesValues !== null && hasFiniteValues(seriesValues),
+    [seriesValues],
+  );
+  const isEmptyCell =
+    !loadingSeries && seriesValues !== null && !hasPlottableData;
 
   if (!selection) {
     return (
@@ -74,12 +83,28 @@ export function MapReadout({
   const gridResolution = Number(gridSpec.spatialResolutionDeg.toFixed(2));
 
   const historyControl = (
-    <YearSelector
-      selectedYears={selectedYears}
-      cachedYears={cachedYears}
-      loading={loadingSeries}
-      onSelectYears={onSelectYears}
-    />
+    <section>
+      <div className="mb-3 flex items-baseline justify-between gap-3">
+        <label className={SECTION_LABEL} htmlFor="history-years">
+          History window
+        </label>
+        <span className="font-mono text-[12.5px] font-semibold text-accent">
+          {historyLabel}
+        </span>
+      </div>
+      <input
+        id="history-years"
+        className="w-full cursor-pointer [accent-color:var(--accent)]"
+        type="range"
+        min={ZARR_TIME.defaultHistoryYears}
+        max={ZARR_TIME.maxHistoryYears}
+        step={1}
+        value={historyYears}
+        onChange={(event) =>
+          onHistoryYearsChange(Number(event.currentTarget.value))
+        }
+      />
+    </section>
   );
 
   const chart = (
@@ -91,12 +116,17 @@ export function MapReadout({
       {/* View switch left, download right, on the row between title and plot. */}
       <div className="mb-3 mt-2 flex items-center justify-between gap-3 shrink-0">
         <div className="flex items-center gap-2">
-          <PlotViewToggle view={plotView} onChange={setPlotView} />
+          <PlotViewToggle
+            view={plotView}
+            onChange={setPlotView}
+            disabled={isEmptyCell}
+          />
           {plotView === "fingerprint" ? (
             <button
               type="button"
               onClick={() => setFingerprintTransposed((prev) => !prev)}
-              className="rounded-md border border-editor-border px-2 py-0.5 text-[11.5px] font-semibold text-editor-fg-secondary transition-colors hover:border-editor-border-strong hover:text-editor-fg-primary"
+              disabled={isEmptyCell}
+              className="rounded-md border border-editor-border px-2 py-0.5 text-[11.5px] font-semibold text-editor-fg-secondary transition-colors hover:border-editor-border-strong hover:text-editor-fg-primary disabled:cursor-not-allowed disabled:opacity-40"
               aria-pressed={fingerprintTransposed}
               title="Swap the hour and day axes"
             >
@@ -108,7 +138,7 @@ export function MapReadout({
           selection={selection}
           gridSpec={gridSpec}
           historyYears={selectedYears.length}
-          values={loadingSeries ? null : seriesValues}
+          values={loadingSeries || !hasPlottableData ? null : seriesValues}
           units={seriesUnits}
           selectedYears={selectedYears}
         />
@@ -126,6 +156,11 @@ export function MapReadout({
       ) : seriesError ? (
         <p className="text-[13px] leading-[1.55] text-editor-fg-tertiary">
           {seriesError}
+        </p>
+      ) : isEmptyCell ? (
+        <p className="text-[13px] leading-[1.55] text-editor-fg-tertiary">
+          No data at this cell. NEE is estimated over vegetated land, so ocean
+          and bare-ground cells are empty. Pick a cell over vegetation.
         </p>
       ) : seriesValues ? (
         plotView === "line" ? (
@@ -178,9 +213,11 @@ export function MapReadout({
 function PlotViewToggle({
   view,
   onChange,
+  disabled = false,
 }: {
   view: PlotView;
   onChange: (view: PlotView) => void;
+  disabled?: boolean;
 }) {
   const options: { id: PlotView; label: string }[] = [
     { id: "line", label: "Line" },
@@ -200,8 +237,9 @@ function PlotViewToggle({
             type="button"
             role="tab"
             aria-selected={active}
+            disabled={disabled}
             onClick={() => onChange(option.id)}
-            className={`rounded-[5px] px-2 py-0.5 text-[11.5px] font-semibold transition-colors ${
+            className={`rounded-[5px] px-2 py-0.5 text-[11.5px] font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${
               active
                 ? "bg-accent text-white"
                 : "text-editor-fg-tertiary hover:text-editor-fg-secondary"

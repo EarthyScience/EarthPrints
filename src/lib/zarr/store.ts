@@ -50,6 +50,30 @@ export function getActiveByteSink(): ByteSink | null {
   return activeByteSink;
 }
 
+// Swapped in alongside the sink so an abandoned request stops downloading
+// instead of running to completion for a result nobody will read.
+let activeAbortSignal: AbortSignal | null = null;
+
+export function setActiveAbortSignal(signal: AbortSignal | null): void {
+  activeAbortSignal = signal;
+}
+
+export function getActiveAbortSignal(): AbortSignal | null {
+  return activeAbortSignal;
+}
+
+/** The rejection used when a caller abandons a decode. */
+export function abortError(): Error {
+  const error = new Error("Chunk decode aborted");
+  error.name = "AbortError";
+  return error;
+}
+
+/** True when the error is a fetch abort rather than a real failure. */
+export function isAbortError(error: unknown): boolean {
+  return error instanceof Error && error.name === "AbortError";
+}
+
 /**
  * Attempts per request, the first included. A picked coordinate fans out into
  * one request per native chunk, and a single flaky one fails the whole series,
@@ -108,7 +132,12 @@ async function progressFetch(request: Request): Promise<Response> {
   // the request that was active when it started even if another request swaps
   // the global sink in while we await the response.
   const sink = activeByteSink;
-  const response = await fetchWithRetry(request);
+  // Bind the signal onto the Request so fetchWithRetry's clones keep it and
+  // its own aborted check sees it.
+  const signal = activeAbortSignal;
+  const response = await fetchWithRetry(
+    signal ? new Request(request, { signal }) : request,
+  );
   const total = Number(response.headers.get("content-length"));
 
   if (
@@ -149,15 +178,88 @@ async function progressFetch(request: Request): Promise<Response> {
   }
 }
 
-export async function openZarrStore(url = ZARR_STORE.url) {
+/**
+ * Cache metadata documents only. Chunk bodies are hundreds of MB each and are
+ * fetched exactly once per pixel neighbourhood by the decode worker, so
+ * retaining their compressed bytes buys nothing and previously grew without
+ * bound (the default policy caches every request into an unbounded Map).
+ */
+export function metadataOnlyKey(
+  path: `/${string}`,
+  range?: unknown,
+): string | undefined {
+  if (range !== undefined) return undefined;
+  return /\/(zarr\.json|\.zarray|\.zattrs|\.zgroup)$/.test(path)
+    ? path
+    : undefined;
+}
+
+export async function openZarrStore(url: string = ZARR_STORE.url) {
   const raw = new zarr.FetchStore(url, { fetch: progressFetch });
   const consolidated = await zarr.withConsolidatedMetadata(raw);
-  const store = zarr.withByteCaching(consolidated);
+  const store = zarr.withByteCaching(consolidated, { keyFor: metadataOnlyKey });
   return {
     store,
     root: zarr.root(store),
+    // The decode worker opens its own store against the same dataset.
+    url,
   };
 }
+
+/**
+ * Aggregate byte progress across the several native chunks one time series
+ * needs. Chunks download one at a time, so the denominator is extrapolated
+ * from the chunks already finished (they are near-identical in size), which
+ * keeps the bar moving forward instead of resetting per chunk.
+ */
+export function createSeriesProgressTracker(
+  chunkCount: number,
+  onProgress: (loaded: number, total: number) => void,
+) {
+  let completedBytes = 0;
+  let completedChunks = 0;
+  let inflightLoaded = 0;
+  let inflightTotal = 0;
+  let inflight = false;
+
+  function emit() {
+    const perChunk =
+      completedChunks > 0 ? completedBytes / completedChunks : inflightTotal;
+    // Only subtract a slot for the in-flight chunk while one is actually
+    // running, or the estimate dips every time a chunk lands.
+    const pending = Math.max(
+      0,
+      chunkCount - completedChunks - (inflight ? 1 : 0),
+    );
+    const loaded = completedBytes + inflightLoaded;
+    const total = completedBytes + inflightTotal + perChunk * pending;
+    // A response without a Content-Length contributes bytes but no total.
+    onProgress(loaded, Math.max(loaded, total));
+  }
+
+  return {
+    /** Latest byte counts for the chunk currently downloading. */
+    update(loaded: number, total: number) {
+      inflight = true;
+      inflightLoaded = loaded;
+      inflightTotal = total;
+      emit();
+    },
+    /** The in-flight chunk finished; fold its bytes into the completed total. */
+    complete() {
+      completedBytes += Math.max(inflightTotal, inflightLoaded);
+      completedChunks += 1;
+      inflightLoaded = 0;
+      inflightTotal = 0;
+      inflight = false;
+      emit();
+    },
+  };
+}
+
+export type SeriesProgressTracker = ReturnType<
+  typeof createSeriesProgressTracker
+>;
 
 /** One pixel, time × hour slice, via zarrita's built-in slice assembly. */
 export async function fetchPixelTimeSeries(

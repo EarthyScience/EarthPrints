@@ -1,5 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { createByteProgressSink, fetchWithRetry } from "@/lib/zarr/store";
+import {
+  createByteProgressSink,
+  createSeriesProgressTracker,
+  fetchWithRetry,
+  metadataOnlyKey,
+} from "@/lib/zarr/store";
 
 describe("createByteProgressSink", () => {
   it("reports running loaded/total as bytes arrive", () => {
@@ -144,5 +149,79 @@ describe("fetchWithRetry", () => {
 
     await expect(settle(fetchWithRetry(request))).rejects.toThrow("Aborted");
     expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("metadataOnlyKey", () => {
+  it("caches whole-object reads of metadata documents", () => {
+    expect(metadataOnlyKey("/NEE/zarr.json")).toBe("/NEE/zarr.json");
+    expect(metadataOnlyKey("/NEE/.zarray")).toBe("/NEE/.zarray");
+    expect(metadataOnlyKey("/NEE/.zattrs")).toBe("/NEE/.zattrs");
+    expect(metadataOnlyKey("/.zgroup")).toBe("/.zgroup");
+  });
+
+  it("skips chunk bodies, which are hundreds of MB each", () => {
+    expect(metadataOnlyKey("/NEE/0.0.18.97")).toBeUndefined();
+    expect(metadataOnlyKey("/NEE/c/0/0/18/97")).toBeUndefined();
+  });
+
+  it("skips range reads entirely", () => {
+    expect(
+      metadataOnlyKey("/NEE/zarr.json", { offset: 0, length: 10 }),
+    ).toBeUndefined();
+  });
+});
+
+describe("createSeriesProgressTracker", () => {
+  it("extrapolates the total from the chunks already finished", () => {
+    const onProgress = vi.fn();
+    const tracker = createSeriesProgressTracker(3, onProgress);
+
+    // The in-flight chunk's own size seeds the estimate for the other two,
+    // so the denominator is right from the first update rather than growing.
+    tracker.update(0, 100);
+    expect(onProgress).toHaveBeenLastCalledWith(0, 300);
+    tracker.update(50, 100);
+    expect(onProgress).toHaveBeenLastCalledWith(50, 300);
+    tracker.complete();
+
+    // The total must not dip once a chunk lands and none is yet in flight.
+    expect(onProgress).toHaveBeenLastCalledWith(100, 300);
+
+    tracker.update(40, 100);
+    expect(onProgress).toHaveBeenLastCalledWith(140, 300);
+    tracker.complete();
+    expect(onProgress).toHaveBeenLastCalledWith(200, 300);
+
+    tracker.update(100, 100);
+    tracker.complete();
+    expect(onProgress).toHaveBeenLastCalledWith(300, 300);
+  });
+
+  it("never reports more loaded than total", () => {
+    const seen: Array<[number, number]> = [];
+    const tracker = createSeriesProgressTracker(4, (loaded, total) => {
+      seen.push([loaded, total]);
+    });
+
+    for (let chunk = 0; chunk < 4; chunk++) {
+      tracker.update(0, 80);
+      tracker.update(80, 80);
+      tracker.complete();
+    }
+
+    for (const [loaded, total] of seen) {
+      expect(loaded).toBeLessThanOrEqual(total);
+    }
+  });
+
+  it("counts a chunk whose length header never arrived", () => {
+    const onProgress = vi.fn();
+    const tracker = createSeriesProgressTracker(1, onProgress);
+
+    tracker.update(120, 0);
+    tracker.complete();
+
+    expect(onProgress).toHaveBeenLastCalledWith(120, 120);
   });
 });
