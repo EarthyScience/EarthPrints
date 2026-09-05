@@ -2,12 +2,17 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { Joyride, type Step, type TooltipRenderProps } from "react-joyride";
-import { EMPTY_CELL_HINT, TOUR_STEPS } from "@/lib/constants/tour";
+import {
+  EMPTY_CELL_HINT,
+  tourStepsFor,
+  tourTargetFor,
+} from "@/lib/constants/tour";
 import { getSidebarState, setSidebarState } from "@/lib/sidebar";
 import {
   hasFiniteValues,
   hasSeenGuide,
   isDesktopViewport,
+  MOBILE_MEDIA_QUERY,
   markGuideSeen,
   stepUnlocked,
   subscribeGuideRequests,
@@ -18,6 +23,8 @@ type MapTourProps = {
   hasSelection: boolean;
   loadingSeries: boolean;
   seriesValues: Float32Array | null;
+  /** The mobile bottom sheet is open. Ignored above the desktop breakpoint. */
+  panelOpen: boolean;
 };
 
 /** Above the icon tooltips at z-200, which are the highest thing in the app. */
@@ -118,14 +125,16 @@ export function MapTour({
   hasSelection,
   loadingSeries,
   seriesValues,
+  panelOpen,
 }: MapTourProps) {
   // The map subtree is client-only (`ssr: false` in MapExperience), so reading
   // the viewport and the cookie during the first render is safe and avoids an
   // effect that would set state on mount.
   /** Last interactive step the tour advanced out of on its own. */
   const [advancedFrom, setAdvancedFrom] = useState<number | null>(null);
-  const [run, setRun] = useState(
-    () => isDesktopViewport(window.innerWidth) && !hasSeenGuide(),
+  const [run, setRun] = useState(() => !hasSeenGuide());
+  const [isMobile, setIsMobile] = useState(
+    () => !isDesktopViewport(window.innerWidth),
   );
   const [stepIndex, setStepIndex] = useState(0);
 
@@ -133,7 +142,13 @@ export function MapTour({
     hasSelection,
     loadingSeries,
     hasData: hasFiniteValues(seriesValues),
+    isMobile,
+    panelOpen,
   };
+
+  // Steps that only make sense in one arrangement drop out of the other, so
+  // the indices below and the "n / m" counter both stay honest.
+  const activeSteps = tourStepsFor(isMobile);
 
   const start = useCallback(() => {
     setStepIndex(0);
@@ -147,22 +162,32 @@ export function MapTour({
 
   useEffect(() => subscribeGuideRequests(start), [start]);
 
+  // Which arrangement the layout is in decides both the step list and where
+  // several steps point, so it has to be watched rather than read once.
+  useEffect(() => {
+    const query = window.matchMedia(MOBILE_MEDIA_QUERY);
+    const onChange = (event: MediaQueryListEvent) => setIsMobile(event.matches);
+    query.addEventListener("change", onChange);
+    return () => query.removeEventListener("change", onChange);
+  }, []);
+
   // The panel can be collapsed from a previous visit, and at desktop widths a
   // collapsed panel is `visibility: hidden`, so every step from the third on
-  // would light up nothing.
+  // would light up nothing. On mobile the sheet is the user's to open, which is
+  // what the "Open the record" step is for.
   useEffect(() => {
-    if (!run) return;
-    if ((TOUR_STEPS[stepIndex]?.gate ?? "none") === "none") return;
+    if (!run || isMobile) return;
+    if ((activeSteps[stepIndex]?.gate ?? "none") === "none") return;
 
     const sidebar = getSidebarState();
     if (sidebar.collapsed) setSidebarState({ ...sidebar, collapsed: false });
-  }, [run, stepIndex]);
+  }, [run, isMobile, stepIndex, activeSteps]);
 
   // Interactive steps have no Next button: they end when the app says the user
   // did the thing. That is a fact about the current props rather than a side
   // effect, so it is settled during render instead of in an effect.
-  const current = TOUR_STEPS[stepIndex];
-  const next = TOUR_STEPS[stepIndex + 1];
+  const current = activeSteps[stepIndex];
+  const next = activeSteps[stepIndex + 1];
   const actionDone = next ? stepUnlocked(next.gate, gateState) : true;
 
   // Only once per step. The gate stays satisfied after the user acts, so
@@ -180,7 +205,7 @@ export function MapTour({
 
   if (!run) return null;
 
-  const steps: Step[] = TOUR_STEPS.map((spec, index) => {
+  const steps: Step[] = activeSteps.map((spec, index) => {
     const emptyCell =
       spec.id === "pick" &&
       hasSelection &&
@@ -189,7 +214,7 @@ export function MapTour({
       !hasFiniteValues(seriesValues);
 
     return {
-      target: spec.target,
+      target: tourTargetFor(spec, isMobile),
       spotlightTarget: spec.spotlightTarget,
       // Only when the step overrides it. Joyride picks this key off the step
       // and merges it over `options`, so passing `undefined` on the other
@@ -266,7 +291,7 @@ export function MapTour({
           setStepIndex((index) => Math.max(0, index - 1));
           return;
         }
-        if (stepIndex >= TOUR_STEPS.length - 1) {
+        if (stepIndex >= activeSteps.length - 1) {
           finish();
           return;
         }

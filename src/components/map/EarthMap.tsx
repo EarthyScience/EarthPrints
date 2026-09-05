@@ -462,6 +462,7 @@ export function EarthMap() {
             hasSelection={selection !== null}
             loadingSeries={loadingSeries}
             seriesValues={seriesValues}
+            panelOpen={controlsOpen}
           />
           <div className="pointer-events-none absolute inset-x-0 top-2 z-30 flex justify-center px-2">
             <MapSearch

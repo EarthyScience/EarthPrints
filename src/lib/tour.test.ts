@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { TOUR_STEPS } from "@/lib/constants/tour";
+import {
+  TOUR_STEPS,
+  tourStepsFor,
+  tourTargetFor,
+} from "@/lib/constants/tour";
 import {
   hasFiniteValues,
   isDesktopViewport,
@@ -12,6 +16,8 @@ const state = (overrides: Partial<TourGateState> = {}): TourGateState => ({
   hasSelection: false,
   loadingSeries: false,
   hasData: false,
+  isMobile: false,
+  panelOpen: false,
   ...overrides,
 });
 
@@ -65,6 +71,24 @@ describe("stepUnlocked", () => {
     expect(stepUnlocked("selection", state({ hasSelection: true }))).toBe(true);
   });
 
+  // On mobile the readout is a sheet that picking a cell does not open, so
+  // every step pointing into it has to wait for the user to open it. On
+  // desktop the panel is always in flow and the distinction does not exist.
+  it("waits for the mobile sheet before pointing into the readout", () => {
+    const picked = { hasSelection: true, isMobile: true };
+    expect(stepUnlocked("panel", state(picked))).toBe(false);
+    expect(stepUnlocked("panel", state({ ...picked, panelOpen: true }))).toBe(
+      true,
+    );
+    expect(stepUnlocked("panel", state({ hasSelection: true }))).toBe(true);
+  });
+
+  it("lets the step that opens the sheet run while it is still closed", () => {
+    expect(
+      stepUnlocked("selection", state({ hasSelection: true, isMobile: true })),
+    ).toBe(true);
+  });
+
   // The plot area swaps between skeleton, error and chart, so a step anchored
   // to the chart has to wait for the load rather than for the selection.
   it("holds the plot steps through the load", () => {
@@ -87,7 +111,10 @@ describe("TOUR_STEPS", () => {
   // width, so an unscoped `[aria-label=...]` would spotlight a zero-size node.
   it("targets only explicit tour anchors, never aria labels or classes", () => {
     for (const step of TOUR_STEPS) {
-      expect(step.target).toMatch(/^(body|#editor-controls|\[data-tour="[a-z-]+"\])$/);
+      for (const target of [step.target, step.mobileTarget]) {
+        if (!target) continue;
+        expect(target).toMatch(/^(body|#editor-controls|\[data-tour="[a-z-]+"\])$/);
+      }
     }
   });
 
@@ -108,5 +135,43 @@ describe("TOUR_STEPS", () => {
       if (!step.interactive) return;
       expect(TOUR_STEPS[index + 1]?.gate).not.toBe("none");
     });
+  });
+});
+
+describe("tourStepsFor", () => {
+  it("keeps the open-the-sheet step for mobile only", () => {
+    expect(tourStepsFor(true).map((s) => s.id)).toContain("open");
+    expect(tourStepsFor(false).map((s) => s.id)).not.toContain("open");
+  });
+
+  // The sheet has to be open before anything inside it can be pointed at.
+  it("puts opening the sheet before the first step inside it on mobile", () => {
+    const ids = tourStepsFor(true).map((s) => s.id);
+    expect(ids.indexOf("open")).toBeLessThan(ids.indexOf("record"));
+  });
+
+  it("follows every interactive step with a gated one, in both layouts", () => {
+    for (const isMobile of [true, false]) {
+      const steps = tourStepsFor(isMobile);
+      steps.forEach((step, index) => {
+        if (!step.interactive) return;
+        expect(steps[index + 1]?.gate).not.toBe("none");
+      });
+    }
+  });
+});
+
+describe("tourTargetFor", () => {
+  it("sends the controls step to the floating stack on mobile", () => {
+    const controls = TOUR_STEPS.find((s) => s.id === "controls")!;
+
+    expect(tourTargetFor(controls, true)).toBe('[data-tour="controls-mobile"]');
+    expect(tourTargetFor(controls, false)).toBe('[data-tour="controls"]');
+  });
+
+  it("falls back to the shared target where a step has no mobile one", () => {
+    const record = TOUR_STEPS.find((s) => s.id === "record")!;
+
+    expect(tourTargetFor(record, true)).toBe(record.target);
   });
 });

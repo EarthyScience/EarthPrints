@@ -10,14 +10,27 @@ const GUIDE_COOKIE = "earthprints_guide_seen";
 const GUIDE_COOKIE_MAX_AGE_S = 60 * 60 * 24 * 365;
 
 /** What a step needs to exist before it can be shown. */
-export type TourGate = "none" | "selection" | "series";
+export type TourGate = "none" | "selection" | "panel" | "series";
 
 export type TourGateState = {
   hasSelection: boolean;
   loadingSeries: boolean;
   /** Series loaded and holding at least one real number. */
   hasData: boolean;
+  /** Below the desktop breakpoint, where the readout is a bottom sheet. */
+  isMobile: boolean;
+  /** That sheet is open. Always irrelevant on desktop, where the panel is in flow. */
+  panelOpen: boolean;
 };
+
+/**
+ * Whether the readout is on screen at all. On desktop it always is; on mobile
+ * it is a sheet that starts closed and that picking a cell does not open, so
+ * every step pointing into it has to wait for the user to open it.
+ */
+function readoutVisible(state: TourGateState): boolean {
+  return !state.isMobile || state.panelOpen;
+}
 
 /** Pulled out of `document.cookie` so it can be tested without a DOM. */
 export function parseGuideSeen(cookie: string): boolean {
@@ -37,13 +50,15 @@ export function markGuideSeen(): void {
 }
 
 /**
- * The guide is desktop-only for now. Below this the panel is a bottom drawer
- * and half the steps would point at something that is not there, so the same
- * constant the layout switches on decides whether the guide exists at all.
+ * Which arrangement the layout is in. The same constant the panel switches on
+ * decides which targets the guide points at, so the two cannot disagree.
  */
 export function isDesktopViewport(width: number): boolean {
   return width >= SIDEBAR_DESKTOP_MIN_VIEWPORT;
 }
+
+/** Matches while the layout is in its mobile arrangement. */
+export const MOBILE_MEDIA_QUERY = `(max-width: ${SIDEBAR_DESKTOP_MIN_VIEWPORT - 1}px)`;
 
 /**
  * A cell over ocean or bare ground comes back as all NaN rather than empty, so
@@ -63,8 +78,15 @@ export function stepUnlocked(gate: TourGate, state: TourGateState): boolean {
       return true;
     case "selection":
       return state.hasSelection;
+    case "panel":
+      return state.hasSelection && readoutVisible(state);
     case "series":
-      return state.hasSelection && !state.loadingSeries && state.hasData;
+      return (
+        state.hasSelection &&
+        readoutVisible(state) &&
+        !state.loadingSeries &&
+        state.hasData
+      );
   }
 }
 

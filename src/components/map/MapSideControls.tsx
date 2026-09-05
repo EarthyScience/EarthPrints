@@ -48,7 +48,10 @@ export function MapSideControls({
   controlsId,
 }: MapSideControlsProps) {
   return (
-    <div className="pointer-events-none absolute right-3 top-1/2 z-20 hidden -translate-y-1/2 flex-col items-end gap-2 max-[900px]:flex">
+    <div
+      className="pointer-events-none absolute right-3 top-1/2 z-20 hidden -translate-y-1/2 flex-col items-end gap-2 max-[900px]:flex"
+      data-tour="controls-mobile"
+    >
       <div className={ISLAND_CLASS}>
         <IconButton
           variant="plain"
@@ -117,7 +120,7 @@ export function MapSideControls({
               <PatchIcon />
             </IconButton>
           </div>
-          <div className={ISLAND_CLASS}>
+          <div className={ISLAND_CLASS} data-tour="panel-toggle">
             <IconButton
               variant="plain"
               tooltipPlacement="left"

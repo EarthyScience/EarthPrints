@@ -55,14 +55,13 @@ export function EditorAboutDropdown() {
       >
         <AboutContent />
 
-        {/* Desktop only, matching the guide itself. */}
         <button
           type="button"
           onClick={() => {
             setOpen(false);
             requestGuide();
           }}
-          className="mt-4 hidden w-full rounded-md border border-editor-border px-2 py-1.5 text-[12px] font-semibold text-editor-fg-secondary transition-colors hover:border-editor-border-strong hover:text-editor-fg-primary min-[901px]:block"
+          className="mt-4 w-full rounded-md border border-editor-border px-2 py-1.5 text-[12px] font-semibold text-editor-fg-secondary transition-colors hover:border-editor-border-strong hover:text-editor-fg-primary"
         >
           Show the guide
         </button>

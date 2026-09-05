@@ -5,6 +5,10 @@ export type TourStepSpec = {
   id: string;
   /** Where the card anchors. */
   target: string;
+  /** Anchor below the desktop breakpoint, where the control moved. */
+  mobileTarget?: string;
+  /** Restricts the step to one arrangement of the layout. */
+  only?: "mobile" | "desktop";
   /** Where the light falls, when that is a larger region than the anchor. */
   spotlightTarget?: string;
   /** Overrides the default even padding around the lit area. */
@@ -47,13 +51,24 @@ export const TOUR_STEPS: TourStepSpec[] = [
     interactive: true,
   },
   {
+    id: "open",
+    target: '[data-tour="panel-toggle"]',
+    only: "mobile",
+    title: "Open the record",
+    body: [
+      "Tap here. The numbers for the cell you picked live in a panel that slides up from the bottom.",
+    ],
+    gate: "selection",
+    interactive: true,
+  },
+  {
     id: "record",
     target: '[data-tour="record"]',
     title: "What a click fetches",
     body: [
       "Your click snapped to the nearest 0.05° cell, roughly 5km across, and the panel now holds that cell's record: an hourly estimate of net ecosystem exchange, the balance between the carbon a place takes in and the carbon it breathes back out.",
     ],
-    gate: "selection",
+    gate: "panel",
   },
   {
     id: "plots",
@@ -77,6 +92,8 @@ export const TOUR_STEPS: TourStepSpec[] = [
   {
     id: "controls",
     target: '[data-tour="controls"]',
+    // The same controls live in a floating stack beside the map on mobile.
+    mobileTarget: '[data-tour="controls-mobile"]',
     // A short, wide row of buttons. Even padding leaves it looking loose above
     // and below, so the light hugs it vertically.
     spotlightPadding: { top: 3, bottom: 3, left: 8, right: 8 },
@@ -88,3 +105,15 @@ export const TOUR_STEPS: TourStepSpec[] = [
     gate: "selection",
   },
 ];
+
+/** The steps that apply to one arrangement of the layout. */
+export function tourStepsFor(isMobile: boolean): TourStepSpec[] {
+  return TOUR_STEPS.filter(
+    (spec) => !spec.only || (spec.only === "mobile") === isMobile,
+  );
+}
+
+/** Where a step anchors in that arrangement. */
+export function tourTargetFor(spec: TourStepSpec, isMobile: boolean): string {
+  return (isMobile && spec.mobileTarget) || spec.target;
+}
