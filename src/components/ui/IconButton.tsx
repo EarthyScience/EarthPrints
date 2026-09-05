@@ -17,6 +17,8 @@ type IconButtonProps = {
    */
   variant?: "default" | "plain";
   tooltipPlacement?: "bottom" | "left";
+  /** Anchor for the guided tour, so it can light the control and not a wrapper. */
+  "data-tour"?: string;
 };
 
 // Every IconButton renders inside the editor nav, so the editor sizing/colour
@@ -68,6 +70,7 @@ export function IconButton({
   "aria-expanded": ariaExpanded,
   "aria-controls": ariaControls,
   "aria-pressed": ariaPressed,
+  "data-tour": dataTour,
   href,
   variant = "default",
   tooltipPlacement = "bottom",
@@ -106,6 +109,7 @@ export function IconButton({
       aria-expanded={ariaExpanded}
       aria-controls={ariaControls}
       aria-pressed={ariaPressed}
+      data-tour={dataTour}
     >
       {children}
     </button>

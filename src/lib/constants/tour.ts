@@ -71,6 +71,8 @@ export const TOUR_STEPS: TourStepSpec[] = [
   {
     id: "open",
     target: '[data-tour="panel-toggle"]',
+    // The button, not the island it sits in, and hugging it.
+    mobileSpotlightPadding: 4,
     only: "mobile",
     title: "Open the record",
     body: [

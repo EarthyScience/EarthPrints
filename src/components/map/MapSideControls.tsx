@@ -120,11 +120,12 @@ export function MapSideControls({
               <PatchIcon />
             </IconButton>
           </div>
-          <div className={ISLAND_CLASS} data-tour="panel-toggle">
+          <div className={ISLAND_CLASS}>
             <IconButton
               variant="plain"
               tooltipPlacement="left"
               className="animate-[zoomToSelectionIn_0.18s_cubic-bezier(0.16,1,0.3,1)]"
+              data-tour="panel-toggle"
               aria-label={controlsOpen ? "Hide time series" : "Show time series"}
               aria-expanded={controlsOpen}
               aria-controls={controlsId}
