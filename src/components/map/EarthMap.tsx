@@ -458,11 +458,20 @@ export function EarthMap() {
               />
             ) : null}
           </Map>
+          {/* Anchor only: something at the foot of the map for the guide to
+              hang a card on, so the card does not cover the map it is asking
+              you to tap. */}
+          <div
+            aria-hidden="true"
+            data-tour="map-foot"
+            className="pointer-events-none absolute inset-x-0 bottom-0 h-px"
+          />
           <MapTour
             hasSelection={selection !== null}
             loadingSeries={loadingSeries}
             seriesValues={seriesValues}
             panelOpen={controlsOpen}
+            onPanelOpenChange={setControlsOpen}
           />
           <div className="pointer-events-none absolute inset-x-0 top-2 z-30 flex justify-center px-2">
             <MapSearch

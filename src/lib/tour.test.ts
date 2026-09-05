@@ -175,3 +175,29 @@ describe("tourTargetFor", () => {
     expect(tourTargetFor(record, true)).toBe(record.target);
   });
 });
+
+describe("mobile sheet handling", () => {
+  const byId = (id: string) => TOUR_STEPS.find((step) => step.id === id)!;
+
+  it("brings the sheet down for the step beside it, and up for the ones inside it", () => {
+    expect(byId("controls").mobilePanel).toBe("closed");
+    for (const id of ["record", "plots", "years"]) {
+      expect(byId(id).mobilePanel).toBe("open");
+    }
+  });
+
+  // The whole point of that step is that the user does it.
+  it("leaves the sheet alone on the step that teaches opening it", () => {
+    expect(byId("open").mobilePanel).toBeUndefined();
+  });
+
+  // A full-viewport target leaves an anchored card nowhere to go but off the
+  // bottom edge, and a centred one would cover the map it asks you to tap.
+  it("hangs the card off the foot of the map, still lighting all of it", () => {
+    const pick = byId("pick");
+
+    expect(pick.mobileTarget).toBe('[data-tour="map-foot"]');
+    expect(pick.mobileSpotlightTarget).toBe('[data-tour="map"]');
+    expect(pick.mobilePlacement).toBe("top");
+  });
+});

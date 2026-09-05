@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Joyride, type Step, type TooltipRenderProps } from "react-joyride";
 import {
   EMPTY_CELL_HINT,
+  tourSpotlightFor,
   tourStepsFor,
   tourTargetFor,
 } from "@/lib/constants/tour";
@@ -25,6 +26,7 @@ type MapTourProps = {
   seriesValues: Float32Array | null;
   /** The mobile bottom sheet is open. Ignored above the desktop breakpoint. */
   panelOpen: boolean;
+  onPanelOpenChange: (open: boolean) => void;
 };
 
 /** Above the icon tooltips at z-200, which are the highest thing in the app. */
@@ -126,6 +128,7 @@ export function MapTour({
   loadingSeries,
   seriesValues,
   panelOpen,
+  onPanelOpenChange,
 }: MapTourProps) {
   // The map subtree is client-only (`ssr: false` in MapExperience), so reading
   // the viewport and the cookie during the first render is safe and avoids an
@@ -149,6 +152,9 @@ export function MapTour({
   // Steps that only make sense in one arrangement drop out of the other, so
   // the indices below and the "n / m" counter both stay honest.
   const activeSteps = tourStepsFor(isMobile);
+  const current = activeSteps[stepIndex];
+  const next = activeSteps[stepIndex + 1];
+  const wantsPanel = isMobile ? current?.mobilePanel : undefined;
 
   const start = useCallback(() => {
     setStepIndex(0);
@@ -161,6 +167,14 @@ export function MapTour({
   }, []);
 
   useEffect(() => subscribeGuideRequests(start), [start]);
+
+  // Reopening matters on the way back: once the user has learned to open the
+  // sheet, a step pointing into it should not stall because they closed it.
+  useEffect(() => {
+    if (!run || !wantsPanel) return;
+    const shouldBeOpen = wantsPanel === "open";
+    if (panelOpen !== shouldBeOpen) onPanelOpenChange(shouldBeOpen);
+  }, [run, wantsPanel, panelOpen, onPanelOpenChange]);
 
   // Which arrangement the layout is in decides both the step list and where
   // several steps point, so it has to be watched rather than read once.
@@ -177,17 +191,15 @@ export function MapTour({
   // what the "Open the record" step is for.
   useEffect(() => {
     if (!run || isMobile) return;
-    if ((activeSteps[stepIndex]?.gate ?? "none") === "none") return;
+    if ((current?.gate ?? "none") === "none") return;
 
     const sidebar = getSidebarState();
     if (sidebar.collapsed) setSidebarState({ ...sidebar, collapsed: false });
-  }, [run, isMobile, stepIndex, activeSteps]);
+  }, [run, isMobile, current]);
 
   // Interactive steps have no Next button: they end when the app says the user
   // did the thing. That is a fact about the current props rather than a side
   // effect, so it is settled during render instead of in an effect.
-  const current = activeSteps[stepIndex];
-  const next = activeSteps[stepIndex + 1];
   const actionDone = next ? stepUnlocked(next.gate, gateState) : true;
 
   // Only once per step. The gate stays satisfied after the user acts, so
@@ -215,7 +227,7 @@ export function MapTour({
 
     return {
       target: tourTargetFor(spec, isMobile),
-      spotlightTarget: spec.spotlightTarget,
+      spotlightTarget: tourSpotlightFor(spec, isMobile),
       // Only when the step overrides it. Joyride picks this key off the step
       // and merges it over `options`, so passing `undefined` on the other
       // steps wiped out the shared padding instead of falling back to it.
@@ -224,7 +236,12 @@ export function MapTour({
         : {}),
       title: spec.title,
       content: emptyCell ? [EMPTY_CELL_HINT] : spec.body,
-      placement: index === 0 ? "center" : "auto",
+      placement:
+        index === 0
+          ? "center"
+          : isMobile
+            ? (spec.mobilePlacement ?? "auto")
+            : "auto",
       data: {
         waiting:
           !!spec.interactive &&

@@ -9,6 +9,12 @@ export type TourStepSpec = {
   mobileTarget?: string;
   /** Restricts the step to one arrangement of the layout. */
   only?: "mobile" | "desktop";
+  /** Where the light falls below the desktop breakpoint. */
+  mobileSpotlightTarget?: string;
+  /** Overrides automatic placement below the desktop breakpoint. */
+  mobilePlacement?: "center" | "top";
+  /** What the mobile sheet should be doing while this step is on screen. */
+  mobilePanel?: "open" | "closed";
   /** Where the light falls, when that is a larger region than the anchor. */
   spotlightTarget?: string;
   /** Overrides the default even padding around the lit area. */
@@ -43,6 +49,12 @@ export const TOUR_STEPS: TourStepSpec[] = [
   {
     id: "pick",
     target: '[data-tour="map"]',
+    // The map is the whole screen on a phone. Anchoring the card to the foot
+    // of it keeps the card on screen and leaves the map above it tappable,
+    // which a centred card would cover.
+    mobileTarget: '[data-tour="map-foot"]',
+    mobileSpotlightTarget: '[data-tour="map"]',
+    mobilePlacement: "top",
     title: "Start with a place",
     body: [
       "Click anywhere on land, or search for a place or coordinates.",
@@ -63,6 +75,7 @@ export const TOUR_STEPS: TourStepSpec[] = [
   },
   {
     id: "record",
+    mobilePanel: "open",
     target: '[data-tour="record"]',
     title: "What a click fetches",
     body: [
@@ -72,6 +85,7 @@ export const TOUR_STEPS: TourStepSpec[] = [
   },
   {
     id: "plots",
+    mobilePanel: "open",
     target: '[data-tour="plot"]',
     title: "Two views of the same numbers",
     body: [
@@ -82,6 +96,7 @@ export const TOUR_STEPS: TourStepSpec[] = [
   },
   {
     id: "years",
+    mobilePanel: "open",
     target: '[data-tour="years"]',
     title: "Widen the window",
     body: [
@@ -91,6 +106,9 @@ export const TOUR_STEPS: TourStepSpec[] = [
   },
   {
     id: "controls",
+    // The sheet covers most of a phone screen, and these controls sit beside
+    // it, so it comes down before the last step.
+    mobilePanel: "closed",
     target: '[data-tour="controls"]',
     // The same controls live in a floating stack beside the map on mobile.
     mobileTarget: '[data-tour="controls-mobile"]',
@@ -116,4 +134,12 @@ export function tourStepsFor(isMobile: boolean): TourStepSpec[] {
 /** Where a step anchors in that arrangement. */
 export function tourTargetFor(spec: TourStepSpec, isMobile: boolean): string {
   return (isMobile && spec.mobileTarget) || spec.target;
+}
+
+/** What the light falls on, when that differs from the anchor. */
+export function tourSpotlightFor(
+  spec: TourStepSpec,
+  isMobile: boolean,
+): string | undefined {
+  return (isMobile && spec.mobileSpotlightTarget) || spec.spotlightTarget;
 }
