@@ -42,6 +42,8 @@
   --accent: #52d4c8;
   --accent-bright: #7df5e8;
   --accent-on-dark: #52d4c8;
+  /** The guide keeps the dark accent in both themes, so it reads as one thing. */
+  --tour-accent: #52d4c8;
   --editor-bg-depth: #171716;
   --editor-bg-base: #1d1d1c;
   --editor-bg-primary: #212120;
@@ -285,19 +287,6 @@
   }
 }
 
-/*
- * The guide's spotlight is one SVG path: an outer rectangle plus the cutout,
- * filled with the even-odd rule. There is no separate element for the hole, so
- * the accent outline around the highlighted area has to be a stroke on that
- * path, which also strokes the outer rectangle and draws a frame around the
- * whole viewport. Half that frame's width falls inside the overlay, so the
- * clip trims it away. The cutout sits well inside the edge and is untouched.
- */
-.react-joyride__spotlight {
-  clip-path: inset(2px);
-}
-
-.react-joyride__spotlight path {
-  stroke: color-mix(in srgb, var(--accent) 55%, transparent);
-  stroke-width: 2;
-}
+/* The guide draws its own outline around the lit area (see MapTour), because
+   Joyride's overlay is a single path holding the cutout and an outer rectangle
+   the size of the viewport: stroking it frames the whole page. */

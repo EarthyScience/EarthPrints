@@ -1,7 +1,13 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Joyride, type Step, type TooltipRenderProps } from "react-joyride";
+import { createPortal } from "react-dom";
+import {
+  Joyride,
+  type SpotlightPadding,
+  type Step,
+  type TooltipRenderProps,
+} from "react-joyride";
 import {
   EMPTY_CELL_HINT,
   tourSpotlightFor,
@@ -46,6 +52,87 @@ function sheetSettled(): Promise<void> {
 /** Breathing room between the target and the lit edge. */
 const SPOTLIGHT_PADDING = 8;
 
+/** Corner rounding of the lit area, shared by the cutout and its outline. */
+const SPOTLIGHT_RADIUS = 12;
+
+type Insets = { top: number; right: number; bottom: number; left: number };
+
+function resolvePadding(value: SpotlightPadding | number | undefined): Insets {
+  const fallback = typeof value === "number" ? value : SPOTLIGHT_PADDING;
+  const sides = typeof value === "object" ? value : {};
+  return {
+    top: sides.top ?? fallback,
+    right: sides.right ?? fallback,
+    bottom: sides.bottom ?? fallback,
+    left: sides.left ?? fallback,
+  };
+}
+
+/**
+ * The outline around the lit area.
+ *
+ * Joyride's overlay is one path holding both the cutout and an outer rectangle
+ * the size of the viewport, so stroking it draws a frame around the whole page
+ * as well. Trimming that frame with a clip worked here but not on every
+ * browser, so the outline is drawn as its own element against the same rect
+ * Joyride lights.
+ */
+function SpotlightOutline({
+  selector,
+  padding,
+}: {
+  selector: string;
+  padding: Insets;
+}) {
+  const [box, setBox] = useState<Insets | null>(null);
+
+  useEffect(() => {
+    const target = document.querySelector(selector);
+    if (!target) return;
+
+    const measure = () => {
+      const rect = target.getBoundingClientRect();
+      setBox({
+        top: rect.top - padding.top,
+        left: rect.left - padding.left,
+        right: rect.width + padding.left + padding.right,
+        bottom: rect.height + padding.top + padding.bottom,
+      });
+    };
+
+    const frame = requestAnimationFrame(measure);
+    const observer = new ResizeObserver(measure);
+    observer.observe(target);
+    window.addEventListener("resize", measure);
+    window.addEventListener("scroll", measure, true);
+
+    return () => {
+      cancelAnimationFrame(frame);
+      observer.disconnect();
+      window.removeEventListener("resize", measure);
+      window.removeEventListener("scroll", measure, true);
+    };
+  }, [selector, padding.top, padding.right, padding.bottom, padding.left]);
+
+  if (!box) return null;
+
+  return createPortal(
+    <div
+      aria-hidden="true"
+      className="pointer-events-none fixed border-2 border-[var(--tour-accent)]"
+      style={{
+        top: box.top,
+        left: box.left,
+        width: box.right,
+        height: box.bottom,
+        borderRadius: SPOTLIGHT_RADIUS,
+        zIndex: TOUR_Z_INDEX + 1,
+      }}
+    />,
+    document.body,
+  );
+}
+
 /** Pulse box, in px. Kept in sync with the `h-4 w-4` on the span below. */
 const PULSE_SIZE = 16;
 
@@ -77,7 +164,7 @@ function TourCard({
   return (
     <div
       {...tooltipProps}
-      className="w-[min(360px,calc(100vw-2rem))] rounded-editor-md border border-[color-mix(in_srgb,var(--accent)_40%,transparent)] bg-editor-bg-primary p-4 shadow-[0_2px_12px_rgba(0,0,0,0.35)]"
+      className="w-[min(360px,calc(100vw-2rem))] rounded-editor-md border border-[color-mix(in_srgb,var(--tour-accent)_45%,transparent)] bg-editor-bg-primary p-4 shadow-[0_2px_12px_rgba(0,0,0,0.35)]"
     >
       <p className="text-[13.5px] font-semibold text-editor-fg-primary">
         {step.title}
@@ -130,8 +217,8 @@ function TourCard({
 function TourPulse() {
   return (
     <span className="relative grid h-4 w-4 place-items-center">
-      <span className="absolute h-full w-full animate-ping rounded-full bg-accent opacity-75" />
-      <span className="relative h-2 w-2 rounded-full bg-accent shadow-[0_0_0_2px_color-mix(in_srgb,var(--accent)_28%,transparent)]" />
+      <span className="absolute h-full w-full animate-ping rounded-full bg-[var(--tour-accent)] opacity-75" />
+      <span className="relative h-2 w-2 rounded-full bg-[var(--tour-accent)] shadow-[0_0_0_2px_color-mix(in_srgb,var(--tour-accent)_28%,transparent)]" />
     </span>
   );
 }
@@ -272,8 +359,21 @@ export function MapTour({
     };
   });
 
+  const outlineTarget =
+    current && current.target !== "body"
+      ? tourSpotlightFor(current, isMobile) ?? tourTargetFor(current, isMobile)
+      : null;
+
   return (
-    <Joyride
+    <>
+      {outlineTarget ? (
+        <SpotlightOutline
+          key={outlineTarget}
+          selector={outlineTarget}
+          padding={resolvePadding(paddingFor(current))}
+        />
+      ) : null}
+      <Joyride
       steps={steps}
       run={run}
       stepIndex={stepIndex}
@@ -283,6 +383,7 @@ export function MapTour({
       options={{
         overlayColor: OVERLAY_COLOR,
         spotlightPadding: SPOTLIGHT_PADDING,
+        spotlightRadius: SPOTLIGHT_RADIUS,
         // Put the pulse on the lit border rather than in the gap beside it.
         // Joyride offsets the card by `offset + spotlightPadding + arrowSize`
         // and the arrow box protrudes `arrowSize` back toward the target, so
@@ -293,7 +394,6 @@ export function MapTour({
         arrowBase: PULSE_SIZE,
         arrowSize: PULSE_SIZE,
         offset: -PULSE_SIZE / 2,
-        spotlightRadius: 12,
         zIndex: TOUR_Z_INDEX,
         // Without this the overlay swallows the click the step is asking for.
         blockTargetInteraction: false,
@@ -335,6 +435,7 @@ export function MapTour({
         }
         setStepIndex((index) => index + 1);
       }}
-    />
+      />
+    </>
   );
 }
