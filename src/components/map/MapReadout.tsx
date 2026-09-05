@@ -6,9 +6,8 @@ import { formatLatitude, formatLongitude } from "@/lib/map/geogrid";
 import { DEFAULT_GRID_SPEC, ZARR_STORE } from "@/lib/constants/store";
 import { ZARR_TIME } from "@/lib/zarr/timeRange";
 import { TimeSeriesPlot } from "@/components/map/TimeSeriesPlot";
-import { TimeSeriesPlotLoading } from "@/components/map/TimeSeriesPlotLoading";
 import { FingerprintPlot } from "@/components/map/FingerprintPlot";
-import { FingerprintPlotLoading } from "@/components/map/FingerprintPlotLoading";
+import { PlotSkeleton } from "@/components/map/PlotSkeleton";
 import { ProgressBar } from "@/components/ui/ProgressBar";
 import { DownloadButton } from "@/components/map/DownloadButton";
 import { YearSelector } from "@/components/map/YearSelector";
@@ -121,11 +120,9 @@ export function MapReadout({
       {loadingSeries ? (
         <div className="grid gap-3">
           <SeriesLoader progress={seriesProgress} />
-          {plotView === "line" ? (
-            <TimeSeriesPlotLoading historyYears={selectedYears.length} />
-          ) : (
-            <FingerprintPlotLoading transposed={fingerprintTransposed} />
-          )}
+          <PlotSkeleton
+            fill={plotView === "fingerprint" && fingerprintTransposed}
+          />
         </div>
       ) : seriesError ? (
         <p className="text-[13px] leading-[1.55] text-editor-fg-tertiary">
