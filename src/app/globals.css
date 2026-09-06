@@ -194,22 +194,9 @@
 
 /* ============================================================
    Custom classes — only for what utilities can't express cleanly:
-   the masked brand mark, the theme-driven icon swap, and styling the
-   third-party MapLibre canvas inside our stage.
+   the theme-driven icon swap and styling the third-party MapLibre
+   canvas inside our stage.
    ============================================================ */
-.brand-mark {
-  display: block;
-  flex-shrink: 0;
-  background-color: var(--accent);
-  mask-image: url("/brand-mark-dark.png");
-  mask-size: contain;
-  mask-repeat: no-repeat;
-  mask-position: center;
-  -webkit-mask-image: url("/brand-mark-dark.png");
-  -webkit-mask-size: contain;
-  -webkit-mask-repeat: no-repeat;
-  -webkit-mask-position: center;
-}
 
 /* While the seam is being dragged the pointer is captured, so the col-resize
    cursor has to be forced across the whole document and text selection

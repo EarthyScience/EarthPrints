@@ -9,7 +9,7 @@ export function Brand() {
       className="flex min-w-0 items-center gap-[11px]"
       aria-label={`${SITE_NAME} home`}
     >
-      <span className="flex flex-shrink-0">
+      <span className="flex flex-shrink-0 text-editor-fg-primary">
         <BrandMark size={32} />
       </span>
       <span className="truncate text-[17px] font-semibold tracking-[-0.02em] text-editor-fg-primary">

@@ -26,7 +26,8 @@ export const metadata: Metadata = {
   },
   description: SITE_DESCRIPTION,
   icons: {
-    apple: "/brand-mark-light.png",
+    icon: "/earthprints-icon.svg",
+    apple: "/apple-touch-icon.png",
   },
 };
 
