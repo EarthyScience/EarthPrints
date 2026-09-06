@@ -7,9 +7,8 @@ import { DEFAULT_GRID_SPEC, ZARR_STORE } from "@/lib/constants/store";
 import { ZARR_TIME } from "@/lib/zarr/timeRange";
 import { hasFiniteValues } from "@/lib/zarr/series";
 import { TimeSeriesPlot } from "@/components/map/TimeSeriesPlot";
-import { TimeSeriesPlotLoading } from "@/components/map/TimeSeriesPlotLoading";
 import { FingerprintPlot } from "@/components/map/FingerprintPlot";
-import { FingerprintPlotLoading } from "@/components/map/FingerprintPlotLoading";
+import { PlotSkeleton } from "@/components/map/PlotSkeleton";
 import { ProgressBar } from "@/components/ui/ProgressBar";
 import { DownloadButton } from "@/components/map/DownloadButton";
 import { YearSelector } from "@/components/map/YearSelector";
@@ -91,7 +90,11 @@ export function MapReadout({
   );
 
   const chart = (
-    <section aria-live="polite" className="flex flex-col flex-1 min-h-0">
+    <section
+      aria-live="polite"
+      className="flex flex-col flex-1 min-h-0"
+      data-tour="plot"
+    >
       <span className={`${SECTION_LABEL} block shrink-0`}>
         {plotView === "line" ? "Daily mean" : "Diurnal fingerprint"}
       </span>
@@ -130,11 +133,9 @@ export function MapReadout({
       {loadingSeries ? (
         <div className="grid gap-3">
           <SeriesLoader progress={seriesProgress} />
-          {plotView === "line" ? (
-            <TimeSeriesPlotLoading historyYears={selectedYears.length} />
-          ) : (
-            <FingerprintPlotLoading transposed={fingerprintTransposed} />
-          )}
+          <PlotSkeleton
+            fill={plotView === "fingerprint" && fingerprintTransposed}
+          />
         </div>
       ) : seriesError ? (
         <p className="text-[13px] leading-[1.55] text-editor-fg-tertiary">
@@ -168,7 +169,7 @@ export function MapReadout({
 
   return (
     <div className="flex flex-col divide-y divide-editor-border min-h-full">
-      <section className="pb-4 shrink-0">
+      <section className="pb-4 shrink-0" data-tour="record">
         <h2 className="font-mono text-[15px] font-semibold leading-none tracking-tight tabular-nums text-editor-fg-primary">
           {formatLongitude(selection.grid.lon)}
           <span className="text-editor-fg-tertiary">, </span>

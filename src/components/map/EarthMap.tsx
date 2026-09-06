@@ -52,6 +52,7 @@ import {
 } from "@/lib/sidebar";
 import { MapSideControls } from "@/components/map/MapSideControls";
 import { MapSearch } from "@/components/map/MapSearch";
+import { MapTour } from "@/components/map/MapTour";
 import { MapReadout } from "@/components/map/MapReadout";
 import { GlobeSelectionOverlay } from "@/components/map/GlobeSelectionOverlay";
 
@@ -425,6 +426,7 @@ export function EarthMap() {
       preview={
         <div
           className="map-stage absolute inset-0 overflow-hidden rounded-[inherit]"
+          data-tour="map"
           ref={mapStageRef}
         >
           <Map
@@ -464,6 +466,21 @@ export function EarthMap() {
               />
             ) : null}
           </Map>
+          {/* Anchor only: something at the foot of the map for the guide to
+              hang a card on, so the card does not cover the map it is asking
+              you to tap. */}
+          <div
+            aria-hidden="true"
+            data-tour="map-foot"
+            className="pointer-events-none absolute inset-x-0 bottom-0 h-px"
+          />
+          <MapTour
+            hasSelection={selection !== null}
+            loadingSeries={loadingSeries}
+            seriesValues={seriesValues}
+            panelOpen={controlsOpen}
+            onPanelOpenChange={setControlsOpen}
+          />
           <div className="pointer-events-none absolute inset-x-0 top-2 z-30 flex justify-center px-2">
             <MapSearch
               onSelect={handlePick}

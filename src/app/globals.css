@@ -42,6 +42,8 @@
   --accent: #52d4c8;
   --accent-bright: #7df5e8;
   --accent-on-dark: #52d4c8;
+  /** The guide keeps the dark accent in both themes, so it reads as one thing. */
+  --tour-accent: #52d4c8;
   --editor-bg-depth: #171716;
   --editor-bg-base: #1d1d1c;
   --editor-bg-primary: #212120;
@@ -284,3 +286,7 @@
     opacity: 0.55;
   }
 }
+
+/* The guide draws its own outline around the lit area (see MapTour), because
+   Joyride's overlay is a single path holding the cutout and an outer rectangle
+   the size of the viewport: stroking it frames the whole page. */

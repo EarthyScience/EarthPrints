@@ -48,7 +48,10 @@ export function MapSideControls({
   controlsId,
 }: MapSideControlsProps) {
   return (
-    <div className="pointer-events-none absolute right-3 top-1/2 z-20 hidden -translate-y-1/2 flex-col items-end gap-2 max-[900px]:flex">
+    <div
+      className="pointer-events-none absolute right-3 top-1/2 z-20 hidden -translate-y-1/2 flex-col items-end gap-2 max-[900px]:flex"
+      data-tour="controls-mobile"
+    >
       <div className={ISLAND_CLASS}>
         <IconButton
           variant="plain"
@@ -122,6 +125,7 @@ export function MapSideControls({
               variant="plain"
               tooltipPlacement="left"
               className="animate-[zoomToSelectionIn_0.18s_cubic-bezier(0.16,1,0.3,1)]"
+              data-tour="panel-toggle"
               aria-label={controlsOpen ? "Hide time series" : "Show time series"}
               aria-expanded={controlsOpen}
               aria-controls={controlsId}

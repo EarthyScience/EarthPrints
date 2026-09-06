@@ -2,6 +2,7 @@
 
 import { useEffect, useId, useRef, useState } from "react";
 import { AboutContent } from "@/components/about/AboutContent";
+import { requestGuide } from "@/lib/tour";
 import { IconButton } from "@/components/ui/IconButton";
 import { QuestionMarkIcon } from "@/icons/QuestionMarkIcon";
 
@@ -53,6 +54,17 @@ export function EditorAboutDropdown() {
         aria-hidden={!open}
       >
         <AboutContent />
+
+        <button
+          type="button"
+          onClick={() => {
+            setOpen(false);
+            requestGuide();
+          }}
+          className="mt-4 w-full rounded-md border border-editor-border px-2 py-1.5 text-[12px] font-semibold text-editor-fg-secondary transition-colors hover:border-editor-border-strong hover:text-editor-fg-primary"
+        >
+          Show the guide
+        </button>
       </div>
     </div>
   );
