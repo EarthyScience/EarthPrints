@@ -35,7 +35,7 @@ export type TourStepSpec = {
 
 /** Shown in place of step two's body when the picked cell holds no data. */
 export const EMPTY_CELL_HINT =
-  "That cell is empty, which happens over water and bare ground. Try one over vegetation.";
+  "That cell is empty, which happens over water and bare ground. Try one over land.";
 
 export const TOUR_STEPS: TourStepSpec[] = [
   {
@@ -76,7 +76,7 @@ export const TOUR_STEPS: TourStepSpec[] = [
     only: "mobile",
     title: "Open the record",
     body: [
-      "Tap here. The numbers for the cell you picked live in a panel that slides up from the bottom.",
+      "Tap here. The plots for the cell you picked live in a panel that will show up after a click.",
     ],
     gate: "selection",
     interactive: true,
@@ -87,7 +87,7 @@ export const TOUR_STEPS: TourStepSpec[] = [
     target: '[data-tour="record"]',
     title: "What a click fetches",
     body: [
-      "Your click snapped to the nearest 0.05° cell, roughly 5km across, and the panel now holds that cell's record: an hourly estimate of net ecosystem exchange, the balance between the carbon a place takes in and the carbon it breathes back out.",
+      "Your click snapped to the nearest 0.05° cell, roughly 5km across, and the panel now holds that cell's record: an hourly estimate of net ecosystem exchange, a measure of the carbon a place takes in and the carbon it breathes back out.",
     ],
     gate: "panel",
   },
