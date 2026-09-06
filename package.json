@@ -23,7 +23,7 @@
     "react-map-gl": "^8.1.2",
     "recharts": "^3.10.1",
     "write-excel-file": "^4.1.1",
-    "zarrita": "^0.7.3"
+    "zarrita": "^0.7.5"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
