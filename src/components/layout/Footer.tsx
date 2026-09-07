@@ -1,7 +1,7 @@
+import Image from "next/image";
 import Link from "next/link";
 import { FOOTER_TAGLINE } from "@/lib/constants/footer";
 import { SITE_NAME } from "@/lib/constants/site";
-import { BrandMark } from "@/icons/BrandMark";
 
 const year = new Date().getFullYear();
 
@@ -15,7 +15,24 @@ export function Footer() {
             className="mb-2 inline-flex items-center gap-1 text-base font-semibold tracking-[-0.02em] transition-opacity duration-200 hover:opacity-80"
             aria-label={`${SITE_NAME} home`}
           >
-            <BrandMark />
+            <span className="flex flex-shrink-0">
+              <Image
+                src="/earthprints-bars.svg?v=6"
+                width={24}
+                height={24}
+                className="hidden [.light_&]:block"
+                alt=""
+                aria-hidden="true"
+              />
+              <Image
+                src="/earthprints-bars-dark.svg?v=6"
+                width={24}
+                height={24}
+                className="block [.light_&]:hidden"
+                alt=""
+                aria-hidden="true"
+              />
+            </span>
             <span>{SITE_NAME}</span>
           </Link>
           <p className="text-sm leading-[1.55] tracking-[-0.01em] text-text-muted">

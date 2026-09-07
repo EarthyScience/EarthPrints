@@ -1,6 +1,6 @@
+import Image from "next/image";
 import Link from "next/link";
 import { SITE_NAME } from "@/lib/constants/site";
-import { BrandMark } from "@/icons/BrandMark";
 
 export function Brand() {
   return (
@@ -10,7 +10,22 @@ export function Brand() {
       aria-label={`${SITE_NAME} home`}
     >
       <span className="flex flex-shrink-0 text-editor-fg-primary">
-        <BrandMark />
+        <Image
+          src="/earthprints-bars.svg?v=6"
+          width={24}
+          height={24}
+          className="hidden [.light_&]:block"
+          alt=""
+          aria-hidden="true"
+        />
+        <Image
+          src="/earthprints-bars-dark.svg?v=6"
+          width={24}
+          height={24}
+          className="block [.light_&]:hidden"
+          alt=""
+          aria-hidden="true"
+        />
       </span>
       <span className="truncate text-[17px] font-semibold tracking-[-0.02em] text-editor-fg-primary">
         <b className="font-semibold">{SITE_NAME}</b>
