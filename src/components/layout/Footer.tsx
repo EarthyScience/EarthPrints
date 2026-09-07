@@ -12,10 +12,10 @@ export function Footer() {
         <div className="max-w-[360px] flex-[1_1_220px] max-[720px]:max-w-none max-[720px]:flex-none max-[720px]:pb-5">
           <Link
             href="/map"
-            className="mb-2 inline-flex items-center gap-2.5 text-base font-semibold tracking-[-0.02em] transition-opacity duration-200 hover:opacity-80"
+            className="mb-2 inline-flex items-center gap-1 text-base font-semibold tracking-[-0.02em] transition-opacity duration-200 hover:opacity-80"
             aria-label={`${SITE_NAME} home`}
           >
-            <BrandMark size={22} />
+            <BrandMark />
             <span>{SITE_NAME}</span>
           </Link>
           <p className="text-sm leading-[1.55] tracking-[-0.01em] text-text-muted">

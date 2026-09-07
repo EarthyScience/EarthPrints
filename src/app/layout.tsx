@@ -26,7 +26,10 @@ export const metadata: Metadata = {
   },
   description: SITE_DESCRIPTION,
   icons: {
-    icon: "/earthprints-icon.svg",
+    icon: [
+      { url: "/earthprints-bars.svg", media: "(prefers-color-scheme: light)" },
+      { url: "/earthprints-bars-dark.svg", media: "(prefers-color-scheme: dark)" },
+    ],
     apple: "/apple-touch-icon.png",
   },
 };

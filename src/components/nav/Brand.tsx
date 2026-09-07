@@ -6,11 +6,11 @@ export function Brand() {
   return (
     <Link
       href="/map"
-      className="flex min-w-0 items-center gap-[11px]"
+      className="flex min-w-0 items-center gap-1"
       aria-label={`${SITE_NAME} home`}
     >
       <span className="flex flex-shrink-0 text-editor-fg-primary">
-        <BrandMark size={32} />
+        <BrandMark />
       </span>
       <span className="truncate text-[17px] font-semibold tracking-[-0.02em] text-editor-fg-primary">
         <b className="font-semibold">{SITE_NAME}</b>
