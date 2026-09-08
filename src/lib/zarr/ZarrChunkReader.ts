@@ -2,17 +2,18 @@ import * as zarr from "zarrita";
 import { LRUCache } from "@/lib/cache/lru";
 import { ZARR_STORE } from "@/lib/constants/store";
 import {
-  extractBlockFromNativeChunk,
-  neighborhoodBlock,
-  pixelSeriesKey,
+  extractPixelFromNativeChunk,
+  nativeChunkKey,
   pixelToNativeChunkContext,
   stitchTimeSeriesForRange,
   type ArrayChunkSizes,
   type AxisSlice,
-  type LocalBlock,
   type PixelNativeChunkContext,
 } from "@/lib/zarr/chunks";
-import { ChunkWorkerClient, type DecodedBlock } from "@/lib/zarr/chunkWorkerClient";
+import {
+  ChunkWorkerClient,
+  type DecodedChunk,
+} from "@/lib/zarr/chunkWorkerClient";
 import {
   chunkIndexToStartDay,
   DEFAULT_HISTORY_YEARS,
@@ -37,21 +38,25 @@ import { deriveGridSpec } from "@/lib/zarr/gridSpec";
 import type { GridCell, GridSpec } from "@/types/map";
 
 /**
- * One pixel's values for one native time chunk: `chunkTime * hourCount`
- * floats, ~140 KB here. The chunk it came from is ~224 MB and is never kept.
+ * One whole decoded native chunk: every pixel of a 40x40 patch for one time
+ * chunk, ~224 MB here.
+ *
+ * Keeping the patch rather than a window of it is what makes exploring cheap.
+ * The patch is exactly the area the map already draws as the dashed box, so
+ * every cell the user can see inside it is served without another download.
  */
-type CachedPixelSeries = {
-  values: Float32Array;
+type CachedPatch = {
+  data: Float32Array;
+  shape: number[];
   chunkStartDay: number;
 };
 
 /**
- * Pixels within this many cells of the requested one are harvested from the
- * same decoded chunk. Decoding is the expensive step, so a 5x5 window costs
- * ~3.5 MB of extra transfer and saves a 182 MB refetch when the user explores
- * neighbouring cells.
+ * Byte budget for decoded patches. A patch is ~224 MB, so this holds four:
+ * enough for a few years at one spot, or a couple of neighbouring patches,
+ * without letting a long history selection grow the heap without limit.
  */
-const NEIGHBORHOOD_RADIUS = 2;
+const DEFAULT_CACHE_BYTES = 1024 ** 3;
 
 /** Days per native time chunk, matching the store's `[1461, 24, 40, 40]`. */
 const NATIVE_TIME_CHUNK = 1461;
@@ -62,7 +67,7 @@ const NATIVE_TIME_CHUNK = 1461;
  * cancel the chunk another still wants.
  */
 type InFlightDecode = {
-  promise: Promise<CachedPixelSeries>;
+  promise: Promise<CachedPatch>;
   controller: AbortController;
   waiters: number;
 };
@@ -78,7 +83,7 @@ type ZarrArray = ZarrArrayHandle & {
 
 export class ZarrChunkReader {
   private ds: ZarrStore;
-  private cache: LRUCache<string, CachedPixelSeries>;
+  private cache: LRUCache<string, CachedPatch>;
   private arrayPromises = new Map<string, Promise<ZarrArray>>();
   private chunkLoadsInFlight = new Map<string, InFlightDecode>();
   private gridSpecPromise?: Promise<GridSpec>;
@@ -86,13 +91,15 @@ export class ZarrChunkReader {
   private workerChecked = false;
 
   /**
-   * Entries are a fixed ~140 KB (one pixel, one native time chunk), so the
-   * default caps the decoded cache near 72 MB, and one full-history pixel
-   * occupies 6 of them.
+   * Bounded by bytes, not by entry count: one entry here is a ~224 MB patch,
+   * so counting entries would be a meaningless proxy for memory.
    */
-  constructor(ds: ZarrStore, maxCacheSize = 512) {
+  constructor(ds: ZarrStore, maxBytes = DEFAULT_CACHE_BYTES) {
     this.ds = ds;
-    this.cache = new LRUCache(maxCacheSize);
+    this.cache = new LRUCache(Number.MAX_SAFE_INTEGER, {
+      maxBytes,
+      weigh: (patch) => patch.data.byteLength,
+    });
   }
 
   /**
@@ -148,16 +155,13 @@ export class ZarrChunkReader {
   }
 
   /**
-   * Decode one native chunk, return the requested pixel's slice of it, and
-   * cache the surrounding neighbourhood on the way past.
+   * Decode one native chunk and cache the whole patch.
    *
-   * The requested pixel is read straight out of the decoded block rather than
-   * back out of the cache, so a request never depends on what the cache chose
-   * to retain. Deduping is keyed by pixel, not by chunk: two pixels share a
-   * chunk but not a neighbourhood, and awaiting a neighbour's load would leave
-   * this pixel unharvested.
+   * Deduping is keyed by the chunk, since the entry now serves every pixel in
+   * it: two callers wanting different cells of the same patch genuinely share
+   * one download.
    */
-  private loadPixelSeries(
+  private loadPatch(
     array: ZarrArray,
     variable: string,
     context: PixelNativeChunkContext,
@@ -165,8 +169,8 @@ export class ZarrChunkReader {
     chunkSizes: ArrayChunkSizes,
     tracker: SeriesProgressTracker | null,
     signal: AbortSignal | undefined,
-  ): Promise<CachedPixelSeries> {
-    const loadKey = `${variable}:${timeChunkIdx}:${context.chunkLatIdx}:${context.chunkLonIdx}:${context.localLat}:${context.localLon}`;
+  ): Promise<CachedPatch> {
+    const loadKey = this.patchKey(variable, context, timeChunkIdx);
 
     const existing = this.chunkLoadsInFlight.get(loadKey);
     if (existing) return this.join(existing, signal);
@@ -179,23 +183,21 @@ export class ZarrChunkReader {
     ];
 
     const controller = new AbortController();
-    const promise = this.decodeBlock(
+    const promise = this.decodeChunk(
       array,
       variable,
       chunkCoords,
-      context,
       tracker,
       controller.signal,
     )
       .then((decoded) => {
-        this.storeNeighborhood(
-          variable,
-          context,
-          timeChunkIdx,
-          chunkSizes,
-          decoded,
-        );
-        return this.pixelFromBlock(decoded, context, timeChunkIdx, chunkSizes);
+        const patch: CachedPatch = {
+          data: decoded.data,
+          shape: decoded.shape,
+          chunkStartDay: chunkIndexToStartDay(timeChunkIdx, chunkSizes.time),
+        };
+        this.cache.set(loadKey, patch);
+        return patch;
       })
       .finally(() => {
         this.chunkLoadsInFlight.delete(loadKey);
@@ -213,7 +215,7 @@ export class ZarrChunkReader {
   private join(
     entry: InFlightDecode,
     signal: AbortSignal | undefined,
-  ): Promise<CachedPixelSeries> {
+  ): Promise<CachedPatch> {
     if (!signal) return entry.promise;
     if (signal.aborted) return Promise.reject(abortError());
 
@@ -226,7 +228,7 @@ export class ZarrChunkReader {
       if (entry.waiters <= 0) entry.controller.abort();
     };
 
-    return new Promise<CachedPixelSeries>((resolve, reject) => {
+    return new Promise<CachedPatch>((resolve, reject) => {
       const onAbort = () => {
         release();
         reject(abortError());
@@ -248,33 +250,42 @@ export class ZarrChunkReader {
     });
   }
 
-  /** The requested pixel's own series, read out of the harvested block. */
-  private pixelFromBlock(
-    decoded: DecodedBlock,
+  /** Cache key for one patch: variable, time chunk, and the lat/lon block. */
+  private patchKey(
+    variable: string,
     context: PixelNativeChunkContext,
     timeChunkIdx: number,
-    chunkSizes: ArrayChunkSizes,
-  ): CachedPixelSeries {
-    const { block, seriesLength, values } = decoded;
-    const lat = context.localLat - block.localLatStart;
-    const lon = context.localLon - block.localLonStart;
-    const offset = (lat * block.localLonCount + lon) * seriesLength;
+  ): string {
+    return nativeChunkKey(variable, {
+      timeChunkIdx,
+      hourChunkIdx: 0,
+      latChunkIdx: context.chunkLatIdx,
+      lonChunkIdx: context.chunkLonIdx,
+    });
+  }
 
+  /** One cell's series, read out of a cached patch. */
+  private pixelSegment(
+    patch: CachedPatch,
+    context: PixelNativeChunkContext,
+  ): { values: Float32Array; chunkStartDay: number } {
     return {
-      values: values.slice(offset, offset + seriesLength),
-      chunkStartDay: chunkIndexToStartDay(timeChunkIdx, chunkSizes.time),
+      values: extractPixelFromNativeChunk(patch.data, patch.shape, {
+        localLat: context.localLat,
+        localLon: context.localLon,
+      }),
+      chunkStartDay: patch.chunkStartDay,
     };
   }
 
   /** Decode in the worker where possible, otherwise inline on this thread. */
-  private async decodeBlock(
+  private async decodeChunk(
     array: ZarrArray,
     variable: string,
     chunkCoords: number[],
-    context: PixelNativeChunkContext,
     tracker: SeriesProgressTracker | null,
     signal: AbortSignal,
-  ): Promise<DecodedBlock> {
+  ): Promise<DecodedChunk> {
     const worker = this.getWorker();
 
     if (worker) {
@@ -284,9 +295,6 @@ export class ZarrChunkReader {
             storeUrl: this.ds.url,
             variable,
             chunkCoords,
-            localLat: context.localLat,
-            localLon: context.localLon,
-            radius: NEIGHBORHOOD_RADIUS,
           },
           tracker ? (loaded, total) => tracker.update(loaded, total) : undefined,
           signal,
@@ -316,59 +324,16 @@ export class ZarrChunkReader {
       setActiveAbortSignal(null);
     }
 
-    const block = neighborhoodBlock(
-      { localLat: context.localLat, localLon: context.localLon },
-      NEIGHBORHOOD_RADIUS,
-      chunk.shape,
-    );
-
-    return {
-      block,
-      seriesLength: chunk.shape[0]! * chunk.shape[1]!,
-      values: extractBlockFromNativeChunk(chunk.data, chunk.shape, block),
-    };
-  }
-
-  /** Split a decoded neighbourhood into one cache entry per pixel. */
-  private storeNeighborhood(
-    variable: string,
-    context: PixelNativeChunkContext,
-    timeChunkIdx: number,
-    chunkSizes: ArrayChunkSizes,
-    decoded: DecodedBlock,
-  ): void {
-    const { block, seriesLength, values } = decoded;
-    const chunkStartDay = chunkIndexToStartDay(timeChunkIdx, chunkSizes.time);
-    const latOrigin = context.chunkLatIdx * chunkSizes.lat;
-    const lonOrigin = context.chunkLonIdx * chunkSizes.lon;
-
-    let offset = 0;
-    for (let lat = 0; lat < block.localLatCount; lat++) {
-      for (let lon = 0; lon < block.localLonCount; lon++) {
-        const key = pixelSeriesKey(
-          variable,
-          latOrigin + block.localLatStart + lat,
-          lonOrigin + block.localLonStart + lon,
-          timeChunkIdx,
-        );
-        this.cache.set(key, {
-          // slice(), not subarray(), so evicting one pixel frees its memory
-          // instead of pinning the whole neighbourhood buffer.
-          values: values.slice(offset, offset + seriesLength),
-          chunkStartDay,
-        });
-        offset += seriesLength;
-      }
-    }
+    return { data: chunk.data, shape: chunk.shape };
   }
 
   /**
-   * Calendar years already held for this exact cell, so the year selector can
-   * show which are free to draw.
+   * Calendar years already held for the patch this cell sits in, so the year
+   * selector can show which are free to draw.
    *
-   * The cache is keyed per pixel rather than per native chunk, so this asks
-   * about the picked cell itself: a neighbour having been decoded says nothing
-   * about whether this cell's series is resident.
+   * Patch-scoped on purpose: an entry holds every cell of its 40x40 block, so
+   * a year decoded for a neighbour really is available here too, with no
+   * download.
    */
   getCachedYears(
     grid: GridCell,
@@ -377,14 +342,20 @@ export class ZarrChunkReader {
   ): Set<number> {
     const cachedYears = new Set<number>();
     const chunkCount = Math.ceil(ZARR_STORE.dimensions.time / chunkTime);
+    const latChunkIdx = Math.floor(
+      grid.latIndex / ZARR_STORE.nativeChunks.lat,
+    );
+    const lonChunkIdx = Math.floor(
+      grid.lonIndex / ZARR_STORE.nativeChunks.lon,
+    );
 
     for (let chunkIdx = 0; chunkIdx < chunkCount; chunkIdx++) {
-      const key = pixelSeriesKey(
-        variable,
-        grid.latIndex,
-        grid.lonIndex,
-        chunkIdx,
-      );
+      const key = nativeChunkKey(variable, {
+        timeChunkIdx: chunkIdx,
+        hourChunkIdx: 0,
+        latChunkIdx,
+        lonChunkIdx,
+      });
       if (this.cache.has(key)) {
         for (const year of timeChunkIndexToYears(chunkIdx, chunkTime)) {
           cachedYears.add(year);
@@ -415,7 +386,7 @@ export class ZarrChunkReader {
       typeof array.attrs.units === "string" ? array.attrs.units : undefined;
 
     const keyFor = (timeChunkIdx: number) =>
-      pixelSeriesKey(variable, grid.latIndex, grid.lonIndex, timeChunkIdx);
+      this.patchKey(variable, context, timeChunkIdx);
 
     const missingCount = context.timeChunkIndices.filter(
       (timeChunkIdx) => !this.cache.has(keyFor(timeChunkIdx)),
@@ -429,7 +400,7 @@ export class ZarrChunkReader {
 
     // Sequential on purpose: one decoded chunk resident at a time. Fetching
     // all of them at once is what exhausted memory on mobile.
-    const segments: CachedPixelSeries[] = [];
+    const segments: { values: Float32Array; chunkStartDay: number }[] = [];
     for (const timeChunkIdx of context.timeChunkIndices) {
       // Stop between chunks too, so an abandoned request does not start the
       // next download after the current one was already paid for.
@@ -437,21 +408,20 @@ export class ZarrChunkReader {
 
       const cached = this.cache.get(keyFor(timeChunkIdx));
       if (cached) {
-        segments.push(cached);
+        segments.push(this.pixelSegment(cached, context));
         continue;
       }
 
-      segments.push(
-        await this.loadPixelSeries(
-          array,
-          variable,
-          context,
-          timeChunkIdx,
-          chunkSizes,
-          tracker,
-          signal,
-        ),
+      const patch = await this.loadPatch(
+        array,
+        variable,
+        context,
+        timeChunkIdx,
+        chunkSizes,
+        tracker,
+        signal,
       );
+      segments.push(this.pixelSegment(patch, context));
       tracker?.complete();
     }
 
@@ -560,5 +530,3 @@ export class ZarrChunkReader {
     );
   }
 }
-
-export type { LocalBlock };

@@ -1,11 +1,6 @@
 /// <reference lib="webworker" />
 import * as zarr from "zarrita";
 import {
-  extractBlockFromNativeChunk,
-  neighborhoodBlock,
-  type LocalBlock,
-} from "@/lib/zarr/chunks";
-import {
   createByteProgressSink,
   isAbortError,
   openZarrStore,
@@ -19,12 +14,12 @@ import {
  *
  * One chunk of this dataset is 1461 x 24 x 40 x 40 f4, so decompressing it
  * allocates ~224 MB. Doing that on the main thread froze the tab for seconds
- * at a time and killed it outright on phones. Here the big array is allocated,
- * read, and dropped inside the worker; only the requested pixel neighbourhood
- * (a few MB) is transferred back, so the main-thread heap never sees it.
+ * at a time and killed it outright on phones. Here it is decompressed off the
+ * main thread and handed over as a transfer, so no copy is made and the main
+ * thread never blocks on the work.
  *
- * Requests are queued and served one at a time, which also caps process-wide
- * peak memory at a single decoded chunk no matter how many pixels are pending.
+ * Requests are queued and served one at a time, which caps the memory held
+ * during decoding at a single chunk no matter how many pixels are pending.
  */
 
 export type ChunkRequest = {
@@ -33,9 +28,6 @@ export type ChunkRequest = {
   storeUrl: string;
   variable: string;
   chunkCoords: number[];
-  localLat: number;
-  localLon: number;
-  radius: number;
 };
 
 /** Abandon a decode: drop it if queued, abort its download if running. */
@@ -51,9 +43,8 @@ export type ChunkResponse =
   | {
       id: number;
       type: "result";
-      block: LocalBlock;
-      seriesLength: number;
-      values: Float32Array;
+      data: Float32Array;
+      shape: number[];
     }
   | { id: number; type: "error"; message: string };
 
@@ -128,23 +119,16 @@ async function handle(request: ChunkRequest): Promise<void> {
       setActiveAbortSignal(null);
     }
 
-    const block = neighborhoodBlock(
-      { localLat: request.localLat, localLon: request.localLon },
-      request.radius,
-      chunk.shape,
-    );
-    const values = extractBlockFromNativeChunk(chunk.data, chunk.shape, block);
-    const seriesLength = chunk.shape[0]! * chunk.shape[1]!;
-
+    // Transferred, not copied, so handing back the whole chunk costs no more
+    // than handing back a slice of it did.
     scope.postMessage(
       {
         id: request.id,
         type: "result",
-        block,
-        seriesLength,
-        values,
+        data: chunk.data,
+        shape: chunk.shape,
       } satisfies ChunkResponse,
-      [values.buffer],
+      [chunk.data.buffer],
     );
   } catch (error) {
     // The caller that aborted has already settled its own promise; there is

@@ -3,17 +3,15 @@ import type {
   ChunkResponse,
   WorkerMessage,
 } from "@/lib/zarr/chunk.worker";
-import type { LocalBlock } from "@/lib/zarr/chunks";
 import { abortError } from "@/lib/zarr/store";
 
-export type DecodedBlock = {
-  block: LocalBlock;
-  seriesLength: number;
-  values: Float32Array;
+export type DecodedChunk = {
+  data: Float32Array;
+  shape: number[];
 };
 
 type Pending = {
-  resolve: (value: DecodedBlock) => void;
+  resolve: (value: DecodedChunk) => void;
   reject: (error: Error) => void;
   onProgress?: (loaded: number, total: number) => void;
 };
@@ -68,21 +66,17 @@ export class ChunkWorkerClient {
       return;
     }
 
-    entry.resolve({
-      block: message.block,
-      seriesLength: message.seriesLength,
-      values: message.values,
-    });
+    entry.resolve({ data: message.data, shape: message.shape });
   }
 
   decode(
     request: Omit<ChunkRequest, "id" | "type">,
     onProgress?: (loaded: number, total: number) => void,
     signal?: AbortSignal,
-  ): Promise<DecodedBlock> {
+  ): Promise<DecodedChunk> {
     const id = ++this.nextId;
 
-    return new Promise<DecodedBlock>((resolve, reject) => {
+    return new Promise<DecodedChunk>((resolve, reject) => {
       if (signal?.aborted) {
         reject(abortError());
         return;
