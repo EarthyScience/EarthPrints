@@ -5,6 +5,7 @@ import {
 } from "@/lib/map/fingerprintScale";
 import { formatSeriesValue } from "@/components/map/timeSeriesChartConfig";
 import { formatSelectedYearsLabel } from "@/lib/zarr/timeRange";
+import { formatTimeBasis } from "@/lib/zarr/localTime";
 import type { CapturedImage } from "./capture";
 import { isoDate, type ExportProvenance } from "./provenance";
 
@@ -107,6 +108,7 @@ function drawFacts(
     ["Clicked", formatLatLon(prov.click.lat, prov.click.lon)],
     ["Grid index", `lat ${prov.cell.latIndex}, lon ${prov.cell.lonIndex}`],
     ["Resolution", `${prov.resolutionDeg}deg, hourly`],
+    ["Hours", formatTimeBasis(prov.timeBasis, prov.utcOffsetHours)],
     ["Variable", `${prov.variable}${prov.units ? ` (${prov.units})` : ""}`],
     ...(yearsLabel ? [["Years", yearsLabel] as [string, string]] : []),
     ["Window", `${isoDate(prov.windowStart)} to ${isoDate(prov.windowEnd)}`],
@@ -304,9 +306,10 @@ export async function buildReportPdf({
     doc,
     assets.fingerprint,
     "Diurnal fingerprint",
-    `${prov.dayCount.toLocaleString()} days x ${prov.hoursPerDay} hours${
-      prov.units ? ` - ${prov.units}` : ""
-    }`,
+    `${prov.dayCount.toLocaleString()} days x ${prov.hoursPerDay} hours - ${formatTimeBasis(
+      prov.timeBasis,
+      prov.utcOffsetHours,
+    )}${prov.units ? ` - ${prov.units}` : ""}`,
     cursor,
   );
 

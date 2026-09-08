@@ -1,4 +1,5 @@
 import type { SheetData } from "write-excel-file/browser";
+import { formatUtcOffset } from "@/lib/zarr/localTime";
 import { isoDate, type ExportProvenance } from "./provenance";
 import type { SeriesRow } from "./rows";
 
@@ -22,17 +23,23 @@ export function buildWorkbookSheets(
   const data: SheetData = [
     [
       { value: "timestamp_utc", ...BOLD },
+      { value: "timestamp_local", ...BOLD },
       { value: "year", ...BOLD },
       { value: "date", ...BOLD },
+      { value: "date_local", ...BOLD },
       { value: "hour", ...BOLD },
+      { value: "hour_local", ...BOLD },
       { value: "day_index", ...BOLD },
       { value: `value (${prov.units ?? "unspecified"})`, ...BOLD },
     ],
     ...rows.map((row) => [
       { value: row.timestamp, type: Date },
+      { value: row.timestampLocal, type: Date },
       row.year,
       row.date,
+      row.dateLocal,
       row.hour,
+      row.hourLocal,
       row.dayIndex,
       row.value,
     ]),
@@ -51,6 +58,9 @@ export function buildWorkbookSheets(
     ["cell_lon", prov.cell.lon],
     ["lat_index", prov.cell.latIndex],
     ["lon_index", prov.cell.lonIndex],
+    ["local_time", `mean solar time, ${formatUtcOffset(prov.utcOffsetHours)}`],
+    ["utc_offset_hours", prov.utcOffsetHours],
+    ["plot_time_basis", prov.timeBasis],
     ["history_years", prov.historyYears],
     ...(prov.selectedYears && prov.selectedYears.length > 0
       ? [["selected_years", prov.selectedYears.join(", ")] as [string, string]]
@@ -88,9 +98,12 @@ export async function buildSeriesWorkbook(
       dateFormat: "yyyy-mm-dd hh:mm:ss",
       columns: [
         { width: 22 },
+        { width: 22 },
         { width: 8 },
         { width: 14 },
+        { width: 14 },
         { width: 8 },
+        { width: 12 },
         { width: 12 },
         { width: 16 },
       ],

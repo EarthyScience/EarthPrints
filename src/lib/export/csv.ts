@@ -1,7 +1,9 @@
+import { formatUtcOffset } from "@/lib/zarr/localTime";
 import { isoDate, type ExportProvenance } from "./provenance";
 import type { SeriesRow } from "./rows";
 
-export const CSV_COLUMNS = "timestamp_utc,year,date,hour,day_index,value";
+export const CSV_COLUMNS =
+  "timestamp_utc,timestamp_local,year,date,date_local,hour,hour_local,day_index,value";
 
 /**
  * Provenance rides along as `#` comment lines. A file of bare numbers is
@@ -23,6 +25,11 @@ function buildHeader(rowCount: number, prov: ExportProvenance): string[] {
     `cell_lon: ${prov.cell.lon}`,
     `lat_index: ${prov.cell.latIndex}`,
     `lon_index: ${prov.cell.lonIndex}`,
+    // The store's hour axis is UTC. The local columns are that axis moved by the
+    // cell's nominal solar offset, so a reader can pick either without guessing.
+    `local_time: mean solar time, ${formatUtcOffset(prov.utcOffsetHours)}`,
+    `utc_offset_hours: ${prov.utcOffsetHours}`,
+    `plot_time_basis: ${prov.timeBasis}`,
     `history_years: ${prov.historyYears}`,
     ...(prov.selectedYears && prov.selectedYears.length > 0
       ? [`selected_years: ${prov.selectedYears.join(", ")}`]
@@ -50,9 +57,18 @@ export function buildSeriesCsv(
 
   for (const row of rows) {
     lines.push(
-      `${row.timestamp.toISOString()},${row.year},${row.date},${row.hour},${row.dayIndex},${
-        row.value ?? ""
-      }`,
+      [
+        row.timestamp.toISOString(),
+        // No trailing Z: this one is a wall clock, not an instant in UTC.
+        row.timestampLocal.toISOString().slice(0, 19),
+        row.year,
+        row.date,
+        row.dateLocal,
+        row.hour,
+        row.hourLocal,
+        row.dayIndex,
+        row.value ?? "",
+      ].join(","),
     );
   }
 

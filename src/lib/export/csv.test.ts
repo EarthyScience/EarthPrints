@@ -68,7 +68,9 @@ describe("buildSeriesCsv", () => {
     const dataLines = text.split("\n").slice(-25, -1);
 
     expect(dataLines[3].endsWith(",")).toBe(true);
-    expect(dataLines[3].split(",")).toHaveLength(6);
+    expect(dataLines[3].split(",")).toHaveLength(
+      CSV_COLUMNS.split(",").length,
+    );
   });
 
   it("says unspecified rather than null when units are absent", () => {

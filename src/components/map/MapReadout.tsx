@@ -4,7 +4,13 @@ import { useMemo, useState } from "react";
 import type { GridSpec, MapSelection } from "@/types/map";
 import { formatLatitude, formatLongitude } from "@/lib/map/geogrid";
 import { DEFAULT_GRID_SPEC, ZARR_STORE } from "@/lib/constants/store";
-import { ZARR_TIME } from "@/lib/zarr/timeRange";
+import { ZARR_TIME, getSelectedYearsDayMapping } from "@/lib/zarr/timeRange";
+import {
+  formatTimeBasis,
+  localHourOffset,
+  shiftSeriesToLocalTime,
+  type TimeBasis,
+} from "@/lib/zarr/localTime";
 import { hasFiniteValues } from "@/lib/zarr/series";
 import { TimeSeriesPlot } from "@/components/map/TimeSeriesPlot";
 import { FingerprintPlot } from "@/components/map/FingerprintPlot";
@@ -49,13 +55,35 @@ export function MapReadout({
 }: MapReadoutProps) {
   const [plotView, setPlotView] = useState<PlotView>("line");
   const [fingerprintTransposed, setFingerprintTransposed] = useState(false);
-  // An all-NaN cell has nothing to draw, download, or switch views on.
+  const [timeBasis, setTimeBasis] = useState<TimeBasis>("local");
+  // An all-NaN cell has nothing to draw, download, or switch views on. Measured
+  // on the archive values, since the local-time roll blanks a few edge hours of
+  // its own and must not make a populated cell look empty.
   const hasPlottableData = useMemo(
     () => seriesValues !== null && hasFiniteValues(seriesValues),
     [seriesValues],
   );
   const isEmptyCell =
     !loadingSeries && seriesValues !== null && !hasPlottableData;
+
+  // The archive's hour axis is UTC, so a pixel's diurnal cycle sits wherever its
+  // longitude puts solar noon in UTC unless we re-index it onto the local clock.
+  const utcOffsetHours = localHourOffset(selection?.grid.lon ?? 0);
+  const timeBasisLabel = formatTimeBasis(timeBasis, utcOffsetHours);
+
+  const displayValues = useMemo(() => {
+    if (!seriesValues || timeBasis === "utc") return seriesValues;
+    const { absoluteDays } = getSelectedYearsDayMapping(
+      selectedYears,
+      undefined,
+      Math.floor(seriesValues.length / ZARR_TIME.hoursPerDay),
+    );
+    return shiftSeriesToLocalTime(seriesValues, {
+      hoursPerDay: ZARR_TIME.hoursPerDay,
+      offsetHours: utcOffsetHours,
+      absoluteDays,
+    });
+  }, [seriesValues, selectedYears, timeBasis, utcOffsetHours]);
 
   if (!selection) {
     return (
@@ -100,8 +128,8 @@ export function MapReadout({
       </span>
 
       {/* View switch left, download right, on the row between title and plot. */}
-      <div className="mb-3 mt-2 flex items-center justify-between gap-3 shrink-0">
-        <div className="flex items-center gap-2">
+      <div className="mb-3 mt-2 flex flex-wrap items-center justify-between gap-x-3 gap-y-2 shrink-0">
+        <div className="flex flex-wrap items-center gap-2">
           <PlotViewToggle
             view={plotView}
             onChange={setPlotView}
@@ -119,12 +147,23 @@ export function MapReadout({
               ⇄ Flip axes
             </button>
           ) : null}
+          <TimeBasisToggle
+            basis={timeBasis}
+            offsetHours={utcOffsetHours}
+            onChange={setTimeBasis}
+            disabled={isEmptyCell}
+          />
         </div>
         <DownloadButton
           selection={selection}
           gridSpec={gridSpec}
           historyYears={selectedYears.length}
           values={loadingSeries || !hasPlottableData ? null : seriesValues}
+          displayValues={
+            loadingSeries || !hasPlottableData ? null : displayValues
+          }
+          timeBasis={timeBasis}
+          timeBasisLabel={timeBasisLabel}
           units={seriesUnits}
           selectedYears={selectedYears}
         />
@@ -146,19 +185,20 @@ export function MapReadout({
           No data at this cell. NEE is estimated over vegetated land, so ocean
           and bare-ground cells are empty. Pick a cell over vegetation.
         </p>
-      ) : seriesValues ? (
+      ) : displayValues ? (
         plotView === "line" ? (
           <TimeSeriesPlot
-            values={seriesValues}
+            values={displayValues}
             units={seriesUnits}
             hoursPerDay={ZARR_TIME.hoursPerDay}
           />
         ) : (
           <FingerprintPlot
-            values={seriesValues}
+            values={displayValues}
             units={seriesUnits}
             hoursPerDay={ZARR_TIME.hoursPerDay}
             selectedYears={selectedYears}
+            timeBasisLabel={timeBasisLabel}
             transposed={fingerprintTransposed}
             onTransposedChange={setFingerprintTransposed}
           />
@@ -221,6 +261,56 @@ function PlotViewToggle({
             type="button"
             role="tab"
             aria-selected={active}
+            disabled={disabled}
+            onClick={() => onChange(option.id)}
+            className={`rounded-[5px] px-2 py-0.5 text-[11.5px] font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${
+              active
+                ? "bg-accent text-white"
+                : "text-editor-fg-tertiary hover:text-editor-fg-secondary"
+            }`}
+          >
+            {option.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+/**
+ * Which clock the plots read against. Local is the default: the archive's hour
+ * axis is UTC, so a pixel's own clock is what makes its diurnal cycle line up.
+ * UTC stays reachable for anyone checking against the raw store.
+ */
+function TimeBasisToggle({
+  basis,
+  offsetHours,
+  onChange,
+  disabled = false,
+}: {
+  basis: TimeBasis;
+  offsetHours: number;
+  onChange: (basis: TimeBasis) => void;
+  disabled?: boolean;
+}) {
+  const options: { id: TimeBasis; label: string }[] = [
+    { id: "local", label: "Local" },
+    { id: "utc", label: "UTC" },
+  ];
+  return (
+    <div
+      className="inline-flex rounded-md border border-editor-border p-0.5"
+      role="group"
+      aria-label="Time basis"
+      title={`Hours read in ${formatTimeBasis("local", offsetHours)}, or as stored in UTC`}
+    >
+      {options.map((option) => {
+        const active = option.id === basis;
+        return (
+          <button
+            key={option.id}
+            type="button"
+            aria-pressed={active}
             disabled={disabled}
             onClick={() => onChange(option.id)}
             className={`rounded-[5px] px-2 py-0.5 text-[11.5px] font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${

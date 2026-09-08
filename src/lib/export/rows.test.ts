@@ -9,9 +9,15 @@ const SELECTION: MapSelection = {
   grid: { lon: 11.575, lat: 50.925, lonIndex: 3831, latIndex: 780 },
 };
 
-function provenanceFor(days: number) {
+/** Well east of Greenwich, so the local clock and UTC cannot coincide. */
+const SYDNEY: MapSelection = {
+  click: { lon: 151.2093, lat: -33.8688 },
+  grid: { lon: 151.225, lat: -33.875, lonIndex: 6624, latIndex: 2477 },
+};
+
+function provenanceFor(days: number, selection: MapSelection = SELECTION) {
   return buildProvenance({
-    selection: SELECTION,
+    selection,
     historyYears: 1,
     valueCount: days * ZARR_TIME.hoursPerDay,
     units: "gC m-2 d-1",
@@ -55,6 +61,43 @@ describe("buildSeriesRows", () => {
     expect(last.timestamp.toISOString().slice(0, 10)).toBe(
       prov.windowEnd.toISOString().slice(0, 10),
     );
+  });
+
+  it("carries the cell's own clock beside UTC", () => {
+    const prov = provenanceFor(2, SYDNEY);
+    const rows = buildSeriesRows(
+      new Float32Array(2 * ZARR_TIME.hoursPerDay),
+      prov,
+    );
+
+    expect(prov.utcOffsetHours).toBe(10);
+
+    // The tables stay a dump of the archive, so the UTC columns are untouched
+    // and the local ones are the same instant read on the cell's clock.
+    expect(rows[0].hour).toBe(0);
+    expect(rows[0].hourLocal).toBe(10);
+    expect(rows[0].dateLocal).toBe(rows[0].date);
+
+    // Late UTC hours belong to the next local day.
+    expect(rows[20].hour).toBe(20);
+    expect(rows[20].hourLocal).toBe(6);
+    expect(rows[20].dateLocal).toBe(rows[24].date);
+
+    expect(rows[0].timestampLocal.getTime() - rows[0].timestamp.getTime()).toBe(
+      10 * 3_600_000,
+    );
+  });
+
+  it("leaves the local columns on UTC for a cell near Greenwich", () => {
+    const prov = provenanceFor(1, {
+      click: { lon: 0.1, lat: 51.5 },
+      grid: { lon: 0.025, lat: 51.525, lonIndex: 3600, latIndex: 768 },
+    });
+    const rows = buildSeriesRows(new Float32Array(ZARR_TIME.hoursPerDay), prov);
+
+    expect(prov.utcOffsetHours).toBe(0);
+    expect(rows[7].hourLocal).toBe(rows[7].hour);
+    expect(rows[7].dateLocal).toBe(rows[7].date);
   });
 
   it("carries NaN through as null rather than a number", () => {
