@@ -28,11 +28,11 @@ export const metadata: Metadata = {
   icons: {
     icon: [
       {
-        url: "/earthprints-bars.svg?v=6",
+        url: "/earthprints-bars.svg?v=7",
         media: "(prefers-color-scheme: light)",
       },
       {
-        url: "/earthprints-bars-dark.svg?v=6",
+        url: "/earthprints-bars-dark.svg?v=7",
         media: "(prefers-color-scheme: dark)",
       },
     ],

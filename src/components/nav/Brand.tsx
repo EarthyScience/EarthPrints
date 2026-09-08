@@ -11,7 +11,7 @@ export function Brand() {
     >
       <span className="flex flex-shrink-0 text-editor-fg-primary">
         <Image
-          src="/earthprints-bars.svg?v=6"
+          src="/earthprints-bars.svg?v=7"
           width={24}
           height={24}
           className="hidden [.light_&]:block"
@@ -19,7 +19,7 @@ export function Brand() {
           aria-hidden="true"
         />
         <Image
-          src="/earthprints-bars-dark.svg?v=6"
+          src="/earthprints-bars-dark.svg?v=7"
           width={24}
           height={24}
           className="block [.light_&]:hidden"
