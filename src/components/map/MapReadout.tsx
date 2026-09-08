@@ -144,7 +144,7 @@ export function MapReadout({
       ) : isEmptyCell ? (
         <p className="text-[13px] leading-[1.55] text-editor-fg-tertiary">
           No data at this cell. NEE is estimated over vegetated land, so ocean
-          and bare-ground cells are empty. Pick a cell over vegetation.
+          and bare-ground cells are empty. Pick a cell over land.
         </p>
       ) : seriesValues ? (
         plotView === "line" ? (
