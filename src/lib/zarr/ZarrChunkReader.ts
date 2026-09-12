@@ -2,12 +2,17 @@ import * as zarr from "zarrita";
 import { LRUCache } from "@/lib/cache/lru";
 import { ZARR_STORE } from "@/lib/constants/store";
 import {
+  alignedSubBlock,
+  blockCoversChunk,
   extractPixelFromNativeChunk,
   nativeChunkKey,
   pixelToNativeChunkContext,
+  sliceBlockFromNativeChunk,
   stitchTimeSeriesForRange,
+  subBlockIndices,
   type ArrayChunkSizes,
   type AxisSlice,
+  type LocalBlock,
   type PixelNativeChunkContext,
 } from "@/lib/zarr/chunks";
 import {
@@ -17,6 +22,7 @@ import {
 import {
   chunkIndexToStartDay,
   DEFAULT_HISTORY_YEARS,
+  NATIVE_TIME_CHUNK,
   timeChunkIndexToYears,
   yearsToContiguousBlocks,
   yearsToDayRange,
@@ -35,31 +41,39 @@ import {
   type ZarrStore,
 } from "@/lib/zarr/store";
 import { deriveGridSpec } from "@/lib/zarr/gridSpec";
+import {
+  cacheBytesFor,
+  DEFAULT_PATCH_WINDOW,
+  DESKTOP_CACHE_BYTES,
+} from "@/lib/settings/patchWindow";
 import type { GridCell, GridSpec } from "@/types/map";
 
 /**
- * One whole decoded native chunk: every pixel of a 40x40 patch for one time
- * chunk, ~224 MB here.
+ * One decoded patch: every pixel of a window-aligned tile of a native chunk,
+ * for one time chunk. A tile is the whole 40x40 chunk at the largest window
+ * (~224 MB) down to 10x10 at the smallest (~14 MB).
  *
- * Keeping the patch rather than a window of it is what makes exploring cheap.
- * The patch is exactly the area the map already draws as the dashed box, so
- * every cell the user can see inside it is served without another download.
+ * Keeping a tile rather than a single cell is what makes exploring cheap: the
+ * map draws the tile as the dashed box, and every cell inside it is served
+ * without another download. How big that box is, is the caller's choice.
  */
 type CachedPatch = {
   data: Float32Array;
   shape: number[];
+  block: LocalBlock;
   chunkStartDay: number;
 };
 
-/**
- * Byte budget for decoded patches. A patch is ~224 MB, so this holds four:
- * enough for a few years at one spot, or a couple of neighbouring patches,
- * without letting a long history selection grow the heap without limit.
- */
-const DEFAULT_CACHE_BYTES = 1024 ** 3;
-
-/** Days per native time chunk, matching the store's `[1461, 24, 40, 40]`. */
-const NATIVE_TIME_CHUNK = 1461;
+export type ZarrChunkReaderOptions = {
+  /** Cells kept per side of a downloaded patch. See `@/lib/settings/patchWindow`. */
+  windowSize?: number;
+  /**
+   * Byte budget for decoded patches. Defaults to the desktop budget raised, if
+   * need be, to hold one spot's full history, since a budget under that evicts
+   * the patch it is about to ask for again.
+   */
+  maxBytes?: number;
+};
 
 /**
  * A decode several callers may be waiting on. The controller is only aborted
@@ -89,17 +103,53 @@ export class ZarrChunkReader {
   private gridSpecPromise?: Promise<GridSpec>;
   private workerClient: ChunkWorkerClient | null = null;
   private workerChecked = false;
+  private windowSize: number;
+  private maxBytes: number;
 
   /**
-   * Bounded by bytes, not by entry count: one entry here is a ~224 MB patch,
-   * so counting entries would be a meaningless proxy for memory.
+   * Bounded by bytes, not by entry count: one entry here is a patch of up to
+   * ~224 MB, so counting entries would be a meaningless proxy for memory.
+   *
+   * The legacy number form is a byte budget, kept so existing callers read the
+   * same.
    */
-  constructor(ds: ZarrStore, maxBytes = DEFAULT_CACHE_BYTES) {
+  constructor(ds: ZarrStore, options: number | ZarrChunkReaderOptions = {}) {
+    const resolved =
+      typeof options === "number" ? { maxBytes: options } : options;
+
     this.ds = ds;
-    this.cache = new LRUCache(Number.MAX_SAFE_INTEGER, {
-      maxBytes,
+    this.windowSize = resolved.windowSize ?? DEFAULT_PATCH_WINDOW;
+    this.maxBytes =
+      resolved.maxBytes ?? cacheBytesFor(this.windowSize, DESKTOP_CACHE_BYTES);
+    this.cache = this.createCache();
+  }
+
+  private createCache(): LRUCache<string, CachedPatch> {
+    return new LRUCache(Number.MAX_SAFE_INTEGER, {
+      maxBytes: this.maxBytes,
       weigh: (patch) => patch.data.byteLength,
     });
+  }
+
+  /** Cells kept per side of a downloaded patch. */
+  getWindowSize(): number {
+    return this.windowSize;
+  }
+
+  /**
+   * Change how much of each patch is kept.
+   *
+   * The cache is dropped rather than converted: entries are keyed and shaped by
+   * the window they were cut with, and a smaller window cannot be re-cut from a
+   * larger one without keeping the larger one resident, which is the memory the
+   * change was asked for in the first place.
+   */
+  setWindowSize(windowSize: number, maxBytes?: number): void {
+    if (windowSize === this.windowSize && maxBytes === undefined) return;
+
+    this.windowSize = windowSize;
+    this.maxBytes = maxBytes ?? cacheBytesFor(windowSize, DESKTOP_CACHE_BYTES);
+    this.cache = this.createCache();
   }
 
   /**
@@ -155,11 +205,11 @@ export class ZarrChunkReader {
   }
 
   /**
-   * Decode one native chunk and cache the whole patch.
+   * Decode one native chunk and cache the window kept from it.
    *
-   * Deduping is keyed by the chunk, since the entry now serves every pixel in
-   * it: two callers wanting different cells of the same patch genuinely share
-   * one download.
+   * Deduping is keyed by that window, since the entry serves every pixel in it:
+   * two callers wanting different cells of one window genuinely share a single
+   * download.
    */
   private loadPatch(
     array: ZarrArray,
@@ -172,8 +222,12 @@ export class ZarrChunkReader {
   ): Promise<CachedPatch> {
     const loadKey = this.patchKey(variable, context, timeChunkIdx);
 
+    // A decode whose last waiter walked away is already cancelled: joining it
+    // would hand this caller the abort meant for someone else.
     const existing = this.chunkLoadsInFlight.get(loadKey);
-    if (existing) return this.join(existing, signal);
+    if (existing && !existing.controller.signal.aborted) {
+      return this.join(loadKey, existing, signal);
+    }
 
     const chunkCoords = [
       timeChunkIdx,
@@ -187,6 +241,7 @@ export class ZarrChunkReader {
       array,
       variable,
       chunkCoords,
+      context,
       tracker,
       controller.signal,
     )
@@ -194,6 +249,7 @@ export class ZarrChunkReader {
         const patch: CachedPatch = {
           data: decoded.data,
           shape: decoded.shape,
+          block: decoded.block,
           chunkStartDay: chunkIndexToStartDay(timeChunkIdx, chunkSizes.time),
         };
         this.cache.set(loadKey, patch);
@@ -205,7 +261,7 @@ export class ZarrChunkReader {
 
     const entry: InFlightDecode = { promise, controller, waiters: 0 };
     this.chunkLoadsInFlight.set(loadKey, entry);
-    return this.join(entry, signal);
+    return this.join(loadKey, entry, signal);
   }
 
   /**
@@ -213,6 +269,7 @@ export class ZarrChunkReader {
    * last waiter has given up.
    */
   private join(
+    key: string,
     entry: InFlightDecode,
     signal: AbortSignal | undefined,
   ): Promise<CachedPatch> {
@@ -221,16 +278,26 @@ export class ZarrChunkReader {
 
     entry.waiters += 1;
     let released = false;
-    const release = () => {
+    const release = (cancel: boolean) => {
       if (released) return;
       released = true;
       entry.waiters -= 1;
-      if (entry.waiters <= 0) entry.controller.abort();
+      if (!cancel || entry.waiters > 0) return;
+
+      entry.controller.abort();
+      // Retire it here rather than waiting for the rejection to land: a caller
+      // arriving in between would otherwise join a decode that is already
+      // cancelled and be handed an abort it never asked for. That is what left
+      // the panel blank when a year click was followed straight by a range
+      // selection over the same chunk.
+      if (this.chunkLoadsInFlight.get(key) === entry) {
+        this.chunkLoadsInFlight.delete(key);
+      }
     };
 
     return new Promise<CachedPatch>((resolve, reject) => {
       const onAbort = () => {
-        release();
+        release(true);
         reject(abortError());
       };
       signal.addEventListener("abort", onAbort, { once: true });
@@ -238,41 +305,53 @@ export class ZarrChunkReader {
       entry.promise.then(
         (value) => {
           signal.removeEventListener("abort", onAbort);
-          entry.waiters -= 1;
+          release(false);
           resolve(value);
         },
         (error) => {
           signal.removeEventListener("abort", onAbort);
-          entry.waiters -= 1;
+          release(false);
           reject(error);
         },
       );
     });
   }
 
-  /** Cache key for one patch: variable, time chunk, and the lat/lon block. */
+  /**
+   * Cache key for one patch: variable, time chunk, the lat/lon chunk, and the
+   * window-aligned tile of it that was kept.
+   *
+   * The tile indices come from the pixel alone, so the key is known before the
+   * chunk is decoded and two cells of one tile agree on it.
+   */
   private patchKey(
     variable: string,
     context: PixelNativeChunkContext,
     timeChunkIdx: number,
   ): string {
+    const { subLatIdx, subLonIdx } = subBlockIndices(context, this.windowSize);
     return nativeChunkKey(variable, {
       timeChunkIdx,
       hourChunkIdx: 0,
       latChunkIdx: context.chunkLatIdx,
       lonChunkIdx: context.chunkLonIdx,
+      subLatIdx,
+      subLonIdx,
     });
   }
 
-  /** One cell's series, read out of a cached patch. */
+  /**
+   * One cell's series, read out of a cached patch. Offsets are rebased onto the
+   * patch's own origin, which is the chunk's when the whole chunk was kept.
+   */
   private pixelSegment(
     patch: CachedPatch,
     context: PixelNativeChunkContext,
   ): { values: Float32Array; chunkStartDay: number } {
     return {
       values: extractPixelFromNativeChunk(patch.data, patch.shape, {
-        localLat: context.localLat,
-        localLon: context.localLon,
+        localLat: context.localLat - patch.block.localLatStart,
+        localLon: context.localLon - patch.block.localLonStart,
       }),
       chunkStartDay: patch.chunkStartDay,
     };
@@ -283,6 +362,7 @@ export class ZarrChunkReader {
     array: ZarrArray,
     variable: string,
     chunkCoords: number[],
+    context: PixelNativeChunkContext,
     tracker: SeriesProgressTracker | null,
     signal: AbortSignal,
   ): Promise<DecodedChunk> {
@@ -295,6 +375,9 @@ export class ZarrChunkReader {
             storeUrl: this.ds.url,
             variable,
             chunkCoords,
+            windowSize: this.windowSize,
+            localLat: context.localLat,
+            localLon: context.localLon,
           },
           tracker ? (loaded, total) => tracker.update(loaded, total) : undefined,
           signal,
@@ -324,16 +407,24 @@ export class ZarrChunkReader {
       setActiveAbortSignal(null);
     }
 
-    return { data: chunk.data, shape: chunk.shape };
+    // Same cut the worker makes, so a cached patch has one shape whichever
+    // path decoded it.
+    const block = alignedSubBlock(context, this.windowSize, chunk.shape);
+    if (blockCoversChunk(block, chunk.shape)) {
+      return { data: chunk.data, shape: chunk.shape, block };
+    }
+
+    const kept = sliceBlockFromNativeChunk(chunk.data, chunk.shape, block);
+    return { data: kept.data, shape: kept.shape, block };
   }
 
   /**
    * Calendar years already held for the patch this cell sits in, so the year
    * selector can show which are free to draw.
    *
-   * Patch-scoped on purpose: an entry holds every cell of its 40x40 block, so
-   * a year decoded for a neighbour really is available here too, with no
-   * download.
+   * Patch-scoped on purpose: an entry holds every cell of its window, so a year
+   * decoded for a neighbour in the same window really is available here too,
+   * with no download.
    */
   getCachedYears(
     grid: GridCell,
@@ -348,6 +439,13 @@ export class ZarrChunkReader {
     const lonChunkIdx = Math.floor(
       grid.lonIndex / ZARR_STORE.nativeChunks.lon,
     );
+    const { subLatIdx, subLonIdx } = subBlockIndices(
+      {
+        localLat: grid.latIndex - latChunkIdx * ZARR_STORE.nativeChunks.lat,
+        localLon: grid.lonIndex - lonChunkIdx * ZARR_STORE.nativeChunks.lon,
+      },
+      this.windowSize,
+    );
 
     for (let chunkIdx = 0; chunkIdx < chunkCount; chunkIdx++) {
       const key = nativeChunkKey(variable, {
@@ -355,6 +453,8 @@ export class ZarrChunkReader {
         hourChunkIdx: 0,
         latChunkIdx,
         lonChunkIdx,
+        subLatIdx,
+        subLonIdx,
       });
       if (this.cache.has(key)) {
         for (const year of timeChunkIndexToYears(chunkIdx, chunkTime)) {

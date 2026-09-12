@@ -1,6 +1,12 @@
 /// <reference lib="webworker" />
 import * as zarr from "zarrita";
 import {
+  alignedSubBlock,
+  blockCoversChunk,
+  sliceBlockFromNativeChunk,
+  type LocalBlock,
+} from "@/lib/zarr/chunks";
+import {
   createByteProgressSink,
   isAbortError,
   openZarrStore,
@@ -15,8 +21,10 @@ import {
  * One chunk of this dataset is 1461 x 24 x 40 x 40 f4, so decompressing it
  * allocates ~224 MB. Doing that on the main thread froze the tab for seconds
  * at a time and killed it outright on phones. Here it is decompressed off the
- * main thread and handed over as a transfer, so no copy is made and the main
- * thread never blocks on the work.
+ * main thread, and the window the caller asked to keep is cut out before the
+ * handover, so the 224 MB array is dropped here and never reaches the main
+ * thread's heap. A caller that wants the whole patch gets the decoded array
+ * transferred as-is, with no copy.
  *
  * Requests are queued and served one at a time, which caps the memory held
  * during decoding at a single chunk no matter how many pixels are pending.
@@ -28,6 +36,11 @@ export type ChunkRequest = {
   storeUrl: string;
   variable: string;
   chunkCoords: number[];
+  /** Cells kept per side, aligned to a tiling of the chunk. */
+  windowSize: number;
+  /** The pixel that must land inside the kept window. */
+  localLat: number;
+  localLon: number;
 };
 
 /** Abandon a decode: drop it if queued, abort its download if running. */
@@ -44,7 +57,10 @@ export type ChunkResponse =
       id: number;
       type: "result";
       data: Float32Array;
+      /** Shape of what is returned: the chunk, or the window cut out of it. */
       shape: number[];
+      /** Where that window sits in the chunk, for rebasing pixel offsets. */
+      block: LocalBlock;
     }
   | { id: number; type: "error"; message: string };
 
@@ -119,16 +135,26 @@ async function handle(request: ChunkRequest): Promise<void> {
       setActiveAbortSignal(null);
     }
 
-    // Transferred, not copied, so handing back the whole chunk costs no more
-    // than handing back a slice of it did.
+    const block = alignedSubBlock(
+      { localLat: request.localLat, localLon: request.localLon },
+      request.windowSize,
+      chunk.shape,
+    );
+    // A window that spans the chunk is the chunk: transfer it rather than
+    // copying it into an identical array.
+    const kept = blockCoversChunk(block, chunk.shape)
+      ? { data: chunk.data, shape: chunk.shape }
+      : sliceBlockFromNativeChunk(chunk.data, chunk.shape, block);
+
     scope.postMessage(
       {
         id: request.id,
         type: "result",
-        data: chunk.data,
-        shape: chunk.shape,
+        data: kept.data,
+        shape: kept.shape,
+        block,
       } satisfies ChunkResponse,
-      [chunk.data.buffer],
+      [kept.data.buffer],
     );
   } catch (error) {
     // The caller that aborted has already settled its own promise; there is

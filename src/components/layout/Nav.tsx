@@ -4,11 +4,13 @@ import { Brand } from "@/components/nav/Brand";
 import { EDITOR_CONTROLS_ID } from "@/components/layout/EditorShell";
 import { EditorViewTabs } from "@/components/layout/EditorViewTabs";
 import { NavActions } from "@/components/nav/NavActions";
+import { PatchMenu } from "@/components/map/PatchMenu";
 import { IconButton } from "@/components/ui/IconButton";
 import { AutoZoomIcon } from "@/icons/AutoZoomIcon";
 import { CrosshairIcon } from "@/icons/CrosshairIcon";
 import { PanelLeftIcon } from "@/icons/PanelLeftIcon";
-import { PatchIcon } from "@/icons/PatchIcon";
+import type { PatchWindowSize } from "@/lib/settings/patchWindow";
+import { DEFAULT_PATCH_WINDOW } from "@/lib/settings/patchWindow";
 import type { MapViewMode } from "@/types/map";
 
 type NavProps = {
@@ -20,6 +22,8 @@ type NavProps = {
   onToggleAutoZoom?: () => void;
   showPatch?: boolean;
   onTogglePatch?: () => void;
+  patchWindow?: PatchWindowSize;
+  onPatchWindowChange?: (size: PatchWindowSize) => void;
   /** Desktop side panel state (>=901px only). */
   sidebarCollapsed?: boolean;
   onToggleSidebar?: () => void;
@@ -34,6 +38,8 @@ export function Nav({
   onToggleAutoZoom,
   showPatch = false,
   onTogglePatch,
+  patchWindow = DEFAULT_PATCH_WINDOW,
+  onPatchWindowChange,
   sidebarCollapsed = false,
   onToggleSidebar,
 }: NavProps) {
@@ -94,19 +100,14 @@ export function Nav({
                   <AutoZoomIcon />
                 </IconButton>
               ) : null}
-              {hasSelection && onTogglePatch ? (
-                <IconButton
+              {hasSelection && onTogglePatch && onPatchWindowChange ? (
+                <PatchMenu
                   className="animate-[zoomToSelectionIn_0.18s_cubic-bezier(0.16,1,0.3,1)]"
-                  aria-label={
-                    showPatch
-                      ? "Hide downloaded patch extent"
-                      : "Show downloaded patch extent"
-                  }
-                  aria-pressed={showPatch}
-                  onClick={onTogglePatch}
-                >
-                  <PatchIcon />
-                </IconButton>
+                  showPatch={showPatch}
+                  onTogglePatch={onTogglePatch}
+                  windowSize={patchWindow}
+                  onWindowSizeChange={onPatchWindowChange}
+                />
               ) : null}
             </div>
           </div>

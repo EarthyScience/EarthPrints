@@ -23,6 +23,17 @@ export type NativeChunkCoords = {
   hourChunkIdx: number;
   latChunkIdx: number;
   lonChunkIdx: number;
+  /** Window-aligned sub-block inside the chunk; omitted when it is the chunk. */
+  subLatIdx?: number;
+  subLonIdx?: number;
+};
+
+/** A rectangular region of a decoded chunk, in chunk-local coordinates. */
+export type LocalBlock = {
+  localLatStart: number;
+  localLatCount: number;
+  localLonStart: number;
+  localLonCount: number;
 };
 
 export type PixelNativeChunkContext = ChunkIndices &
@@ -76,12 +87,19 @@ export function pixelToLocalOffset(
   };
 }
 
-/** Cache key for one on-disk Zarr chunk. */
+/**
+ * Cache key for one on-disk Zarr chunk, or for one window-aligned sub-block of
+ * it when the reader is holding less than a whole chunk.
+ */
 export function nativeChunkKey(
   variable: string,
   coords: NativeChunkCoords,
 ): string {
-  return `${variable}:${coords.timeChunkIdx}:${coords.hourChunkIdx}:${coords.latChunkIdx}:${coords.lonChunkIdx}`;
+  const chunk = `${variable}:${coords.timeChunkIdx}:${coords.hourChunkIdx}:${coords.latChunkIdx}:${coords.lonChunkIdx}`;
+  if (coords.subLatIdx === undefined || coords.subLonIdx === undefined) {
+    return chunk;
+  }
+  return `${chunk}:${coords.subLatIdx}:${coords.subLonIdx}`;
 }
 
 export function listTimeChunkIndices(
@@ -202,4 +220,92 @@ export function stitchTimeSeriesForRange(
   }
 
   return stitchTimeSeries(parts);
+}
+
+/**
+ * Which window-aligned sub-block of a chunk a local offset falls in.
+ *
+ * The windows tile the chunk on a fixed grid rather than centring on the
+ * clicked cell, so every cell inside one window shares a cache key and the
+ * first click pays for all of them. A centred window would give each cell its
+ * own extent and its own download, which is what made the old 5x5 harvest miss
+ * so often.
+ */
+export function subBlockIndices(
+  localOffset: LocalOffset,
+  windowSize: number,
+): { subLatIdx: number; subLonIdx: number } {
+  return {
+    subLatIdx: Math.floor(localOffset.localLat / windowSize),
+    subLonIdx: Math.floor(localOffset.localLon / windowSize),
+  };
+}
+
+/** The bounds of that sub-block, clamped to the chunk's own extent. */
+export function alignedSubBlock(
+  localOffset: LocalOffset,
+  windowSize: number,
+  shape: readonly number[],
+): LocalBlock {
+  const [, , latCount = 0, lonCount = 0] = shape;
+  const { subLatIdx, subLonIdx } = subBlockIndices(localOffset, windowSize);
+  const localLatStart = subLatIdx * windowSize;
+  const localLonStart = subLonIdx * windowSize;
+
+  return {
+    localLatStart,
+    localLatCount: Math.max(0, Math.min(windowSize, latCount - localLatStart)),
+    localLonStart,
+    localLonCount: Math.max(0, Math.min(windowSize, lonCount - localLonStart)),
+  };
+}
+
+/** Whether a block already covers the whole chunk, so slicing would be a copy. */
+export function blockCoversChunk(
+  block: LocalBlock,
+  shape: readonly number[],
+): boolean {
+  return (
+    block.localLatStart === 0 &&
+    block.localLonStart === 0 &&
+    block.localLatCount === (shape[2] ?? 0) &&
+    block.localLonCount === (shape[3] ?? 0)
+  );
+}
+
+/**
+ * Cut a sub-block out of a decoded chunk, keeping the chunk's own axis order.
+ *
+ * The result is just a smaller chunk: `[time, hour, lat, lon]` with the lat and
+ * lon axes trimmed, so everything that reads a decoded chunk reads a block too,
+ * given offsets rebased onto the block's origin.
+ */
+export function sliceBlockFromNativeChunk(
+  data: Float32Array,
+  shape: readonly number[],
+  block: LocalBlock,
+): { data: Float32Array; shape: number[] } {
+  const [timeCount = 0, hourCount = 0, latCount = 0, lonCount = 0] = shape;
+  const { localLatStart, localLatCount, localLonStart, localLonCount } = block;
+  const out = new Float32Array(
+    timeCount * hourCount * localLatCount * localLonCount,
+  );
+
+  let cursor = 0;
+  for (let t = 0; t < timeCount; t++) {
+    for (let h = 0; h < hourCount; h++) {
+      const planeStart = (t * hourCount + h) * latCount;
+      for (let lat = 0; lat < localLatCount; lat++) {
+        const rowStart =
+          (planeStart + localLatStart + lat) * lonCount + localLonStart;
+        out.set(data.subarray(rowStart, rowStart + localLonCount), cursor);
+        cursor += localLonCount;
+      }
+    }
+  }
+
+  return {
+    data: out,
+    shape: [timeCount, hourCount, localLatCount, localLonCount],
+  };
 }

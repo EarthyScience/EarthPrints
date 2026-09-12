@@ -3,11 +3,15 @@ import type {
   ChunkResponse,
   WorkerMessage,
 } from "@/lib/zarr/chunk.worker";
+import type { LocalBlock } from "@/lib/zarr/chunks";
 import { abortError } from "@/lib/zarr/store";
 
 export type DecodedChunk = {
   data: Float32Array;
+  /** Shape of what came back: the chunk, or the window cut out of it. */
   shape: number[];
+  /** Where that window sits in the chunk, for rebasing pixel offsets. */
+  block: LocalBlock;
 };
 
 type Pending = {
@@ -66,7 +70,11 @@ export class ChunkWorkerClient {
       return;
     }
 
-    entry.resolve({ data: message.data, shape: message.shape });
+    entry.resolve({
+      data: message.data,
+      shape: message.shape,
+      block: message.block,
+    });
   }
 
   decode(
