@@ -3,6 +3,9 @@ import type { AxisSlice } from "@/lib/zarr/chunks";
 
 export const DEFAULT_HISTORY_YEARS = 1;
 
+/** Days per native time chunk, matching the store's `[1461, 24, 40, 40]`. */
+export const NATIVE_TIME_CHUNK = 1461;
+
 /**
  * Calendar origin of the time axis, mirroring the store's time coordinate
  * (`units: "days since 2001-01-01"`). Kept as a constant alongside the other

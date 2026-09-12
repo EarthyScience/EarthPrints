@@ -1,8 +1,9 @@
 /// <reference lib="webworker" />
 import * as zarr from "zarrita";
 import {
-  extractBlockFromNativeChunk,
-  neighborhoodBlock,
+  alignedSubBlock,
+  blockCoversChunk,
+  sliceBlockFromNativeChunk,
   type LocalBlock,
 } from "@/lib/zarr/chunks";
 import {
@@ -19,12 +20,14 @@ import {
  *
  * One chunk of this dataset is 1461 x 24 x 40 x 40 f4, so decompressing it
  * allocates ~224 MB. Doing that on the main thread froze the tab for seconds
- * at a time and killed it outright on phones. Here the big array is allocated,
- * read, and dropped inside the worker; only the requested pixel neighbourhood
- * (a few MB) is transferred back, so the main-thread heap never sees it.
+ * at a time and killed it outright on phones. Here it is decompressed off the
+ * main thread, and the window the caller asked to keep is cut out before the
+ * handover, so the 224 MB array is dropped here and never reaches the main
+ * thread's heap. A caller that wants the whole patch gets the decoded array
+ * transferred as-is, with no copy.
  *
- * Requests are queued and served one at a time, which also caps process-wide
- * peak memory at a single decoded chunk no matter how many pixels are pending.
+ * Requests are queued and served one at a time, which caps the memory held
+ * during decoding at a single chunk no matter how many pixels are pending.
  */
 
 export type ChunkRequest = {
@@ -33,9 +36,11 @@ export type ChunkRequest = {
   storeUrl: string;
   variable: string;
   chunkCoords: number[];
+  /** Cells kept per side, aligned to a tiling of the chunk. */
+  windowSize: number;
+  /** The pixel that must land inside the kept window. */
   localLat: number;
   localLon: number;
-  radius: number;
 };
 
 /** Abandon a decode: drop it if queued, abort its download if running. */
@@ -51,9 +56,11 @@ export type ChunkResponse =
   | {
       id: number;
       type: "result";
+      data: Float32Array;
+      /** Shape of what is returned: the chunk, or the window cut out of it. */
+      shape: number[];
+      /** Where that window sits in the chunk, for rebasing pixel offsets. */
       block: LocalBlock;
-      seriesLength: number;
-      values: Float32Array;
     }
   | { id: number; type: "error"; message: string };
 
@@ -128,23 +135,26 @@ async function handle(request: ChunkRequest): Promise<void> {
       setActiveAbortSignal(null);
     }
 
-    const block = neighborhoodBlock(
+    const block = alignedSubBlock(
       { localLat: request.localLat, localLon: request.localLon },
-      request.radius,
+      request.windowSize,
       chunk.shape,
     );
-    const values = extractBlockFromNativeChunk(chunk.data, chunk.shape, block);
-    const seriesLength = chunk.shape[0]! * chunk.shape[1]!;
+    // A window that spans the chunk is the chunk: transfer it rather than
+    // copying it into an identical array.
+    const kept = blockCoversChunk(block, chunk.shape)
+      ? { data: chunk.data, shape: chunk.shape }
+      : sliceBlockFromNativeChunk(chunk.data, chunk.shape, block);
 
     scope.postMessage(
       {
         id: request.id,
         type: "result",
+        data: kept.data,
+        shape: kept.shape,
         block,
-        seriesLength,
-        values,
       } satisfies ChunkResponse,
-      [values.buffer],
+      [kept.data.buffer],
     );
   } catch (error) {
     // The caller that aborted has already settled its own promise; there is

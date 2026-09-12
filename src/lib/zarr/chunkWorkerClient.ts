@@ -6,14 +6,16 @@ import type {
 import type { LocalBlock } from "@/lib/zarr/chunks";
 import { abortError } from "@/lib/zarr/store";
 
-export type DecodedBlock = {
+export type DecodedChunk = {
+  data: Float32Array;
+  /** Shape of what came back: the chunk, or the window cut out of it. */
+  shape: number[];
+  /** Where that window sits in the chunk, for rebasing pixel offsets. */
   block: LocalBlock;
-  seriesLength: number;
-  values: Float32Array;
 };
 
 type Pending = {
-  resolve: (value: DecodedBlock) => void;
+  resolve: (value: DecodedChunk) => void;
   reject: (error: Error) => void;
   onProgress?: (loaded: number, total: number) => void;
 };
@@ -69,9 +71,9 @@ export class ChunkWorkerClient {
     }
 
     entry.resolve({
+      data: message.data,
+      shape: message.shape,
       block: message.block,
-      seriesLength: message.seriesLength,
-      values: message.values,
     });
   }
 
@@ -79,10 +81,10 @@ export class ChunkWorkerClient {
     request: Omit<ChunkRequest, "id" | "type">,
     onProgress?: (loaded: number, total: number) => void,
     signal?: AbortSignal,
-  ): Promise<DecodedBlock> {
+  ): Promise<DecodedChunk> {
     const id = ++this.nextId;
 
-    return new Promise<DecodedBlock>((resolve, reject) => {
+    return new Promise<DecodedChunk>((resolve, reject) => {
       if (signal?.aborted) {
         reject(abortError());
         return;

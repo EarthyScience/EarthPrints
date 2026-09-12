@@ -16,6 +16,10 @@ import {
   SELECTION_PATCH_COLOR,
 } from "@/lib/map/selectionStyle";
 import { viewportToGeoBounds } from "@/lib/map/viewportBounds";
+import {
+  DEFAULT_PATCH_WINDOW,
+  type PatchWindowSize,
+} from "@/lib/settings/patchWindow";
 import type { GridCell, GridSpec, MapViewState } from "@/types/map";
 
 type GlobeSelectionOverlayProps = {
@@ -26,6 +30,8 @@ type GlobeSelectionOverlayProps = {
   isLight: boolean;
   isSphere?: boolean;
   showPatch?: boolean;
+  /** Cells kept per side, which is what the box outlines. */
+  patchWindow?: PatchWindowSize;
 };
 
 export function GlobeSelectionOverlay({
@@ -36,6 +42,7 @@ export function GlobeSelectionOverlay({
   isLight,
   isSphere = false,
   showPatch = false,
+  patchWindow = DEFAULT_PATCH_WINDOW,
 }: GlobeSelectionOverlayProps) {
   const data = useMemo(() => {
     const guidePaths = gridCellToGuidePaths(
@@ -45,16 +52,22 @@ export function GlobeSelectionOverlay({
     return selectionGuideGeoJson(cell, guidePaths, {
       densifyGuides: isSphere,
       spec: gridSpec,
+      // The box outlines what is kept, not what is downloaded: the window
+      // tiles the 40x40 chunk, so at 40 the two are the same box.
       patchBounds: showPatch
-        ? chunkPatchBounds(
-            cell,
-            gridSpec.nativeChunks.lat,
-            gridSpec.nativeChunks.lon,
-            gridSpec,
-          )
+        ? chunkPatchBounds(cell, patchWindow, patchWindow, gridSpec)
         : null,
     });
-  }, [cell, gridSpec, isSphere, mapSize.height, mapSize.width, showPatch, viewState]);
+  }, [
+    cell,
+    gridSpec,
+    isSphere,
+    mapSize.height,
+    mapSize.width,
+    patchWindow,
+    showPatch,
+    viewState,
+  ]);
 
   const guideColor = rgba(
     isLight ? SELECTION_GUIDE_COLOR.light : SELECTION_GUIDE_COLOR.dark,

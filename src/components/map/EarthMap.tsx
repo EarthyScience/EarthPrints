@@ -29,6 +29,14 @@ import {
 } from "@/lib/map/viewState";
 import { openZarrStore } from "@/lib/zarr/store";
 import { ZarrChunkReader } from "@/lib/zarr/ZarrChunkReader";
+import {
+  cacheBytesFor,
+  DEFAULT_PATCH_WINDOW,
+  deviceCacheBytes,
+  loadPatchWindow,
+  savePatchWindow,
+  type PatchWindowSize,
+} from "@/lib/settings/patchWindow";
 import { DEFAULT_GRID_SPEC } from "@/lib/constants/store";
 import type {
   GridSpec,
@@ -104,6 +112,11 @@ export function EarthMap() {
   const [selection, setSelection] = useState<MapSelection | null>(null);
   const [autoZoom, setAutoZoom] = useState<boolean>(getInitialAutoZoom);
   const [showPatch, setShowPatch] = useState(true);
+  // Starts at the shared default so server and first client render agree; the
+  // stored or device-chosen size is applied on mount.
+  const [patchWindow, setPatchWindow] =
+    useState<PatchWindowSize>(DEFAULT_PATCH_WINDOW);
+  const patchWindowRef = useRef<PatchWindowSize>(DEFAULT_PATCH_WINDOW);
   const [controlsOpen, setControlsOpen] = useState(false);
   // The boot script has already painted the stored layout onto the root
   // element; this subscribes React to the same source rather than re-reading
@@ -131,7 +144,16 @@ export function EarthMap() {
   const ensureReader = useCallback(() => {
     if (!readerPromiseRef.current) {
       readerPromiseRef.current = openZarrStore()
-        .then((ds) => new ZarrChunkReader(ds))
+        .then(
+          (ds) =>
+            new ZarrChunkReader(ds, {
+              windowSize: patchWindowRef.current,
+              maxBytes: cacheBytesFor(
+                patchWindowRef.current,
+                deviceCacheBytes(),
+              ),
+            }),
+        )
         .catch((error) => {
           readerPromiseRef.current = null;
           throw error;
@@ -322,6 +344,40 @@ export function EarthMap() {
     setShowPatch((previous) => !previous);
   }, []);
 
+  // localStorage and the device hints are client-only, so the stored choice is
+  // applied after mount rather than during render.
+  useEffect(() => {
+    const stored = loadPatchWindow();
+    if (stored === patchWindowRef.current) return;
+
+    patchWindowRef.current = stored;
+    setPatchWindow(stored);
+    void readerPromiseRef.current?.then((reader) => {
+      reader.setWindowSize(stored, cacheBytesFor(stored, deviceCacheBytes()));
+    });
+  }, []);
+
+  const handlePatchWindowChange = useCallback(
+    (size: PatchWindowSize) => {
+      if (size === patchWindowRef.current) return;
+
+      patchWindowRef.current = size;
+      setPatchWindow(size);
+      savePatchWindow(size);
+      // Entries are keyed and cut by the window, so the old ones cannot be
+      // reused: drop them, and tell the year selector they are gone before the
+      // reload repopulates it.
+      setCachedYears(new Set());
+      void readerPromiseRef.current?.then((reader) => {
+        reader.setWindowSize(size, cacheBytesFor(size, deviceCacheBytes()));
+        if (selection) {
+          void loadTimeSeriesForYears(selection, selectedYears);
+        }
+      });
+    },
+    [loadTimeSeriesForYears, selectedYears, selection],
+  );
+
   const handleSidebarWidthChange = useCallback(
     (width: number) => {
       setSidebarState({ width, collapsed: sidebar.collapsed });
@@ -405,6 +461,8 @@ export function EarthMap() {
           onToggleAutoZoom={handleToggleAutoZoom}
           showPatch={showPatch}
           onTogglePatch={handleTogglePatch}
+          patchWindow={patchWindow}
+          onPatchWindowChange={handlePatchWindowChange}
           sidebarCollapsed={sidebar.collapsed}
           onToggleSidebar={handleToggleSidebar}
         />
@@ -415,6 +473,7 @@ export function EarthMap() {
           gridSpec={gridSpec}
           selectedYears={selectedYears}
           cachedYears={cachedYears}
+          patchWindow={patchWindow}
           onSelectYears={handleYearsSelect}
           loadingSeries={loadingSeries}
           seriesProgress={seriesProgress}
@@ -463,6 +522,7 @@ export function EarthMap() {
                 isLight={isLight}
                 isSphere={isSphere}
                 showPatch={showPatch}
+                patchWindow={patchWindow}
               />
             ) : null}
           </Map>
@@ -496,6 +556,8 @@ export function EarthMap() {
             onToggleAutoZoom={handleToggleAutoZoom}
             showPatch={showPatch}
             onTogglePatch={handleTogglePatch}
+            patchWindow={patchWindow}
+            onPatchWindowChange={handlePatchWindowChange}
             controlsOpen={controlsOpen}
             onToggleControls={() => setControlsOpen((open) => !open)}
             controlsId={EDITOR_CONTROLS_ID}

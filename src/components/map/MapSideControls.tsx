@@ -1,12 +1,13 @@
 "use client";
 
+import { PatchMenu } from "@/components/map/PatchMenu";
 import { IconButton } from "@/components/ui/IconButton";
 import { AutoZoomIcon } from "@/icons/AutoZoomIcon";
 import { CrosshairIcon } from "@/icons/CrosshairIcon";
 import { FingerprintIcon } from "@/icons/FingerprintIcon";
 import { GlobeIcon } from "@/icons/GlobeIcon";
 import { MapIcon } from "@/icons/MapIcon";
-import { PatchIcon } from "@/icons/PatchIcon";
+import type { PatchWindowSize } from "@/lib/settings/patchWindow";
 import type { MapViewMode } from "@/types/map";
 
 type MapSideControlsProps = {
@@ -18,14 +19,12 @@ type MapSideControlsProps = {
   onToggleAutoZoom?: () => void;
   showPatch: boolean;
   onTogglePatch: () => void;
+  patchWindow: PatchWindowSize;
+  onPatchWindowChange: (size: PatchWindowSize) => void;
   controlsOpen: boolean;
   onToggleControls: () => void;
   controlsId: string;
 };
-
-const ISLAND_CLASS =
-  "pointer-events-auto flex flex-col items-center gap-1.5 rounded-editor-sm " +
-  "border border-editor-border bg-editor-bg-base p-1.5 shadow-editor";
 
 // Mobile-only counterpart to the header nav controls. On narrow layouts
 // (<=900px, matching EditorShell's stacking breakpoint) the view toggle and the
@@ -43,6 +42,8 @@ export function MapSideControls({
   onToggleAutoZoom,
   showPatch,
   onTogglePatch,
+  patchWindow,
+  onPatchWindowChange,
   controlsOpen,
   onToggleControls,
   controlsId,
@@ -52,7 +53,7 @@ export function MapSideControls({
       className="pointer-events-none absolute right-3 top-1/2 z-20 hidden -translate-y-1/2 flex-col items-end gap-2 max-[900px]:flex"
       data-tour="controls-mobile"
     >
-      <div className={ISLAND_CLASS}>
+      <div className="pointer-events-auto flex flex-col items-center gap-1.5 rounded-editor-sm border border-editor-border bg-editor-bg-base p-1.5 shadow-editor">
         <IconButton
           variant="plain"
           tooltipPlacement="left"
@@ -74,7 +75,7 @@ export function MapSideControls({
       </div>
       {hasSelection ? (
         <>
-          <div className={ISLAND_CLASS}>
+          <div className="pointer-events-auto flex flex-col items-center gap-1.5 rounded-editor-sm border border-editor-border bg-editor-bg-base p-1.5 shadow-editor">
             <IconButton
               variant="plain"
               tooltipPlacement="left"
@@ -105,22 +106,17 @@ export function MapSideControls({
                 <AutoZoomIcon />
               </IconButton>
             ) : null}
-            <IconButton
+            <PatchMenu
               variant="plain"
-              tooltipPlacement="left"
+              placement="left"
               className="animate-[zoomToSelectionIn_0.18s_cubic-bezier(0.16,1,0.3,1)]"
-              aria-label={
-                showPatch
-                  ? "Hide downloaded patch extent"
-                  : "Show downloaded patch extent"
-              }
-              aria-pressed={showPatch}
-              onClick={onTogglePatch}
-            >
-              <PatchIcon />
-            </IconButton>
+              showPatch={showPatch}
+              onTogglePatch={onTogglePatch}
+              windowSize={patchWindow}
+              onWindowSizeChange={onPatchWindowChange}
+            />
           </div>
-          <div className={ISLAND_CLASS}>
+          <div className="pointer-events-auto flex flex-col items-center gap-1.5 rounded-editor-sm border border-editor-border bg-editor-bg-base p-1.5 shadow-editor">
             <IconButton
               variant="plain"
               tooltipPlacement="left"

@@ -18,6 +18,10 @@ import { PlotSkeleton } from "@/components/map/PlotSkeleton";
 import { ProgressBar } from "@/components/ui/ProgressBar";
 import { DownloadButton } from "@/components/map/DownloadButton";
 import { YearSelector } from "@/components/map/YearSelector";
+import {
+  DEFAULT_PATCH_WINDOW,
+  type PatchWindowSize,
+} from "@/lib/settings/patchWindow";
 
 type PlotView = "line" | "fingerprint";
 
@@ -29,6 +33,7 @@ type MapReadoutProps = {
   variable?: string;
   selectedYears: number[];
   cachedYears?: Set<number>;
+  patchWindow?: PatchWindowSize;
   onSelectYears: (years: number[]) => void;
   loadingSeries: boolean;
   seriesProgress: SeriesProgress | null;
@@ -37,15 +42,13 @@ type MapReadoutProps = {
   seriesUnits: string | null;
 };
 
-const SECTION_LABEL = "text-[13px] font-semibold text-editor-fg-primary";
-const META = "font-mono text-[11px] text-editor-fg-tertiary";
-
 export function MapReadout({
   selection,
   gridSpec = DEFAULT_GRID_SPEC,
   variable = ZARR_STORE.defaultVariable,
   selectedYears,
   cachedYears = new Set(),
+  patchWindow = DEFAULT_PATCH_WINDOW,
   onSelectYears,
   loadingSeries,
   seriesProgress,
@@ -104,8 +107,8 @@ export function MapReadout({
     );
   }
 
-  const patchCells = gridSpec.nativeChunks.lon;
-  const patchDeg = Number((patchCells * gridSpec.spatialResolutionDeg).toFixed(2));
+  const chunkCells = gridSpec.nativeChunks.lon;
+  const keptDeg = Number((patchWindow * gridSpec.spatialResolutionDeg).toFixed(2));
   const gridResolution = Number(gridSpec.spatialResolutionDeg.toFixed(2));
 
   const historyControl = (
@@ -123,7 +126,7 @@ export function MapReadout({
       className="flex flex-col flex-1 min-h-0"
       data-tour="plot"
     >
-      <span className={`${SECTION_LABEL} block shrink-0`}>
+      <span className="block shrink-0 text-[13px] font-semibold text-editor-fg-primary">
         {plotView === "line" ? "Daily mean" : "Diurnal fingerprint"}
       </span>
 
@@ -219,9 +222,9 @@ export function MapReadout({
           {variable} · {ZARR_STORE.kicker} · snapped to the nearest {gridResolution}° cell
         </p>
         <p className="mt-2 text-[12.5px] leading-[1.5] text-editor-fg-tertiary">
-          Each click downloads a {patchCells}×{patchCells} patch ({patchDeg}° ×{" "}
-          {patchDeg}°), drawn as the dashed box. Toggle it with the patch
-          button.
+          Each click downloads a {chunkCells}×{chunkCells} patch and keeps{" "}
+          {patchWindow}×{patchWindow} of it ({keptDeg}° × {keptDeg}°), drawn as
+          the dashed box. Set how much is kept with the patch button.
         </p>
       </section>
 
@@ -351,7 +354,7 @@ function SeriesLoader({ progress }: { progress: SeriesProgress | null }) {
       </div>
       <ProgressBar value={value} label="Fetching time series" />
       {hasBytes ? (
-        <p className={META}>
+        <p className="font-mono text-[11px] text-editor-fg-tertiary">
           {formatBytes(progress.loaded)} / {formatBytes(progress.total)}
         </p>
       ) : null}

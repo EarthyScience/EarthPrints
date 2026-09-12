@@ -2,12 +2,18 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import * as zarr from "zarrita";
 import { ZarrChunkReader } from "@/lib/zarr/ZarrChunkReader";
 import {
+  alignedSubBlock,
+  blockCoversChunk,
+  sliceBlockFromNativeChunk,
+} from "@/lib/zarr/chunks";
+import {
   ChunkWorkerClient,
-  type DecodedBlock,
+  type DecodedChunk,
 } from "@/lib/zarr/chunkWorkerClient";
 import type { ZarrStore } from "@/lib/zarr/store";
 
 type DecodeRequest = Parameters<ChunkWorkerClient["decode"]>[0];
+import { ZARR_TIME } from "@/lib/zarr/timeRange";
 import type { GridCell } from "@/types/map";
 
 vi.mock("zarrita", async (importOriginal) => {
@@ -59,6 +65,29 @@ function makeChunkData(shape: readonly [number, number, number, number]) {
   }
 
   return data;
+}
+
+/**
+ * What the worker posts back: the window the reader asked to keep, cut out of
+ * the decoded chunk exactly as the worker cuts it.
+ */
+function makeDecodedChunk(request: DecodeRequest): DecodedChunk {
+  const shape = [2, 2, 40, 40] as const;
+  const data = makeChunkData(shape);
+  const timeChunkIdx = request.chunkCoords[0]!;
+  for (let i = 0; i < data.length; i++) data[i] += timeChunkIdx * 10_000;
+
+  const block = alignedSubBlock(
+    { localLat: request.localLat, localLon: request.localLon },
+    request.windowSize,
+    shape,
+  );
+  if (blockCoversChunk(block, shape)) {
+    return { data, shape: [...shape], block };
+  }
+
+  const kept = sliceBlockFromNativeChunk(data, shape, block);
+  return { data: kept.data, shape: kept.shape, block };
 }
 
 describe("ZarrChunkReader", () => {
@@ -139,13 +168,106 @@ describe("ZarrChunkReader", () => {
     ]);
   });
 
-  it("refetches for a pixel outside the harvested block", async () => {
+  it("serves any cell of the kept window without downloading again", async () => {
     const reader = new ZarrChunkReader(ds);
     await reader.getTimeSeries(makeGrid(50, 50));
     mockGetChunk.mockClear();
 
-    // Local (15, 15) is outside the block, which spans local 8..12.
+    // Local (15,15), still inside the 20x20 window holding local (10,10).
     await reader.getTimeSeries(makeGrid(55, 55));
+
+    expect(mockGetChunk).not.toHaveBeenCalled();
+  });
+
+  it("serves every cell of the patch when the window is the whole patch", async () => {
+    const reader = new ZarrChunkReader(ds, { windowSize: 40 });
+    await reader.getTimeSeries(makeGrid(50, 50));
+    mockGetChunk.mockClear();
+
+    // Local (39,39): the far corner of the same 40x40 patch.
+    await reader.getTimeSeries(makeGrid(79, 79));
+
+    expect(mockGetChunk).not.toHaveBeenCalled();
+  });
+
+  it("downloads again for a cell in another window of the same patch", async () => {
+    const reader = new ZarrChunkReader(ds, { windowSize: 20 });
+    await reader.getTimeSeries(makeGrid(50, 50));
+    mockGetChunk.mockClear();
+
+    // Local (39,39) is in the patch but in the next 20x20 tile of it, which
+    // was never kept. This is what a smaller window costs.
+    await reader.getTimeSeries(makeGrid(79, 79));
+
+    expect(mockGetChunk).toHaveBeenCalledTimes(2);
+  });
+
+  it("reads the right cell out of a window that does not start at the patch corner", async () => {
+    const reader = new ZarrChunkReader(ds, { windowSize: 20 });
+
+    // Local (39,39): last cell of the tile starting at local (20,20), so every
+    // offset has to be rebased onto the tile before it is read.
+    const series = await reader.getTimeSeries(makeGrid(79, 79));
+
+    expect(Array.from(series.values)).toEqual([
+      429, 529, 1429, 1529, 10_429, 10_529, 11_429, 11_529,
+    ]);
+  });
+
+  it("keeps the whole archive cached under the default budget", async () => {
+    const reader = new ZarrChunkReader(ds);
+    await reader.getTimeSeries(makeGrid(50, 50), undefined, ZARR_TIME.maxHistoryYears);
+    mockGetChunk.mockClear();
+
+    // Every time chunk of one spot has to stay resident, or selecting all the
+    // years evicts the chunk it is about to ask for again and loops.
+    await reader.getTimeSeries(makeGrid(50, 50), undefined, ZARR_TIME.maxHistoryYears);
+
+    expect(mockGetChunk).not.toHaveBeenCalled();
+  });
+
+  it("drops what it kept when the window changes", async () => {
+    const reader = new ZarrChunkReader(ds, { windowSize: 40 });
+    const grid = makeGrid(50, 50);
+    await reader.getTimeSeries(grid);
+    mockGetChunk.mockClear();
+
+    reader.setWindowSize(10);
+
+    expect(reader.getWindowSize()).toBe(10);
+    expect(reader.getCachedYears(grid).size).toBe(0);
+
+    await reader.getTimeSeries(grid);
+
+    expect(mockGetChunk).toHaveBeenCalledTimes(2);
+  });
+
+  it("tells the worker which window to keep", async () => {
+    const decode = vi.fn<
+      (request: DecodeRequest) => Promise<DecodedChunk>
+    >(async (request) => makeDecodedChunk(request));
+    mockCreateWorker.mockReturnValue({
+      decode,
+      terminate: vi.fn(),
+    } as unknown as ChunkWorkerClient);
+
+    const reader = new ZarrChunkReader(ds, { windowSize: 10 });
+    await reader.getTimeSeries(makeGrid(50, 50));
+
+    expect(decode.mock.calls[0]![0]).toMatchObject({
+      windowSize: 10,
+      localLat: 10,
+      localLon: 10,
+    });
+  });
+
+  it("downloads again for a cell in a different patch", async () => {
+    const reader = new ZarrChunkReader(ds);
+    await reader.getTimeSeries(makeGrid(50, 50));
+    mockGetChunk.mockClear();
+
+    // Patch (2,2) rather than (1,1), so it was never decoded.
+    await reader.getTimeSeries(makeGrid(80, 80));
 
     expect(mockGetChunk).toHaveBeenCalledTimes(2);
   });
@@ -179,9 +301,9 @@ describe("ZarrChunkReader", () => {
       reader.getTimeSeries(makeGrid(51, 51)),
     ]);
 
-    // Neighbours share a chunk but not a neighbourhood, so a concurrent
-    // request must decode for itself rather than wait on the other and come
-    // back empty.
+    // Both cells live in one patch, so they share a single download and each
+    // still reads its own pixel out of it.
+    expect(mockGetChunk).toHaveBeenCalledTimes(2);
     expect(Array.from(first.values)).toEqual([
       110, 210, 1110, 1210, 10_110, 10_210, 11_110, 11_210,
     ]);
@@ -190,8 +312,8 @@ describe("ZarrChunkReader", () => {
     ]);
   });
 
-  it("evicts least-recently-used pixel entries", async () => {
-    // One entry per pixel per time chunk, so this holds a single pixel.
+  it("evicts least-recently-used patches once the byte budget is spent", async () => {
+    // A one-byte budget keeps only the most recent patch.
     const reader = new ZarrChunkReader(ds, 1);
     await reader.getTimeSeries(makeGrid(50, 50));
     mockGetChunk.mockClear();
@@ -199,6 +321,16 @@ describe("ZarrChunkReader", () => {
     await reader.getTimeSeries(makeGrid(50, 50));
 
     expect(mockGetChunk).toHaveBeenCalledTimes(2);
+  });
+
+  it("keeps both patches when the budget has room", async () => {
+    const reader = new ZarrChunkReader(ds, 10 * 1024 * 1024);
+    await reader.getTimeSeries(makeGrid(50, 50));
+    mockGetChunk.mockClear();
+
+    await reader.getTimeSeries(makeGrid(50, 50));
+
+    expect(mockGetChunk).not.toHaveBeenCalled();
   });
 
   it("reports progress that spans every downloaded chunk", async () => {
@@ -234,17 +366,8 @@ describe("ZarrChunkReader", () => {
 
   it("decodes through the worker when one is available", async () => {
     const decode = vi.fn<
-      (request: DecodeRequest) => Promise<DecodedBlock>
-    >(async () => ({
-      block: {
-        localLatStart: 10,
-        localLatCount: 1,
-        localLonStart: 10,
-        localLonCount: 1,
-      },
-      seriesLength: 4,
-      values: new Float32Array([1, 2, 3, 4]),
-    }));
+      (request: DecodeRequest) => Promise<DecodedChunk>
+    >(async (request) => makeDecodedChunk(request));
     mockCreateWorker.mockReturnValue({
       decode,
       terminate: vi.fn(),
@@ -259,10 +382,11 @@ describe("ZarrChunkReader", () => {
       storeUrl: "https://example.test/store",
       variable: "NEE",
       chunkCoords: [0, 0, 1, 1],
-      localLat: 10,
-      localLon: 10,
     });
-    expect(Array.from(series.values)).toEqual([1, 2, 3, 4, 1, 2, 3, 4]);
+    // Cell (50,50) is local (10,10) of the patch: lat*10 + lon = 110.
+    expect(Array.from(series.values)).toEqual([
+      110, 210, 1110, 1210, 10_110, 10_210, 11_110, 11_210,
+    ]);
   });
 
   it("stops between chunks once the caller aborts", async () => {
@@ -337,23 +461,62 @@ describe("ZarrChunkReader", () => {
     ]);
   });
 
+  it("starts a fresh decode rather than joining a cancelled one", async () => {
+    let release: (() => void) | undefined;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const decode = vi.fn<
+      (
+        request: DecodeRequest,
+        onProgress?: (loaded: number, total: number) => void,
+        signal?: AbortSignal,
+      ) => Promise<DecodedChunk>
+    >(async (request, _onProgress, signal) => {
+      await gate;
+      if (signal?.aborted) {
+        const error = new Error("aborted");
+        error.name = "AbortError";
+        throw error;
+      }
+      return makeDecodedChunk(request);
+    });
+    mockCreateWorker.mockReturnValue({
+      decode,
+      terminate: vi.fn(),
+    } as unknown as ChunkWorkerClient);
+
+    const reader = new ZarrChunkReader(ds);
+    const controller = new AbortController();
+    const abandoned = reader.getTimeSeries(
+      makeGrid(50, 50), undefined, undefined, undefined, controller.signal,
+    );
+
+    // Let the decode genuinely start before walking away, then ask for the
+    // same chunk again straight after: a year click followed by a range
+    // selection over it.
+    while (decode.mock.calls.length === 0) {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    }
+    controller.abort();
+    await expect(abandoned).rejects.toMatchObject({ name: "AbortError" });
+    const kept = reader.getTimeSeries(makeGrid(50, 50));
+    release!();
+
+    const series = await kept;
+    expect(Array.from(series.values)).toEqual([
+      110, 210, 1110, 1210, 10_110, 10_210, 11_110, 11_210,
+    ]);
+  });
+
   it("hands the worker a signal so the download can be cancelled", async () => {
     const decode = vi.fn<
       (
         request: DecodeRequest,
         onProgress?: (loaded: number, total: number) => void,
         signal?: AbortSignal,
-      ) => Promise<DecodedBlock>
-    >(async () => ({
-      block: {
-        localLatStart: 10,
-        localLatCount: 1,
-        localLonStart: 10,
-        localLonCount: 1,
-      },
-      seriesLength: 4,
-      values: new Float32Array([1, 2, 3, 4]),
-    }));
+      ) => Promise<DecodedChunk>
+    >(async (request) => makeDecodedChunk(request));
     mockCreateWorker.mockReturnValue({
       decode,
       terminate: vi.fn(),
@@ -367,7 +530,7 @@ describe("ZarrChunkReader", () => {
 
   it("falls back to inline decoding when the worker fails", async () => {
     const decode = vi.fn<
-      (request: DecodeRequest) => Promise<DecodedBlock>
+      (request: DecodeRequest) => Promise<DecodedChunk>
     >(async () => {
       throw new Error("worker died");
     });
@@ -397,18 +560,18 @@ describe("ZarrChunkReader", () => {
 
     await reader.getTimeSeries(grid);
 
-    // The cache is keyed per pixel, so this reports the picked cell itself.
     expect(reader.getCachedYears(grid).size).toBeGreaterThan(0);
   });
 
-  it("does not report a neighbour's harvested years as its own", async () => {
-    const reader = new ZarrChunkReader(ds);
+  it("reports cached years for every cell sharing the kept window", async () => {
+    const reader = new ZarrChunkReader(ds, { windowSize: 20 });
     await reader.getTimeSeries(makeGrid(50, 50));
 
-    // Harvested into the cache alongside the picked cell.
-    expect(reader.getCachedYears(makeGrid(51, 51)).size).toBeGreaterThan(0);
-    // Outside the 5x5 block, so nothing is held for it.
-    expect(reader.getCachedYears(makeGrid(60, 60)).size).toBe(0);
+    // Anywhere in the same 20x20 window is genuinely already downloaded.
+    expect(reader.getCachedYears(makeGrid(55, 55)).size).toBeGreaterThan(0);
+    // The next window along, and another patch entirely, are not.
+    expect(reader.getCachedYears(makeGrid(70, 70)).size).toBe(0);
+    expect(reader.getCachedYears(makeGrid(80, 80)).size).toBe(0);
   });
 
   it("fetches multiple years and returns concatenated time series", async () => {
