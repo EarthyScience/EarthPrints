@@ -8,12 +8,21 @@ import {
   useSyncExternalStore,
 } from "react";
 import Map, {
+  Marker,
   type MapMouseEvent,
   type MapRef,
   type ViewStateChangeEvent,
 } from "react-map-gl/maplibre";
 import "maplibre-gl/dist/maplibre-gl.css";
 import { geoPointToZarrGrid } from "@/lib/map/geogrid";
+import {
+  describeAccuracy,
+  describeGeolocationError,
+  readConnectionHint,
+  requestPosition,
+  shouldWarmCache,
+  type UserPosition,
+} from "@/lib/map/geolocate";
 import { brightenDarkMapPlaceLabels } from "@/lib/map/mapLabels";
 import type {
   Map as MapLibreMap,
@@ -75,7 +84,26 @@ function toMapViewState(
   };
 }
 
+// A Marker rather than a deck layer: it needs no viewport maths and sits
+// correctly on both the flat map and the globe. It ignores pointer events, so
+// picking the cell underneath still works.
+const UserPositionMarker = ({ position }: { position: UserPosition }) => (
+  <Marker
+    longitude={position.lon}
+    latitude={position.lat}
+    anchor="center"
+    style={{ pointerEvents: "none" }}
+  >
+    <span
+      role="img"
+      aria-label={describeAccuracy(position.accuracy)}
+      className="block size-3.5 rounded-full border-2 border-white bg-accent shadow-[0_0_0_4px_color-mix(in_srgb,var(--accent)_25%,transparent),0_1px_4px_rgba(0,0,0,0.35)]"
+    />
+  </Marker>
+);
+
 const AUTO_ZOOM_STORAGE_KEY = "earthprints:auto_zoom";
+const LOCATE_ERROR_VISIBLE_MS = 6000;
 
 function getInitialAutoZoom(): boolean {
   if (typeof window === "undefined") return true;
@@ -97,6 +125,11 @@ export function EarthMap() {
   const seriesAbortRef = useRef<AbortController | null>(null);
   const mapStageRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<MapRef>(null);
+  // The background load of the visitor's own cell. Any real pick aborts it:
+  // the decode worker runs one job at a time, so a warm-up left running would
+  // hold a click's load behind it.
+  const warmAbortRef = useRef<AbortController | null>(null);
+  const didAutoLocateRef = useRef(false);
 
   const [viewState, setViewState] = useState<MapViewState>(DEFAULT_MAP_VIEW);
   const [viewMode, setViewMode] = useState<MapViewMode>("2d");
@@ -124,6 +157,9 @@ export function EarthMap() {
   const [seriesValues, setSeriesValues] = useState<Float32Array | null>(null);
   const [seriesUnits, setSeriesUnits] = useState<string | null>(null);
   const [gridSpec, setGridSpec] = useState<GridSpec>(DEFAULT_GRID_SPEC);
+  const [userPosition, setUserPosition] = useState<UserPosition | null>(null);
+  const [locating, setLocating] = useState(false);
+  const [locateError, setLocateError] = useState<string | null>(null);
 
   const isSphere = viewMode === "sphere";
   const mapStyle = isLight ? MAP_BASE_STYLES.light : MAP_BASE_STYLES.dark;
@@ -264,14 +300,15 @@ export function EarthMap() {
   );
 
   const handlePick = useCallback(
-    (lon: number, lat: number) => {
+    (lon: number, lat: number, options?: { fly?: boolean }) => {
       const nextSelection: MapSelection = {
         click: { lon, lat },
         grid: geoPointToZarrGrid({ lon, lat }, gridSpec),
       };
 
+      warmAbortRef.current?.abort();
       setSelection(nextSelection);
-      if (autoZoom) {
+      if (options?.fly ?? autoZoom) {
         const focused = viewStateFocusedOnCell(
           viewState,
           nextSelection.grid,
@@ -283,6 +320,95 @@ export function EarthMap() {
     },
     [autoZoom, flyToView, gridSpec, selectedYears, loadTimeSeriesForYears, viewMode, viewState],
   );
+
+  // Locating awaits the browser, which can take seconds while the permission
+  // dialog is open; reading the pick through a ref flies from where the map is
+  // by then, not from where it was when the button was pressed.
+  const handlePickRef = useRef(handlePick);
+  useEffect(() => {
+    handlePickRef.current = handlePick;
+  }, [handlePick]);
+
+  // `interactive` is a press of the locate button: it shows the busy state and
+  // reports failures. The request on load does neither, since Chrome leaves an
+  // unanswered permission prompt open indefinitely and the button would sit
+  // disabled for as long as the visitor ignores it.
+  const requestUserPosition = useCallback(
+    async (interactive: boolean): Promise<UserPosition | null> => {
+      if (interactive) setLocating(true);
+      try {
+        const position = await requestPosition();
+        setUserPosition(position);
+        setLocateError(null);
+        return position;
+      } catch (error) {
+        if (interactive) setLocateError(describeGeolocationError(error));
+        return null;
+      } finally {
+        if (interactive) setLocating(false);
+      }
+    },
+    [],
+  );
+
+  // Fetches the visitor's cell and throws the result away: the reader keeps
+  // the decoded series, so pressing the locate button later is instant. The
+  // selection and the panel are left alone.
+  const warmUserCell = useCallback(
+    async (position: UserPosition, years: number[]) => {
+      if (!shouldWarmCache(readConnectionHint())) return;
+      warmAbortRef.current?.abort();
+      const abort = new AbortController();
+      warmAbortRef.current = abort;
+      try {
+        const reader = await ensureReader();
+        const spec = await reader.getGridSpec();
+        if (abort.signal.aborted) return;
+        await reader.getTimeSeriesForYears(
+          geoPointToZarrGrid(position, spec),
+          years,
+          undefined,
+          undefined,
+          abort.signal,
+        );
+      } catch {
+        // Best effort. A real pick reports its own errors.
+      } finally {
+        if (warmAbortRef.current === abort) warmAbortRef.current = null;
+      }
+    },
+    [ensureReader],
+  );
+
+  // Ask once on load. Allowing it marks the position and warms that cell, but
+  // does not move the map. A dismissed dialog is not reported as an error.
+  useEffect(() => {
+    if (didAutoLocateRef.current) return;
+    didAutoLocateRef.current = true;
+    void requestUserPosition(false).then((position) => {
+      if (position) void warmUserCell(position, selectedYears);
+    });
+  }, [requestUserPosition, warmUserCell, selectedYears]);
+
+  useEffect(() => () => warmAbortRef.current?.abort(), []);
+
+  useEffect(() => {
+    if (!locateError) return;
+    const timer = window.setTimeout(
+      () => setLocateError(null),
+      LOCATE_ERROR_VISIBLE_MS,
+    );
+    return () => window.clearTimeout(timer);
+  }, [locateError]);
+
+  // Moves the map even when auto-zoom is off: going there is the point of
+  // pressing it. Without a known position this is also what brings the
+  // permission dialog back for a visitor who dismissed it on load.
+  const handleLocate = useCallback(async () => {
+    const position = userPosition ?? (await requestUserPosition(true));
+    if (!position) return;
+    handlePickRef.current(position.lon, position.lat, { fly: true });
+  }, [requestUserPosition, userPosition]);
 
   const handleMapClick = useCallback(
     (event: MapMouseEvent) => {
@@ -401,6 +527,8 @@ export function EarthMap() {
           onViewModeChange={handleViewModeChange}
           hasSelection={selection !== null}
           onZoomToSelection={handleZoomToSelection}
+          onLocate={handleLocate}
+          locating={locating}
           autoZoom={autoZoom}
           onToggleAutoZoom={handleToggleAutoZoom}
           showPatch={showPatch}
@@ -465,6 +593,9 @@ export function EarthMap() {
                 showPatch={showPatch}
               />
             ) : null}
+            {userPosition ? (
+              <UserPositionMarker position={userPosition} />
+            ) : null}
           </Map>
           {/* Anchor only: something at the foot of the map for the guide to
               hang a card on, so the card does not cover the map it is asking
@@ -481,17 +612,46 @@ export function EarthMap() {
             panelOpen={controlsOpen}
             onPanelOpenChange={setControlsOpen}
           />
-          <div className="pointer-events-none absolute inset-x-0 top-2 z-30 flex justify-center px-2">
+          <div className="pointer-events-none absolute inset-x-0 top-2 z-30 flex flex-col items-center gap-2 px-2">
             <MapSearch
               onSelect={handlePick}
               className="pointer-events-auto w-full min-[901px]:max-w-[400px]"
             />
+            {locateError ? (
+              <div
+                role="status"
+                className="pointer-events-auto flex max-w-[400px] items-center gap-2 rounded-editor-sm border border-editor-border bg-editor-bg-base py-1.5 pl-3 pr-1.5 text-sm text-editor-fg-primary shadow-editor"
+              >
+                <span className="min-w-0 flex-1">{locateError}</span>
+                <button
+                  type="button"
+                  aria-label="Dismiss"
+                  onClick={() => setLocateError(null)}
+                  className="grid size-6 flex-shrink-0 place-items-center rounded-full text-editor-fg-tertiary transition-colors hover:bg-editor-bg-secondary hover:text-editor-fg-primary"
+                >
+                  <svg
+                    width="12"
+                    height="12"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    aria-hidden="true"
+                  >
+                    <path d="M6 6l12 12M18 6 6 18" />
+                  </svg>
+                </button>
+              </div>
+            ) : null}
           </div>
           <MapSideControls
             viewMode={viewMode}
             onViewModeChange={handleViewModeChange}
             hasSelection={selection !== null}
             onZoomToSelection={handleZoomToSelection}
+            onLocate={handleLocate}
+            locating={locating}
             autoZoom={autoZoom}
             onToggleAutoZoom={handleToggleAutoZoom}
             showPatch={showPatch}
