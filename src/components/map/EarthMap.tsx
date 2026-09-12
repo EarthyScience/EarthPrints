@@ -329,6 +329,25 @@ export function EarthMap() {
     handlePickRef.current = handlePick;
   }, [handlePick]);
 
+  // Centres the map on the visitor, the way Google Maps opens on you. It only
+  // moves the camera; nothing is selected. A visitor who already picked a cell
+  // while the permission dialog was open stays where they are.
+  const centerOnPosition = useCallback(
+    (position: UserPosition) => {
+      if (selection) return;
+      const cell = geoPointToZarrGrid(position, gridSpec);
+      flyToView(
+        viewStateFocusedOnCell(viewState, cell, viewMode),
+        SELECTION_FOCUS_TRANSITION_MS,
+      );
+    },
+    [flyToView, gridSpec, selection, viewMode, viewState],
+  );
+  const centerOnPositionRef = useRef(centerOnPosition);
+  useEffect(() => {
+    centerOnPositionRef.current = centerOnPosition;
+  }, [centerOnPosition]);
+
   // `interactive` is a press of the locate button: it shows the busy state and
   // reports failures. The request on load does neither, since Chrome leaves an
   // unanswered permission prompt open indefinitely and the button would sit
@@ -380,13 +399,15 @@ export function EarthMap() {
     [ensureReader],
   );
 
-  // Ask once on load. Allowing it marks the position and warms that cell, but
-  // does not move the map. A dismissed dialog is not reported as an error.
+  // Ask once on load. Allowing it centres the map on the position and warms
+  // that cell. A dismissed dialog is not reported as an error.
   useEffect(() => {
     if (didAutoLocateRef.current) return;
     didAutoLocateRef.current = true;
     void requestUserPosition(false).then((position) => {
-      if (position) void warmUserCell(position, selectedYears);
+      if (!position) return;
+      centerOnPositionRef.current(position);
+      void warmUserCell(position, selectedYears);
     });
   }, [requestUserPosition, warmUserCell, selectedYears]);
 
