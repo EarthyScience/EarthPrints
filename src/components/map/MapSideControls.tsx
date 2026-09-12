@@ -5,6 +5,7 @@ import { AutoZoomIcon } from "@/icons/AutoZoomIcon";
 import { CrosshairIcon } from "@/icons/CrosshairIcon";
 import { FingerprintIcon } from "@/icons/FingerprintIcon";
 import { GlobeIcon } from "@/icons/GlobeIcon";
+import { LocateIcon } from "@/icons/LocateIcon";
 import { MapIcon } from "@/icons/MapIcon";
 import { PatchIcon } from "@/icons/PatchIcon";
 import type { MapViewMode } from "@/types/map";
@@ -14,6 +15,8 @@ type MapSideControlsProps = {
   onViewModeChange: (mode: MapViewMode) => void;
   hasSelection: boolean;
   onZoomToSelection: () => void;
+  onLocate?: () => void;
+  locating?: boolean;
   autoZoom?: boolean;
   onToggleAutoZoom?: () => void;
   showPatch: boolean;
@@ -39,6 +42,8 @@ export function MapSideControls({
   onViewModeChange,
   hasSelection,
   onZoomToSelection,
+  onLocate,
+  locating = false,
   autoZoom = true,
   onToggleAutoZoom,
   showPatch,
@@ -71,6 +76,19 @@ export function MapSideControls({
         >
           <GlobeIcon />
         </IconButton>
+        {/* Here rather than with the selection controls below: going to your
+            location is useful before anything has been picked. */}
+        {onLocate ? (
+          <IconButton
+            variant="plain"
+            tooltipPlacement="left"
+            aria-label="Go to my location"
+            disabled={locating}
+            onClick={onLocate}
+          >
+            <LocateIcon />
+          </IconButton>
+        ) : null}
       </div>
       {hasSelection ? (
         <>
