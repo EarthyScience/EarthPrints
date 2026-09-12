@@ -37,6 +37,12 @@ type FingerprintPlotProps = {
   pixelRatio?: number;
   selectedYear?: number | null;
   selectedYears?: number[] | null;
+  /**
+   * Which clock `values` has already been rolled onto, e.g.
+   * `local solar time (UTC+10)`. The plot does no conversion of its own; this
+   * only names the hour axis, which would otherwise silently read as UTC.
+   */
+  timeBasisLabel?: string;
   transposed?: boolean;
   onTransposedChange?: (transposed: boolean) => void;
 };
@@ -78,6 +84,7 @@ export function FingerprintPlot({
   pixelRatio,
   selectedYear = null,
   selectedYears = null,
+  timeBasisLabel,
   transposed: controlledTransposed,
   onTransposedChange,
 }: FingerprintPlotProps) {
@@ -384,14 +391,16 @@ export function FingerprintPlot({
         />
         {hover ? (
           <div
-            className="pointer-events-none absolute z-10 -translate-x-1/2 rounded-md border border-editor-border bg-editor-bg-primary px-2 py-1 font-mono text-[11px] leading-tight text-editor-fg-secondary shadow-md"
+            className="pointer-events-none absolute z-10 -translate-x-1/2 whitespace-nowrap rounded-md border border-editor-border bg-editor-bg-primary px-2 py-1 font-mono text-[11px] leading-tight text-editor-fg-secondary shadow-md"
             style={{
               left: Math.max(48, Math.min(width - 48, hover.left)),
               top: Math.max(0, hover.top - 52),
             }}
           >
             <div className="text-editor-fg-primary">
-              {formatIsoDate(hover.absoluteDay)} · {String(hover.hour).padStart(2, "0")}:00
+              {formatIsoDate(hover.absoluteDay)} ·{" "}
+              {String(hover.hour).padStart(2, "0")}:00
+              {timeBasisLabel ? ` ${hoverBasisSuffix(timeBasisLabel)}` : ""}
             </div>
             <div>
               {Number.isFinite(hover.value)
@@ -419,10 +428,19 @@ export function FingerprintPlot({
       </div>
       <p className="mt-2 shrink-0 font-mono text-xs leading-normal text-editor-fg-tertiary">
         {nSel.toLocaleString()} days × {hoursPerDay} hours
+        {timeBasisLabel ? ` · ${timeBasisLabel}` : ""}
         {units ? ` · ${units}` : ""}
       </p>
     </div>
   );
+}
+
+/**
+ * Short form of the basis for the hover chip, which has no room for the full
+ * caption: `local solar time (UTC+10)` reads as `local`, `UTC` stays `UTC`.
+ */
+function hoverBasisSuffix(timeBasisLabel: string): string {
+  return timeBasisLabel.startsWith("local") ? "local" : timeBasisLabel;
 }
 
 /** Keep a bottom-axis date label inside the plot width. */

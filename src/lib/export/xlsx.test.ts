@@ -5,6 +5,9 @@ import { buildWorkbookSheets } from "@/lib/export/xlsx";
 import { ZARR_TIME } from "@/lib/zarr/timeRange";
 import type { MapSelection } from "@/types/map";
 
+/** Index of the value column, last in the row. */
+const VALUE_COLUMN = 8;
+
 const SELECTION: MapSelection = {
   click: { lon: 11.5669, lat: 50.9128 },
   grid: { lon: 11.575, lat: 50.925, lonIndex: 3831, latIndex: 780 },
@@ -30,9 +33,12 @@ describe("buildWorkbookSheets", () => {
     expect(data).toHaveLength(2 * ZARR_TIME.hoursPerDay + 1);
     expect(data[0].map((cell) => (cell as { value: string }).value)).toEqual([
       "timestamp_utc",
+      "timestamp_local",
       "year",
       "date",
+      "date_local",
       "hour",
+      "hour_local",
       "day_index",
       "value (gC m-2 d-1)",
     ]);
@@ -49,8 +55,8 @@ describe("buildWorkbookSheets", () => {
   it("leaves missing values null so Excel shows a blank, not a zero", () => {
     const { data } = sheetsForDays(1);
 
-    expect(data[3][5]).toBeNull();
-    expect(data[2][5]).toBe(1.5);
+    expect(data[3][VALUE_COLUMN]).toBeNull();
+    expect(data[2][VALUE_COLUMN]).toBe(1.5);
   });
 
   it("carries the provenance facts on its own sheet", () => {

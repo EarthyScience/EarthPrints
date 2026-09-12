@@ -5,6 +5,7 @@ import {
   yearsToContiguousBlocks,
   yearsToDateRange,
 } from "@/lib/zarr/timeRange";
+import { localHourOffset, type TimeBasis } from "@/lib/zarr/localTime";
 import type { GeoPoint, GridCell, MapSelection } from "@/types/map";
 
 /**
@@ -25,6 +26,13 @@ export type ExportProvenance = {
   selectedYear: number | null;
   selectedYears: number[] | null;
   hoursPerDay: number;
+  /** Which clock the plots in this export were drawn against. */
+  timeBasis: TimeBasis;
+  /**
+   * Nominal UTC offset of the cell, in whole hours. Applied to the plots when
+   * `timeBasis` is `local`; the tables carry both clocks either way.
+   */
+  utcOffsetHours: number;
   /** Days covered by the loaded window. */
   dayCount: number;
   /** Absolute day index (0 = archive origin) of the window's first day. */
@@ -45,6 +53,7 @@ type BuildInput = {
   variable?: string;
   hoursPerDay?: number;
   totalDays?: number;
+  timeBasis?: TimeBasis;
   generatedAt?: Date;
 };
 
@@ -58,6 +67,7 @@ export function buildProvenance({
   variable = ZARR_STORE.defaultVariable,
   hoursPerDay = ZARR_TIME.hoursPerDay,
   totalDays = ZARR_TIME.totalDays,
+  timeBasis = "local",
   generatedAt = new Date(),
 }: BuildInput): ExportProvenance {
   const dayCount = Math.floor(valueCount / hoursPerDay);
@@ -94,6 +104,8 @@ export function buildProvenance({
     selectedYear: years && years.length === 1 ? years[0]! : null,
     selectedYears: years,
     hoursPerDay,
+    timeBasis,
+    utcOffsetHours: localHourOffset(selection.grid.lon, hoursPerDay),
     dayCount,
     baseDay: startDay,
     windowStart,

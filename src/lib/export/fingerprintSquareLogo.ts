@@ -11,6 +11,7 @@ import {
   formatSelectedYearsLabel,
   getSelectedYearsDayMapping,
 } from "@/lib/zarr/timeRange";
+import { formatUtcOffset } from "@/lib/zarr/localTime";
 import type { ExportProvenance } from "./provenance";
 import type { CapturedImage } from "./capture";
 
@@ -304,7 +305,11 @@ export function buildSquareFingerprintCanvas(
   // A. Top-Left: Data Source Provenance Badge
   const provYearTag =
     years && years.length > 0 ? ` · ${formatSelectedYearsLabel(years)}` : "";
-  const provText = `${prov.dataset} · ${prov.variable}${provYearTag} · ${prov.resolutionDeg}° grid`;
+  // The hour ticks along the top are whatever clock the caller handed us, so the
+  // badge has to name it. Compact form only: this graphic gets shared on its own.
+  const provClock =
+    prov.timeBasis === "utc" ? "UTC" : formatUtcOffset(prov.utcOffsetHours);
+  const provText = `${prov.dataset} · ${prov.variable}${provYearTag} · ${prov.resolutionDeg}° grid · ${provClock}`;
 
   ctx.save();
   ctx.font = `400 ${standardFontSize}px ${SANS_FONT_FAMILY}`;

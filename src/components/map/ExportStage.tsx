@@ -47,6 +47,8 @@ type StageProps = {
   hoursPerDay?: number;
   selectedYear?: number | null;
   selectedYears?: number[] | null;
+  /** Names the clock `values` is already on, for the fingerprint's caption. */
+  timeBasisLabel?: string;
 };
 
 /**
@@ -60,6 +62,7 @@ function ExportStage({
   hoursPerDay,
   selectedYear,
   selectedYears,
+  timeBasisLabel,
 }: StageProps) {
   return (
     <FixedThemeProvider theme="light">
@@ -81,6 +84,7 @@ function ExportStage({
             pixelRatio={EXPORT_PIXEL_RATIO}
             selectedYear={selectedYear}
             selectedYears={selectedYears}
+            timeBasisLabel={timeBasisLabel}
           />
         </div>
       </div>

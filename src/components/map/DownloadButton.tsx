@@ -15,6 +15,7 @@ import { buildProvenance, exportFileBaseName } from "@/lib/export/provenance";
 import { buildSeriesRows } from "@/lib/export/rows";
 import { buildSeriesWorkbook } from "@/lib/export/xlsx";
 import { blobToBytes, buildZip, dataUrlToBytes } from "@/lib/export/zip";
+import type { TimeBasis } from "@/lib/zarr/localTime";
 import { useTheme } from "@/providers/ThemeProvider";
 import type { GridSpec, MapSelection } from "@/types/map";
 
@@ -22,7 +23,15 @@ type DownloadButtonProps = {
   selection: MapSelection;
   gridSpec: GridSpec;
   historyYears: number;
+  /** Archive values, on the store's UTC hour axis. The tables dump these. */
   values: Float32Array | null;
+  /**
+   * The same values rolled onto whichever clock the panel is showing. The
+   * rendered plots use these, so a downloaded image matches the screen.
+   */
+  displayValues: Float32Array | null;
+  timeBasis: TimeBasis;
+  timeBasisLabel: string;
   units: string | null;
   selectedYear?: number | null;
   selectedYears?: number[] | null;
@@ -33,6 +42,9 @@ export function DownloadButton({
   gridSpec,
   historyYears,
   values,
+  displayValues,
+  timeBasis,
+  timeBasisLabel,
   units,
   selectedYear = null,
   selectedYears = null,
@@ -86,22 +98,24 @@ export function DownloadButton({
         selectedYears,
         valueCount: values.length,
         units,
+        timeBasis,
       });
       const base = exportFileBaseName(prov);
 
       const [mapCapture, plots] = await Promise.all([
         captureMapForExport({ cell: selection.grid, gridSpec }),
         capturePlotsForExport({
-          values,
+          values: displayValues ?? values,
           units,
           hoursPerDay: prov.hoursPerDay,
           selectedYear,
           selectedYears,
+          timeBasisLabel,
         }),
       ]);
 
       const squareCanvas = buildSquareFingerprintCanvas({
-        values,
+        values: displayValues ?? values,
         prov,
         units,
         size: 1024,
@@ -122,7 +136,7 @@ export function DownloadButton({
         buildReportPdf({
           prov,
           assets,
-          values,
+          values: displayValues ?? values,
           attribution: mapCapture.attribution,
         }),
         buildSeriesWorkbook(rows, prov),
@@ -163,7 +177,18 @@ export function DownloadButton({
     } finally {
       setBusy(false);
     }
-  }, [gridSpec, historyYears, selectedYear, selectedYears, selection, units, values]);
+  }, [
+    displayValues,
+    gridSpec,
+    historyYears,
+    selectedYear,
+    selectedYears,
+    selection,
+    timeBasis,
+    timeBasisLabel,
+    units,
+    values,
+  ]);
 
   // Single Workbook export
   const runWorkbookExport = useCallback(async () => {
@@ -181,6 +206,7 @@ export function DownloadButton({
         selectedYears,
         valueCount: values.length,
         units,
+        timeBasis,
       });
       const base = exportFileBaseName(prov);
       const rows = buildSeriesRows(values, prov);
@@ -192,7 +218,7 @@ export function DownloadButton({
     } finally {
       setBusy(false);
     }
-  }, [historyYears, selectedYear, selectedYears, selection, units, values]);
+  }, [historyYears, selectedYear, selectedYears, selection, timeBasis, units, values]);
 
   // Standalone Square Badge export
   const runSquareBadgeExport = useCallback(
@@ -213,11 +239,12 @@ export function DownloadButton({
           selectedYears,
           valueCount: values.length,
           units,
+          timeBasis,
         });
         const base = exportFileBaseName(prov);
 
         const canvas = buildSquareFingerprintCanvas({
-          values,
+          values: displayValues ?? values,
           prov,
           units,
           size: targetSize,
@@ -247,7 +274,17 @@ export function DownloadButton({
         setBusy(false);
       }
     },
-    [historyYears, isLight, selectedYear, selectedYears, selection, units, values],
+    [
+      displayValues,
+      historyYears,
+      isLight,
+      selectedYear,
+      selectedYears,
+      selection,
+      timeBasis,
+      units,
+      values,
+    ],
   );
 
   // Single PDF export
@@ -266,17 +303,19 @@ export function DownloadButton({
         selectedYears,
         valueCount: values.length,
         units,
+        timeBasis,
       });
       const base = exportFileBaseName(prov);
 
       const [mapCapture, plots] = await Promise.all([
         captureMapForExport({ cell: selection.grid, gridSpec }),
         capturePlotsForExport({
-          values,
+          values: displayValues ?? values,
           units,
           hoursPerDay: prov.hoursPerDay,
           selectedYear,
           selectedYears,
+          timeBasisLabel,
         }),
       ]);
       const assets: ReportAssets = {
@@ -288,7 +327,7 @@ export function DownloadButton({
       const pdf = await buildReportPdf({
         prov,
         assets,
-        values,
+        values: displayValues ?? values,
         attribution: mapCapture.attribution,
       });
 
@@ -299,7 +338,18 @@ export function DownloadButton({
     } finally {
       setBusy(false);
     }
-  }, [gridSpec, historyYears, selectedYear, selectedYears, selection, units, values]);
+  }, [
+    displayValues,
+    gridSpec,
+    historyYears,
+    selectedYear,
+    selectedYears,
+    selection,
+    timeBasis,
+    timeBasisLabel,
+    units,
+    values,
+  ]);
 
   // Single CSV export
   const runCsvExport = useCallback(() => {
@@ -312,13 +362,14 @@ export function DownloadButton({
       selectedYears,
       valueCount: values.length,
       units,
+      timeBasis,
     });
     const base = exportFileBaseName(prov);
     const rows = buildSeriesRows(values, prov);
     const csv = buildSeriesCsv(rows, prov);
     const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
     downloadBlob(blob, `${base}.csv`);
-  }, [historyYears, selectedYear, selectedYears, selection, units, values]);
+  }, [historyYears, selectedYear, selectedYears, selection, timeBasis, units, values]);
 
   return (
     <div ref={containerRef} className="relative inline-flex items-center">
