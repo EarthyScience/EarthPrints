@@ -4,6 +4,7 @@ import { createRoot } from "react-dom/client";
 import Map from "react-map-gl/maplibre";
 import type { Map as MapLibreMap, MapLibreEvent } from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
+import "@/lib/map/initMaplibre";
 import { GlobeSelectionOverlay } from "@/components/map/GlobeSelectionOverlay";
 import {
   MAP_BASE_STYLES,

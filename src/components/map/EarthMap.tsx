@@ -13,6 +13,7 @@ import Map, {
   type ViewStateChangeEvent,
 } from "react-map-gl/maplibre";
 import "maplibre-gl/dist/maplibre-gl.css";
+import "@/lib/map/initMaplibre";
 import { geoPointToZarrGrid } from "@/lib/map/geogrid";
 import { brightenDarkMapPlaceLabels } from "@/lib/map/mapLabels";
 import type {
