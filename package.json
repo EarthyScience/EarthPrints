@@ -11,8 +11,7 @@
     "test:watch": "vitest"
   },
   "dependencies": {
-    "@deck.gl/react": "^9.4.0",
-    "deck.gl": "^9.4.0",
+    "@deck.gl/core": "^9.4.0",
     "fflate": "^0.8.3",
     "jspdf": "^4.2.1",
     "maplibre-gl": "^6.9.0",
