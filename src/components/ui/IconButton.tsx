@@ -8,6 +8,7 @@ type IconButtonProps = {
   "aria-expanded"?: boolean;
   "aria-controls"?: string;
   "aria-pressed"?: boolean;
+  disabled?: boolean;
   /** When set, renders an anchor to this URL instead of a button. */
   href?: string;
   /**
@@ -71,6 +72,7 @@ export function IconButton({
   "aria-controls": ariaControls,
   "aria-pressed": ariaPressed,
   "data-tour": dataTour,
+  disabled,
   href,
   variant = "default",
   tooltipPlacement = "bottom",
@@ -84,6 +86,7 @@ export function IconButton({
         ? ICON_BUTTON_PLAIN_PRESSED_CLASS
         : ICON_BUTTON_PRESSED_CLASS
       : null,
+    disabled ? "cursor-wait opacity-60" : null,
     className,
   ]
     .filter(Boolean)
@@ -109,6 +112,7 @@ export function IconButton({
       aria-expanded={ariaExpanded}
       aria-controls={ariaControls}
       aria-pressed={ariaPressed}
+      disabled={disabled}
       data-tour={dataTour}
     >
       {children}

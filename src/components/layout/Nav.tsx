@@ -8,6 +8,7 @@ import { PatchMenu } from "@/components/map/PatchMenu";
 import { IconButton } from "@/components/ui/IconButton";
 import { AutoZoomIcon } from "@/icons/AutoZoomIcon";
 import { CrosshairIcon } from "@/icons/CrosshairIcon";
+import { LocateIcon } from "@/icons/LocateIcon";
 import { PanelLeftIcon } from "@/icons/PanelLeftIcon";
 import type { PatchWindowSize } from "@/lib/settings/patchWindow";
 import { DEFAULT_PATCH_WINDOW } from "@/lib/settings/patchWindow";
@@ -18,6 +19,8 @@ type NavProps = {
   onViewModeChange?: (mode: MapViewMode) => void;
   hasSelection?: boolean;
   onZoomToSelection?: () => void;
+  onLocate?: () => void;
+  locating?: boolean;
   autoZoom?: boolean;
   onToggleAutoZoom?: () => void;
   showPatch?: boolean;
@@ -34,6 +37,8 @@ export function Nav({
   onViewModeChange,
   hasSelection = false,
   onZoomToSelection,
+  onLocate,
+  locating = false,
   autoZoom = true,
   onToggleAutoZoom,
   showPatch = false,
@@ -73,6 +78,15 @@ export function Nav({
               </div>
             ) : null}
             <div className="flex items-center gap-1.5 max-[900px]:hidden">
+              {onLocate ? (
+                <IconButton
+                  aria-label="Go to my location"
+                  disabled={locating}
+                  onClick={onLocate}
+                >
+                  <LocateIcon />
+                </IconButton>
+              ) : null}
               {hasSelection && onZoomToSelection ? (
                 <IconButton
                   className="animate-[zoomToSelectionIn_0.18s_cubic-bezier(0.16,1,0.3,1)]"
