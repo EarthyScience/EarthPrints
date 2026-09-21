@@ -22,6 +22,10 @@ import {
   DEFAULT_PATCH_WINDOW,
   type PatchWindowSize,
 } from "@/lib/settings/patchWindow";
+import { ColormapPicker } from "@/components/map/ColormapPicker";
+import type { ColormapId } from "@/lib/map/fingerprintScale";
+import { loadColormap, saveColormap } from "@/lib/settings/colormap";
+import { useTheme } from "@/providers/ThemeProvider";
 
 type PlotView = "line" | "fingerprint";
 
@@ -56,9 +60,18 @@ export function MapReadout({
   seriesValues,
   seriesUnits,
 }: MapReadoutProps) {
+  const { isLight } = useTheme();
   const [plotView, setPlotView] = useState<PlotView>("line");
   const [fingerprintTransposed, setFingerprintTransposed] = useState(false);
   const [timeBasis, setTimeBasis] = useState<TimeBasis>("local");
+  const [colormapId, setColormapId] = useState<ColormapId>(
+    () => loadColormap() ?? (isLight ? "science-light" : "science-dark"),
+  );
+
+  const handleColormapChange = (id: ColormapId) => {
+    setColormapId(id);
+    saveColormap(id);
+  };
   // An all-NaN cell has nothing to draw, download, or switch views on. Measured
   // on the archive values, since the local-time roll blanks a few edge hours of
   // its own and must not make a populated cell look empty.
@@ -131,7 +144,7 @@ export function MapReadout({
       </span>
 
       {/* View switch left, download right, on the row between title and plot. */}
-      <div className="mb-3 mt-2 flex flex-wrap items-center justify-between gap-x-3 gap-y-2 shrink-0">
+      <div className="mt-2 flex flex-wrap items-center justify-between gap-x-3 gap-y-2 shrink-0">
         <div className="flex flex-wrap items-center gap-2">
           <PlotViewToggle
             view={plotView}
@@ -169,8 +182,18 @@ export function MapReadout({
           timeBasisLabel={timeBasisLabel}
           units={seriesUnits}
           selectedYears={selectedYears}
+          colormapId={colormapId}
         />
       </div>
+
+      {/* Colormap picker — only shown in fingerprint view, on its own line below the controls row. */}
+      {plotView === "fingerprint" ? (
+        <div className="mb-3 mt-2 shrink-0">
+          <ColormapPicker value={colormapId} onChange={handleColormapChange} />
+        </div>
+      ) : (
+        <div className="mb-3" />
+      )}
 
       {loadingSeries ? (
         <div className="grid gap-3">
@@ -204,6 +227,7 @@ export function MapReadout({
             timeBasisLabel={timeBasisLabel}
             transposed={fingerprintTransposed}
             onTransposedChange={setFingerprintTransposed}
+            colormapId={colormapId}
           />
         )
       ) : null}

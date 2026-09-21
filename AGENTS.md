@@ -14,6 +14,22 @@ Follow the Lovable design reference in every UX/UI detail when implementing this
 
 Lovable reference files (exported/saved pages, e.g. "Remix of ... Lovable.html" and its `_files/` folder) are for local visual reference only. Never commit them to the repo — they are gitignored; keep them that way.
 
+# Next.js docs — read targeted, not wholesale
+
+The docs tree at `node_modules/next/dist/docs/` is **452 files / ~3 MB**.
+Do NOT read it all — it would consume the entire context window before any
+code is written. Instead, grep for the specific topic first:
+
+```bash
+find node_modules/next/dist/docs -name '*.md' | xargs grep -l 'YOUR_TOPIC' | head -5
+```
+
+High-value files:
+- `01-app/01-getting-started/05-server-and-client-components.md` — "use client" rules
+- `01-app/01-getting-started/06-fetching-data.md` — data fetching patterns
+- `01-app/01-getting-started/08-caching.md` — caching semantics
+- `01-app/01-getting-started/18-upgrading.md` — breaking changes vs older Next.js
+
 # Commit authorship
 
 Commits are authored by the repo owner only. Do NOT add a `Co-Authored-By: Claude` (or any AI assistant) trailer to commit messages, and do not set the author/committer to an AI identity. Leave git's configured user as the sole author.
