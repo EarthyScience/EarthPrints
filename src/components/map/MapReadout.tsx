@@ -182,6 +182,7 @@ export function MapReadout({
           timeBasisLabel={timeBasisLabel}
           units={seriesUnits}
           selectedYears={selectedYears}
+          colormapId={colormapId}
         />
       </div>
 

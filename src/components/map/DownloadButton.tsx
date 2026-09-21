@@ -18,6 +18,7 @@ import { blobToBytes, buildZip, dataUrlToBytes } from "@/lib/export/zip";
 import type { TimeBasis } from "@/lib/zarr/localTime";
 import { useTheme } from "@/providers/ThemeProvider";
 import type { GridSpec, MapSelection } from "@/types/map";
+import type { ColormapId } from "@/lib/map/fingerprintScale";
 
 type DownloadButtonProps = {
   selection: MapSelection;
@@ -35,6 +36,8 @@ type DownloadButtonProps = {
   units: string | null;
   selectedYear?: number | null;
   selectedYears?: number[] | null;
+  /** Colour palette to use for the square fingerprint badge. */
+  colormapId?: ColormapId;
 };
 
 export function DownloadButton({
@@ -48,6 +51,7 @@ export function DownloadButton({
   units,
   selectedYear = null,
   selectedYears = null,
+  colormapId,
 }: DownloadButtonProps) {
   const { isLight } = useTheme();
   const [busy, setBusy] = useState(false);
@@ -122,6 +126,7 @@ export function DownloadButton({
         isLight: true,
         selectedYear,
         selectedYears,
+        colormapId,
       });
       const squareDataUrl = squareCanvas.toDataURL("image/png");
 
@@ -178,6 +183,7 @@ export function DownloadButton({
       setBusy(false);
     }
   }, [
+    colormapId,
     displayValues,
     gridSpec,
     historyYears,
@@ -251,6 +257,7 @@ export function DownloadButton({
           isLight,
           selectedYear,
           selectedYears,
+          colormapId,
         });
 
         const yearTag =
@@ -275,6 +282,7 @@ export function DownloadButton({
       }
     },
     [
+      colormapId,
       displayValues,
       historyYears,
       isLight,
