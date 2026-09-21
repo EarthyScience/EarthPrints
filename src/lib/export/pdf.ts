@@ -202,7 +202,8 @@ function drawPlot(
  * sampled into thin bars from the same colour scale the plot uses.
  */
 function drawLegend(doc: jsPDF, absMax: number, y: number): number {
-  const scale = fingerprintColorScale(true);
+  // PDF legend always renders in Science Light palette, matching the light export theme.
+  const scale = fingerprintColorScale("science-light");
   const steps = 96;
   const barW = 70;
   const barH = 2.4;
@@ -210,7 +211,7 @@ function drawLegend(doc: jsPDF, absMax: number, y: number): number {
 
   for (let i = 0; i < steps; i += 1) {
     const t = i / (steps - 1);
-    doc.setFillColor(...parseRgb(scale((t * 2 - 1) * absMax, absMax)));
+    doc.setFillColor(...parseRgb(scale((t * 2 - 1) * absMax, absMax, absMax)));
     // Overlap by a hair so no seams show between bars.
     doc.rect(barX + (i * barW) / steps, y, barW / steps + 0.1, barH, "F");
   }

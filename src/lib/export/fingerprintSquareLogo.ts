@@ -116,7 +116,8 @@ export function buildSquareFingerprintCanvas(
 
   // 2. Full-bleed Vertical Fingerprint Heatmap (X = hour 0..23, Y = day 0..nDays-1)
   if (nDays > 0) {
-    const scale = fingerprintColorScale(isLight);
+    // Export always uses the light Science palette regardless of the app's theme.
+    const scale = fingerprintColorScale("science-light");
     const colW = size / hoursPerDay;
 
     // Crisp pixel block rendering
@@ -127,7 +128,7 @@ export function buildSquareFingerprintCanvas(
 
       for (let hour = 0; hour < hoursPerDay; hour++) {
         const val = values[dayOffset * hoursPerDay + hour] as number;
-        const color = scale(val, absMax);
+        const color = scale(val, absMax, absMax);
         if (color === "transparent") continue;
 
         const x0 = Math.floor(hour * colW);

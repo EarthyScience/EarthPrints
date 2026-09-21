@@ -7,10 +7,12 @@ import {
   timeSeriesChartTheme,
 } from "@/components/map/timeSeriesChartConfig";
 import {
+  asymmetricExtents,
+  COLORMAPS,
+  type ColormapId,
   dayIndexTicks,
   FINGERPRINT_HOUR_TICKS,
   fingerprintColorScale,
-  fingerprintLegendStops,
   formatDayTick,
   formatIsoDate,
   symmetricAbsMax,
@@ -45,6 +47,11 @@ type FingerprintPlotProps = {
   timeBasisLabel?: string;
   transposed?: boolean;
   onTransposedChange?: (transposed: boolean) => void;
+  /**
+   * Which colour palette to use. Defaults to the theme-appropriate Science
+   * palette when omitted.
+   */
+  colormapId?: ColormapId;
 };
 
 /**
@@ -87,8 +94,12 @@ export function FingerprintPlot({
   timeBasisLabel,
   transposed: controlledTransposed,
   onTransposedChange,
+  colormapId: colormapIdProp,
 }: FingerprintPlotProps) {
   const { isLight } = useTheme();
+  // Default to the theme-appropriate Science palette when no explicit choice.
+  const colormapId: ColormapId =
+    colormapIdProp ?? (isLight ? "science-light" : "science-dark");
   const wrapperRef = useRef<HTMLDivElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [containerSize, setContainerSize] = useState<{
@@ -112,6 +123,14 @@ export function FingerprintPlot({
 
   const nDays = Math.floor(values.length / hoursPerDay);
   const absMax = useMemo(() => symmetricAbsMax(values), [values]);
+  // Flux uses asymmetric extents; Science maps use symmetric absMax.
+  const extents = useMemo(
+    () =>
+      colormapId === "flux"
+        ? asymmetricExtents(values)
+        : { negMax: absMax, posMax: absMax },
+    [colormapId, values, absMax],
+  );
 
   const years =
     selectedYears && selectedYears.length > 0
@@ -187,11 +206,15 @@ export function FingerprintPlot({
     const axisLeft = axisLeftFor(transposed);
     const plotW = Math.max(1, width - axisLeft - AXIS_RIGHT);
     const plotH = Math.max(1, height - AXIS_TOP - AXIS_BOTTOM);
-    const scale = fingerprintColorScale(isLight);
+    const scale = fingerprintColorScale(colormapId);
 
     // Map a local day index (dayLo..dayHi) to a fill color at the given hour.
     const cellColor = (dayLocal: number, hour: number) =>
-      scale(values[dayLocal * hoursPerDay + hour] as number, absMax);
+      scale(
+        values[dayLocal * hoursPerDay + hour] as number,
+        extents.negMax,
+        extents.posMax,
+      );
 
     if (!transposed) {
       // x = day, y = hour (hour 0 at the bottom).
@@ -312,6 +335,8 @@ export function FingerprintPlot({
   }, [
     values,
     absMax,
+    extents,
+    colormapId,
     nDays,
     nSel,
     dayLo,
@@ -327,7 +352,36 @@ export function FingerprintPlot({
 
   if (nDays === 0) return null;
 
-  const legend = fingerprintLegendStops(isLight);
+  // Zero-crossing position as a fraction of the total bar width.
+  // For symmetric Science maps negMax === posMax so this is always 0.5.
+  // For asymmetric Flux it is skewed: e.g. negMax=1, posMax=3 → 0.25 (25%).
+  const zeroFrac =
+    extents.negMax + extents.posMax > 0
+      ? extents.negMax / (extents.negMax + extents.posMax)
+      : 0.5;
+
+  // Build the colorbar gradient by sampling the actual scale function.
+  // The split between the two ramps is at zeroFrac, so the gradient's colour
+  // boundary matches the label position exactly.
+  const LEGEND_STOPS = 32;
+  const colorScale = fingerprintColorScale(colormapId);
+  const legendCssStops = Array.from({ length: LEGEND_STOPS }, (_, i) => {
+    const frac = i / (LEGEND_STOPS - 1); // 0 → 1 left to right
+    // Map bar position to a data value using zeroFrac as the pivot.
+    const value =
+      frac <= zeroFrac
+        ? zeroFrac > 0
+          ? -extents.negMax * (1 - frac / zeroFrac) // -negMax → 0
+          : 0
+        : 1 - zeroFrac > 0
+          ? extents.posMax * ((frac - zeroFrac) / (1 - zeroFrac)) // 0 → posMax
+          : 0;
+    return `${colorScale(value, extents.negMax, extents.posMax)} ${(frac * 100).toFixed(1)}%`;
+  }).join(", ");
+  const legendGradient = `linear-gradient(to right, ${legendCssStops})`;
+
+  // Convert zeroFrac to a CSS percentage for the label.
+  const zeroFracPct = zeroFrac * 100;
 
   const handleMove = (event: React.MouseEvent<HTMLCanvasElement>) => {
     const canvas = canvasRef.current;
@@ -411,20 +465,29 @@ export function FingerprintPlot({
         ) : null}
       </div>
 
-      <div className="mt-3 shrink-0 flex items-center gap-2">
-        <span className="font-mono text-[11px] tabular-nums text-editor-fg-tertiary">
-          {formatSeriesValue(-absMax)}
-        </span>
-        <span
-          className="h-2 flex-1 rounded-full"
-          style={{
-            background: `linear-gradient(to right, ${legend.uptake}, ${legend.mid}, ${legend.release})`,
-          }}
+      <div className="mt-3 shrink-0">
+        {/* Gradient colorbar */}
+        <div
+          className="h-2 w-full rounded-full"
+          style={{ background: legendGradient }}
           aria-hidden="true"
+          title={COLORMAPS[colormapId].label}
         />
-        <span className="font-mono text-[11px] tabular-nums text-editor-fg-tertiary">
-          {formatSeriesValue(absMax)}
-        </span>
+        {/* Labels: min, 0, max — with 0 at the true zero-crossing position */}
+        <div className="relative mt-1 h-3">
+          <span className="absolute left-0 font-mono text-[11px] tabular-nums text-editor-fg-tertiary">
+            {formatSeriesValue(-extents.negMax)}
+          </span>
+          <span
+            className="absolute -translate-x-1/2 font-mono text-[11px] tabular-nums text-editor-fg-tertiary"
+            style={{ left: `${zeroFracPct.toFixed(1)}%` }}
+          >
+            0
+          </span>
+          <span className="absolute right-0 font-mono text-[11px] tabular-nums text-editor-fg-tertiary">
+            {formatSeriesValue(extents.posMax)}
+          </span>
+        </div>
       </div>
       <p className="mt-2 shrink-0 font-mono text-xs leading-normal text-editor-fg-tertiary">
         {nSel.toLocaleString()} days × {hoursPerDay} hours
