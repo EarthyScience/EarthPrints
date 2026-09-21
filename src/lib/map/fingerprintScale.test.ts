@@ -1,11 +1,17 @@
 import { describe, expect, it } from "vitest";
+import { DIVERGING_TABLES, sampleTable } from "@/lib/map/colormapTables";
 import {
   asymmetricExtents,
+  COLORMAPS,
+  type ColormapId,
   dayIndexTicks,
+  defaultColormapId,
   fingerprintColorScale,
+  fingerprintRampSamples,
   formatIsoDate,
   symmetricAbsMax,
   yearRangesInWindow,
+  zeroFrac,
 } from "@/lib/map/fingerprintScale";
 
 describe("symmetricAbsMax", () => {
@@ -45,47 +51,93 @@ describe("asymmetricExtents", () => {
   });
 });
 
-describe("fingerprintColorScale — science-light (symmetric)", () => {
-  const scale = fingerprintColorScale("science-light");
+describe("fingerprintColorScale — every palette is centred on zero", () => {
+  const ids = Object.keys(COLORMAPS) as ColormapId[];
 
   it("maps non-finite values to transparent", () => {
-    expect(scale(NaN, 5, 5)).toBe("transparent");
-    expect(scale(Infinity, 5, 5)).toBe("transparent");
+    for (const id of ids) {
+      const scale = fingerprintColorScale(id);
+      expect(scale(NaN, 5, 5)).toBe("transparent");
+      expect(scale(Infinity, 5, 5)).toBe("transparent");
+    }
   });
 
-  it("gives negative and positive extremes distinct hues", () => {
-    const uptake = scale(-5, 5, 5);
-    const release = scale(5, 5, 5);
-    expect(uptake).not.toBe(release);
-    expect(uptake).toMatch(/^rgb\(/);
-    expect(release).toMatch(/^rgb\(/);
+  it("gives the two extremes distinct colours", () => {
+    for (const id of ids) {
+      const scale = fingerprintColorScale(id);
+      expect(scale(-5, 5, 5)).not.toBe(scale(5, 5, 5));
+      expect(scale(-5, 5, 5)).toMatch(/^rgb\(/);
+    }
   });
 
-  it("collapses to the neutral midpoint when absMax is zero", () => {
-    // With no spread every value is neutral, not an endpoint.
-    expect(scale(3, 0, 0)).toBe(scale(-3, 0, 0));
+  it("clamps values beyond either extent to the poles", () => {
+    for (const id of ids) {
+      const scale = fingerprintColorScale(id);
+      expect(scale(-99, 2, 2)).toBe(scale(-2, 2, 2));
+      expect(scale(99, 2, 2)).toBe(scale(2, 2, 2));
+    }
+  });
+
+  it("holds zero at the same colour however lopsided the extents are", () => {
+    for (const id of ids) {
+      if (id === "flux") continue; // see the seam test below
+      const scale = fingerprintColorScale(id);
+      const atZero = scale(0, 30, 8);
+      expect(scale(0, 1, 1000)).toBe(atZero);
+      expect(scale(0, 5, 5)).toBe(atZero);
+    }
+  });
+
+  it("scales each half against its own extent, not the larger one", () => {
+    for (const id of ids) {
+      const scale = fingerprintColorScale(id);
+      // The most-negative value hits the cool pole whether or not the positive
+      // side reaches as far. Before this, the short side was never reached.
+      expect(scale(-1, 1, 3)).toBe(scale(-5, 5, 5));
+      expect(scale(3, 1, 3)).toBe(scale(5, 5, 5));
+      // Equal magnitudes of opposite sign are deliberately not equally intense.
+      expect(scale(-1, 1, 3)).not.toBe(scale(1, 1, 3));
+    }
+  });
+
+  it("leaves an unused half neutral rather than dividing by zero", () => {
+    for (const id of ids) {
+      if (id === "flux") continue; // see the seam test below
+      const scale = fingerprintColorScale(id);
+      expect(scale(3, 0, 0)).toBe(scale(-3, 0, 0));
+    }
   });
 });
 
-describe("fingerprintColorScale — science-dark (symmetric)", () => {
-  const scale = fingerprintColorScale("science-dark");
-
-  it("maps non-finite values to transparent", () => {
-    expect(scale(NaN, 5, 5)).toBe("transparent");
+describe("fingerprintColorScale — table palettes", () => {
+  it("walks the real lookup table, centre stop at zero", () => {
+    const scale = fingerprintColorScale("vik");
+    const table = DIVERGING_TABLES.vik;
+    const at = (u: number) => {
+      const [r, g, b] = sampleTable(table, u);
+      return `rgb(${r}, ${g}, ${b})`;
+    };
+    expect(scale(0, 30, 8)).toBe(at(0.5));
+    expect(scale(-30, 30, 8)).toBe(at(0));
+    expect(scale(8, 30, 8)).toBe(at(1));
+    // Half of each arm sits a quarter in from its own end.
+    expect(scale(-15, 30, 8)).toBe(at(0.25));
+    expect(scale(4, 30, 8)).toBe(at(0.75));
   });
 
-  it("gives different colours to different values", () => {
-    expect(scale(-5, 5, 5)).not.toBe(scale(5, 5, 5));
-  });
-
-  it("produces different colours than science-light", () => {
-    const light = fingerprintColorScale("science-light")(-5, 5, 5);
-    const dark = fingerprintColorScale("science-dark")(-5, 5, 5);
-    expect(light).not.toBe(dark);
+  it("gives light and dark defaults different neutrals", () => {
+    const luma = (css: string) => {
+      const [r, g, b] = css.match(/\d+/g)!.map(Number);
+      return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+    };
+    const light = fingerprintColorScale(defaultColormapId(true))(0, 5, 5);
+    const dark = fingerprintColorScale(defaultColormapId(false))(0, 5, 5);
+    expect(luma(light)).toBeGreaterThan(180);
+    expect(luma(dark)).toBeLessThan(60);
   });
 });
 
-describe("fingerprintColorScale — flux (asymmetric)", () => {
+describe("fingerprintColorScale — flux", () => {
   const scale = fingerprintColorScale("flux");
 
   it("maps non-finite values to transparent", () => {
@@ -98,19 +150,50 @@ describe("fingerprintColorScale — flux (asymmetric)", () => {
     expect(scale(0, 1, 3)).toMatch(/^rgb\(/);
   });
 
-  it("zero maps to the kbc end (near cyan)", () => {
-    // At value=0 on the negative half (t=0 → kbc index 255), we expect
-    // approximately [179, 255, 246] from CET_KBC.
-    const color = scale(0, 1, 3);
-    expect(color).toMatch(/^rgb\(/);
+  /*
+   * Flux is two sequential CET ramps glued at zero rather than one diverging
+   * table, and the two ends do not meet: approaching zero from below lands on
+   * kbc\'s pale cyan, from above on kryw\'s white. So the neutral colour depends
+   * on the sign of the value, and a cell at exactly 0 takes the white side.
+   * Pinned here so the seam is visible rather than surprising; the single-table
+   * palettes are continuous through zero by construction.
+   */
+  it("has a documented discontinuity at zero", () => {
+    const fromBelow = scale(-1e-12, 1, 3);
+    const atZero = scale(0, 1, 3);
+    expect(fromBelow).toBe("rgb(179, 255, 246)");
+    expect(atZero).toBe("rgb(255, 255, 255)");
+    expect(fromBelow).not.toBe(atZero);
+  });
+});
+
+describe("colorbar geometry", () => {
+  it("places zero by the ratio of the two extents", () => {
+    expect(zeroFrac(30, 10)).toBeCloseTo(0.75, 10);
+    expect(zeroFrac(5, 5)).toBeCloseTo(0.5, 10);
+    expect(zeroFrac(0, 0)).toBe(0.5);
   });
 
-  it("uses full negMax span independently of posMax", () => {
-    // With asymmetric extents (-1 vs 3), the colour at -1 should be
-    // the same as at -5 with negMax=5 (both hit the darkest kbc entry).
-    const colorA = scale(-1, 1, 3);
-    const colorB = scale(-5, 5, 5);
-    expect(colorA).toBe(colorB);
+  it("samples a bar running from -negMax to +posMax, neutral at the pivot", () => {
+    const samples = fingerprintRampSamples("vik", 30, 10, 5);
+    const scale = fingerprintColorScale("vik");
+    expect(samples[0].value).toBeCloseTo(-30, 10);
+    expect(samples[0].color).toBe(scale(-30, 30, 10));
+    expect(samples[4].value).toBeCloseTo(10, 10);
+    expect(samples[4].color).toBe(scale(10, 30, 10));
+    // zeroFrac is 0.75, which is sample 3 of 0..4.
+    expect(samples[3].value).toBeCloseTo(0, 10);
+    expect(samples[3].color).toBe(scale(0, 30, 10));
+  });
+
+  it("covers every palette without gaps", () => {
+    for (const id of Object.keys(COLORMAPS) as ColormapId[]) {
+      const samples = fingerprintRampSamples(id, 2, 7);
+      expect(samples).toHaveLength(32);
+      expect(samples[0].frac).toBe(0);
+      expect(samples[31].frac).toBe(1);
+      for (const sample of samples) expect(sample.color).toMatch(/^rgb\(/);
+    }
   });
 });
 

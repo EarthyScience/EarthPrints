@@ -115,6 +115,7 @@ export function DownloadButton({
           selectedYear,
           selectedYears,
           timeBasisLabel,
+          colormapId,
         }),
       ]);
 
@@ -324,6 +325,7 @@ export function DownloadButton({
           selectedYear,
           selectedYears,
           timeBasisLabel,
+          colormapId,
         }),
       ]);
       const assets: ReportAssets = {
@@ -347,6 +349,7 @@ export function DownloadButton({
       setBusy(false);
     }
   }, [
+    colormapId,
     displayValues,
     gridSpec,
     historyYears,

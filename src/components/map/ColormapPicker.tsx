@@ -1,9 +1,10 @@
 "use client";
 
+import { useEffect, useRef, useState } from "react";
 import {
   COLORMAPS,
-  fingerprintColorScale,
   type ColormapId,
+  fingerprintRampGradient,
 } from "@/lib/map/fingerprintScale";
 
 type ColormapPickerProps = {
@@ -11,74 +12,110 @@ type ColormapPickerProps = {
   onChange: (id: ColormapId) => void;
 };
 
-const COLORMAP_IDS: ColormapId[] = ["science-light", "science-dark", "flux"];
+const COLORMAP_IDS = Object.keys(COLORMAPS) as ColormapId[];
 
 /**
- * Build a CSS linear-gradient preview for a given colormap ID.
- * Uses 16 samples from the actual scale function (same as the colorbar) so
- * the swatch faithfully represents every palette, including Flux.
+ * Swatch gradient for one palette, sampled from the actual scale function (the
+ * same helper the colorbar uses) so a swatch never misrepresents its map.
  *
- * Extents are symmetric (negMax = posMax = 1, zero at 50%) because the swatch
- * is a palette preview, not tied to any real dataset range.
+ * Extents are symmetric here (negMax = posMax = 1, zero at 50%) because the
+ * swatch is a palette preview, not tied to any real dataset range.
  */
-function swatchGradient(id: ColormapId): string {
-  const scale = fingerprintColorScale(id);
-  const N = 16;
-  const stops = Array.from({ length: N }, (_, i) => {
-    const frac = i / (N - 1); // 0 → 1
-    // Map 0→0.5 to -1→0 and 0.5→1 to 0→1 (symmetric, negMax=posMax=1).
-    const value = frac <= 0.5 ? -(1 - frac * 2) : frac * 2 - 1;
-    return `${scale(value, 1, 1)} ${(frac * 100).toFixed(0)}%`;
-  });
-  return `linear-gradient(to right, ${stops.join(", ")})`;
-}
-
-// Pre-compute once — palette swatches never change at runtime.
 const SWATCH_GRADIENTS = Object.fromEntries(
-  COLORMAP_IDS.map((id) => [id, swatchGradient(id)]),
+  COLORMAP_IDS.map((id) => [id, fingerprintRampGradient(id, 1, 1, 16)]),
 ) as Record<ColormapId, string>;
 
 /**
- * A row of swatch buttons for selecting the fingerprint heatmap's colour
- * palette. Each button shows a small gradient preview sampled from the
- * actual colour scale so the swatch matches the rendered colorbar exactly.
+ * Palette selector for the fingerprint heatmap. This is a dropdown rather than
+ * a row of buttons because the list outgrew the sidebar's width; the swatches
+ * are the point, since the maps differ in ways their names do not convey.
  */
 export function ColormapPicker({ value, onChange }: ColormapPickerProps) {
+  const [open, setOpen] = useState(false);
+  const containerRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const onDocClick = (e: MouseEvent) => {
+      if (
+        containerRef.current &&
+        !containerRef.current.contains(e.target as Node)
+      ) {
+        setOpen(false);
+      }
+    };
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setOpen(false);
+    };
+    document.addEventListener("mousedown", onDocClick);
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", onDocClick);
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [open]);
+
   return (
-    <div
-      className="flex flex-wrap items-center gap-2"
-      role="group"
-      aria-label="Heatmap colour palette"
-    >
+    <div className="flex items-center gap-2">
       <span className="shrink-0 text-[11.5px] font-semibold text-editor-fg-tertiary">
         Palette
       </span>
-      {COLORMAP_IDS.map((id) => {
-        const active = id === value;
-        const { label } = COLORMAPS[id];
-        return (
-          <button
-            key={id}
-            type="button"
-            aria-pressed={active}
-            onClick={() => onChange(id)}
-            title={COLORMAPS[id].description}
-            className={`flex items-center gap-1.5 rounded-md border px-2 py-0.5 text-[11.5px] font-semibold transition-colors ${
-              active
-                ? "border-accent bg-accent/10 text-accent"
-                : "border-editor-border text-editor-fg-tertiary hover:border-editor-border-strong hover:text-editor-fg-secondary"
-            }`}
+      <div ref={containerRef} className="relative inline-flex items-center">
+        <button
+          type="button"
+          onClick={() => setOpen((prev) => !prev)}
+          aria-expanded={open}
+          aria-haspopup="menu"
+          title={COLORMAPS[value].description}
+          className="flex items-center gap-1.5 rounded-md border border-editor-border px-2 py-0.5 text-[11.5px] font-semibold text-editor-fg-secondary transition-colors hover:border-editor-border-strong hover:text-editor-fg-primary"
+        >
+          <span
+            className="block h-2.5 w-9 shrink-0 rounded-sm"
+            style={{ background: SWATCH_GRADIENTS[value] }}
+            aria-hidden="true"
+          />
+          <span>{COLORMAPS[value].label}</span>
+        </button>
+
+        {open ? (
+          <div
+            role="menu"
+            className="absolute left-0 top-full z-50 mt-1.5 w-56 rounded-lg border border-editor-border bg-editor-bg-primary p-1 shadow-lg backdrop-blur-md"
           >
-            {/* Gradient swatch — mirrors the colorbar */}
-            <span
-              className="block h-2.5 w-9 flex-shrink-0 rounded-sm"
-              style={{ background: SWATCH_GRADIENTS[id] }}
-              aria-hidden="true"
-            />
-            <span>{label}</span>
-          </button>
-        );
-      })}
+            {COLORMAP_IDS.map((id) => {
+              const active = id === value;
+              return (
+                <button
+                  key={id}
+                  type="button"
+                  role="menuitemradio"
+                  aria-checked={active}
+                  title={COLORMAPS[id].description}
+                  onClick={() => {
+                    onChange(id);
+                    setOpen(false);
+                  }}
+                  className={`flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[12px] font-medium hover:bg-editor-bg-secondary hover:text-editor-fg-primary ${
+                    active
+                      ? "text-editor-fg-primary"
+                      : "text-editor-fg-secondary"
+                  }`}
+                >
+                  <span
+                    className="block h-2.5 w-14 shrink-0 rounded-sm"
+                    style={{ background: SWATCH_GRADIENTS[id] }}
+                    aria-hidden="true"
+                  />
+                  <span className="flex-1">{COLORMAPS[id].label}</span>
+                  {active ? (
+                    <span className="font-mono text-[10px] text-accent">●</span>
+                  ) : null}
+                </button>
+              );
+            })}
+          </div>
+        ) : null}
+      </div>
     </div>
   );
 }

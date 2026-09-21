@@ -23,7 +23,7 @@ import {
   type PatchWindowSize,
 } from "@/lib/settings/patchWindow";
 import { ColormapPicker } from "@/components/map/ColormapPicker";
-import type { ColormapId } from "@/lib/map/fingerprintScale";
+import { type ColormapId, defaultColormapId } from "@/lib/map/fingerprintScale";
 import { loadColormap, saveColormap } from "@/lib/settings/colormap";
 import { useTheme } from "@/providers/ThemeProvider";
 
@@ -65,7 +65,7 @@ export function MapReadout({
   const [fingerprintTransposed, setFingerprintTransposed] = useState(false);
   const [timeBasis, setTimeBasis] = useState<TimeBasis>("local");
   const [colormapId, setColormapId] = useState<ColormapId>(
-    () => loadColormap() ?? (isLight ? "science-light" : "science-dark"),
+    () => loadColormap() ?? defaultColormapId(isLight),
   );
 
   const handleColormapChange = (id: ColormapId) => {
