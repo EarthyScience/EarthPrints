@@ -2,7 +2,7 @@
 
 import {
   COLORMAPS,
-  fingerprintLegendStopsForColormap,
+  fingerprintColorScale,
   type ColormapId,
 } from "@/lib/map/fingerprintScale";
 
@@ -14,9 +14,34 @@ type ColormapPickerProps = {
 const COLORMAP_IDS: ColormapId[] = ["science-light", "science-dark", "flux"];
 
 /**
+ * Build a CSS linear-gradient preview for a given colormap ID.
+ * Uses 16 samples from the actual scale function (same as the colorbar) so
+ * the swatch faithfully represents every palette, including Flux.
+ *
+ * Extents are symmetric (negMax = posMax = 1, zero at 50%) because the swatch
+ * is a palette preview, not tied to any real dataset range.
+ */
+function swatchGradient(id: ColormapId): string {
+  const scale = fingerprintColorScale(id);
+  const N = 16;
+  const stops = Array.from({ length: N }, (_, i) => {
+    const frac = i / (N - 1); // 0 → 1
+    // Map 0→0.5 to -1→0 and 0.5→1 to 0→1 (symmetric, negMax=posMax=1).
+    const value = frac <= 0.5 ? -(1 - frac * 2) : frac * 2 - 1;
+    return `${scale(value, 1, 1)} ${(frac * 100).toFixed(0)}%`;
+  });
+  return `linear-gradient(to right, ${stops.join(", ")})`;
+}
+
+// Pre-compute once — palette swatches never change at runtime.
+const SWATCH_GRADIENTS = Object.fromEntries(
+  COLORMAP_IDS.map((id) => [id, swatchGradient(id)]),
+) as Record<ColormapId, string>;
+
+/**
  * A row of swatch buttons for selecting the fingerprint heatmap's colour
- * palette. Each button shows a small gradient preview (uptake → mid →
- * release) so the choice is visual rather than purely text-based.
+ * palette. Each button shows a small gradient preview sampled from the
+ * actual colour scale so the swatch matches the rendered colorbar exactly.
  */
 export function ColormapPicker({ value, onChange }: ColormapPickerProps) {
   return (
@@ -30,7 +55,6 @@ export function ColormapPicker({ value, onChange }: ColormapPickerProps) {
       </span>
       {COLORMAP_IDS.map((id) => {
         const active = id === value;
-        const stops = fingerprintLegendStopsForColormap(id);
         const { label } = COLORMAPS[id];
         return (
           <button
@@ -45,12 +69,10 @@ export function ColormapPicker({ value, onChange }: ColormapPickerProps) {
                 : "border-editor-border text-editor-fg-tertiary hover:border-editor-border-strong hover:text-editor-fg-secondary"
             }`}
           >
-            {/* Gradient swatch */}
+            {/* Gradient swatch — mirrors the colorbar */}
             <span
               className="block h-2.5 w-9 flex-shrink-0 rounded-sm"
-              style={{
-                background: `linear-gradient(to right, ${stops.uptake}, ${stops.mid}, ${stops.release})`,
-              }}
+              style={{ background: SWATCH_GRADIENTS[id] }}
               aria-hidden="true"
             />
             <span>{label}</span>
