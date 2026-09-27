@@ -1,9 +1,7 @@
 import { Marker } from "react-map-gl/maplibre";
 import { describeAccuracy, type UserPosition } from "@/lib/map/geolocate";
 
-// A Marker rather than a deck layer: it needs no viewport maths and sits
-// correctly on both the flat map and the globe. It ignores pointer events, so
-// picking the cell underneath still works.
+
 export const UserPositionMarker = ({ position }: { position: UserPosition }) => (
   <Marker
     longitude={position.lon}

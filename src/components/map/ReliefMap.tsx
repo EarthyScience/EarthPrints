@@ -11,6 +11,7 @@ import {
   type UserPosition,
 } from "@/lib/map/geolocate";
 import { buildReliefStyle } from "@/lib/map/reliefStyle";
+import { attachSmoothWheelZoom } from "@/lib/map/smoothWheelZoom";
 import {
   DEFAULT_MAP_VIEW,
   VIEW_MODE_TRANSITION_MS,
@@ -28,9 +29,19 @@ const LOCATE_ZOOM = 8;
 const LOCATE_FLY_MS = 1000;
 const LOCATE_ERROR_VISIBLE_MS = 6000;
 
+// A longer, softer glide after release than MapLibre's defaults
+// (linearity 0.3, deceleration 2500, maxSpeed 1400).
+const DRAG_PAN = {
+  linearity: 0.4,
+  deceleration: 1600,
+  maxSpeed: 1800,
+  easing: (t: number) => 1 - (1 - t) ** 3,
+};
+
 export function ReliefMap() {
   const { theme } = useTheme();
   const mapRef = useRef<MapRef>(null);
+  const detachWheelZoomRef = useRef<(() => void) | null>(null);
   const [viewMode, setViewMode] = useState<MapViewMode>("sphere");
   const [userPosition, setUserPosition] = useState<UserPosition | null>(null);
   const [locating, setLocating] = useState(false);
@@ -57,9 +68,15 @@ export function ReliefMap() {
   }, [applyTouchRotation]);
 
   const handleMapLoad = useCallback(
-    (event: MapLibreEvent) => applyTouchRotation(event.target),
+    (event: MapLibreEvent) => {
+      applyTouchRotation(event.target);
+      detachWheelZoomRef.current?.();
+      detachWheelZoomRef.current = attachSmoothWheelZoom(event.target);
+    },
     [applyTouchRotation],
   );
+
+  useEffect(() => () => detachWheelZoomRef.current?.(), []);
 
   const handleViewModeChange = useCallback((mode: MapViewMode) => {
     setViewMode(mode);
@@ -122,6 +139,11 @@ export function ReliefMap() {
         initialViewState={DEFAULT_MAP_VIEW}
         minZoom={0}
         maxZoom={18}
+        // Let tiles for the levels passed on the way in keep loading, so
+        // detail fills in during the zoom instead of all at once after it.
+        cancelPendingTileRequestsWhileZooming={false}
+        scrollZoom={false}
+        dragPan={DRAG_PAN}
         dragRotate={isSphere}
         pitchWithRotate={isSphere}
         touchZoomRotate

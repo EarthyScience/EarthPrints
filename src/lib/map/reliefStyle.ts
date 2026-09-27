@@ -10,6 +10,10 @@ export const DEM_SOURCE_ID = "dem";
 export const VECTOR_SOURCE_ID = "openmaptiles";
 
 const MAPTERHORN_TILES = "https://tiles.mapterhorn.com/{z}/{x}/{y}.webp";
+// Mapterhorn is global only up to z12; above that it has tiles for some
+// regions and 404s elsewhere, which MapLibre draws as holes. Capping the
+// source makes it overzoom z12 everywhere instead.
+export const MAPTERHORN_MAX_ZOOM = 12;
 const OPENFREEMAP_TILEJSON = "https://tiles.openfreemap.org/planet";
 const OPENFREEMAP_GLYPHS =
   "https://tiles.openfreemap.org/fonts/{fontstack}/{range}.pbf";
@@ -24,6 +28,7 @@ type ReliefPalette = {
   shadow: string;
   highlight: string;
   accent: string;
+  exaggeration: number | ExpressionSpecification;
   boundary: string;
   label: string;
   labelHalo: string;
@@ -31,37 +36,36 @@ type ReliefPalette = {
   sky: SkySpecification;
 };
 
-// Hypsometric tints in the Natural Earth tradition: greens low, tans and
-// browns through the uplands, pale near the summits so relief reads as light.
+// Light is a monochrome "clay" globe: near-white land over a cool gray
+// ocean, with the terrain carried by blue-gray shading rather than hue.
+// Dark keeps Natural Earth style hypsometric tints in night tones.
 export const RELIEF_PALETTES: Record<Theme, ReliefPalette> = {
   light: {
     elevation: [
-      [-6000, "#a9c9da"],
-      [-200, "#c9dfe9"],
-      [0, "#b3cfa2"],
-      [150, "#c6d8a6"],
-      [500, "#dcdcae"],
-      [1000, "#e4d2a2"],
-      [1800, "#d7b78c"],
-      [2800, "#c4a283"],
-      [4000, "#cdbcb0"],
-      [5500, "#ece6e1"],
-      [7000, "#fbfaf8"],
+      [-6000, "#c3c7d4"],
+      [-200, "#d3d6e0"],
+      [0, "#eceef3"],
+      [500, "#f0f1f5"],
+      [1500, "#f4f5f8"],
+      [3000, "#f8f9fb"],
+      [5000, "#ffffff"],
     ],
-    ocean: "#c4dce8",
-    water: "#bcd7e5",
-    waterOpacity: 0.82,
-    shadow: "rgba(72, 58, 44, 0.55)",
-    highlight: "rgba(255, 255, 255, 0.55)",
-    accent: "rgba(96, 80, 62, 0.35)",
-    boundary: "rgba(80, 70, 60, 0.35)",
-    label: "#3b3833",
-    labelHalo: "rgba(255, 255, 255, 0.85)",
-    waterLabel: "#5d7f93",
+    ocean: "#d5d8e2",
+    water: "#d1d5df",
+    waterOpacity: 0.92,
+    shadow: "rgba(84, 92, 124, 0.55)",
+    highlight: "rgba(255, 255, 255, 0.9)",
+    accent: "rgba(84, 92, 124, 0.28)",
+    // Full strength at globe scale, where slopes are only a few pixels wide.
+    exaggeration: ["interpolate", ["linear"], ["zoom"], 0, 1, 6, 0.7],
+    boundary: "rgba(92, 98, 122, 0.3)",
+    label: "#4a4f5e",
+    labelHalo: "rgba(246, 247, 250, 0.9)",
+    waterLabel: "#7d8399",
     sky: {
-      "sky-color": "#dfeaf1",
+      "sky-color": "#e9ebf1",
       "horizon-color": "#ffffff",
-      "fog-color": "#ffffff",
+      "fog-color": "#f3f4f7",
       "sky-horizon-blend": 0.6,
       "horizon-fog-blend": 0.7,
       "fog-ground-blend": 0.4,
@@ -88,6 +92,7 @@ export const RELIEF_PALETTES: Record<Theme, ReliefPalette> = {
     shadow: "rgba(0, 0, 0, 0.75)",
     highlight: "rgba(170, 196, 222, 0.22)",
     accent: "rgba(0, 0, 0, 0.4)",
+    exaggeration: 0.5,
     boundary: "rgba(210, 220, 230, 0.22)",
     label: "#ffffff",
     labelHalo: "rgba(0, 0, 0, 0.92)",
@@ -134,6 +139,7 @@ function buildStyle(theme: Theme): StyleSpecification {
         tiles: [MAPTERHORN_TILES],
         encoding: "terrarium",
         tileSize: 512,
+        maxzoom: MAPTERHORN_MAX_ZOOM,
         attribution: MAPTERHORN_ATTRIBUTION,
       },
       [VECTOR_SOURCE_ID]: {
@@ -176,6 +182,7 @@ function buildStyle(theme: Theme): StyleSpecification {
             palette.highlight,
           ],
           "hillshade-accent-color": palette.accent,
+          "hillshade-exaggeration": palette.exaggeration,
         },
       },
       {
