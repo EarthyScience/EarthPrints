@@ -8,7 +8,6 @@ import {
   useSyncExternalStore,
 } from "react";
 import Map, {
-  Marker,
   type MapMouseEvent,
   type MapRef,
   type ViewStateChangeEvent,
@@ -17,7 +16,6 @@ import "maplibre-gl/dist/maplibre-gl.css";
 import "@/lib/map/initMaplibre";
 import { geoPointToZarrGrid } from "@/lib/map/geogrid";
 import {
-  describeAccuracy,
   describeGeolocationError,
   readConnectionHint,
   requestPosition,
@@ -73,6 +71,7 @@ import { MapSearch } from "@/components/map/MapSearch";
 import { MapTour } from "@/components/map/MapTour";
 import { MapReadout } from "@/components/map/MapReadout";
 import { GlobeSelectionOverlay } from "@/components/map/GlobeSelectionOverlay";
+import { UserPositionMarker } from "@/components/map/UserPositionMarker";
 
 function toMapViewState(
   viewState: {
@@ -92,24 +91,6 @@ function toMapViewState(
     pitch: mode === "sphere" ? viewState.pitch : 0,
   };
 }
-
-// A Marker rather than a deck layer: it needs no viewport maths and sits
-// correctly on both the flat map and the globe. It ignores pointer events, so
-// picking the cell underneath still works.
-const UserPositionMarker = ({ position }: { position: UserPosition }) => (
-  <Marker
-    longitude={position.lon}
-    latitude={position.lat}
-    anchor="center"
-    style={{ pointerEvents: "none" }}
-  >
-    <span
-      role="img"
-      aria-label={describeAccuracy(position.accuracy)}
-      className="block size-3.5 rounded-full border-2 border-white bg-accent shadow-[0_0_0_4px_color-mix(in_srgb,var(--accent)_25%,transparent),0_1px_4px_rgba(0,0,0,0.35)]"
-    />
-  </Marker>
-);
 
 const AUTO_ZOOM_STORAGE_KEY = "earthprints:auto_zoom";
 const LOCATE_ERROR_VISIBLE_MS = 6000;

@@ -86,7 +86,7 @@ export function YearSelector({
             </span>
           ) : null}
         </div>
-        <span className="font-mono text-[12.5px] font-semibold text-accent">
+        <span className="font-mono text-[12.5px] font-semibold text-brand">
           {yearsLabel}
         </span>
       </div>
@@ -121,7 +121,7 @@ export function YearSelector({
               }
               className={`relative flex items-center justify-center rounded-[5px] py-1 font-mono text-[11px] tabular-nums transition-all ${
                 isSelected
-                  ? "bg-accent font-bold text-white shadow-xs"
+                  ? "bg-brand font-bold text-white shadow-xs"
                   : isCached
                     ? "border border-editor-border bg-editor-bg-primary/80 text-editor-fg-primary hover:border-editor-border-strong hover:bg-editor-bg-primary"
                     : "border border-transparent text-editor-fg-tertiary hover:border-editor-border/60 hover:bg-editor-bg-primary/40 hover:text-editor-fg-secondary"

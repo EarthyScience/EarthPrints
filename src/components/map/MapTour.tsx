@@ -146,7 +146,7 @@ const BUTTON_BASE =
 const BACK_BUTTON = `${BUTTON_BASE} border border-editor-border bg-editor-bg-primary text-editor-fg-primary hover:border-editor-border-strong`;
 
 /** Primary: solid accent, matching the plot tabs and the selected year chips. */
-const PRIMARY_BUTTON = `${BUTTON_BASE} border border-transparent bg-accent text-white hover:opacity-90`;
+const PRIMARY_BUTTON = `${BUTTON_BASE} border border-transparent bg-brand text-white hover:opacity-90`;
 
 function TourCard({
   backProps,

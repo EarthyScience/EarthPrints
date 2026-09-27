@@ -130,10 +130,9 @@ export function SidebarResizer({ width, onWidthChange }: SidebarResizerProps) {
       onDoubleClick={handleDoubleClick}
       className="group absolute inset-y-0 left-[var(--editor-sidebar-track)] z-30 hidden w-[9px] -translate-x-1/2 cursor-col-resize touch-none focus:outline-none min-[901px]:block"
     >
-      {/* The hit area is wide; the line that lights up is one pixel of it. */}
       <span
         aria-hidden="true"
-        className="pointer-events-none absolute inset-y-0 left-1/2 w-px -translate-x-1/2 bg-accent opacity-0 transition-opacity duration-150 group-hover:opacity-100 group-focus-visible:opacity-100"
+        className="pointer-events-none absolute inset-y-0 left-1/2 w-px -translate-x-1/2 bg-brand opacity-0 transition-opacity duration-150 group-hover:opacity-100 group-focus-visible:opacity-100"
       />
     </div>
   );

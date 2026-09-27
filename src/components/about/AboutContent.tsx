@@ -4,9 +4,9 @@ import { TEAM_MEMBERS } from "@/lib/constants/about";
 
 const LINK_BADGE_CLASS =
   "inline-flex items-center rounded-full border px-2.5 py-1 text-[11px] font-semibold " +
-  "leading-none tracking-[0.02em] text-accent no-underline transition-[background-color,border-color] duration-150 " +
-  "border-[color-mix(in_srgb,var(--accent)_40%,transparent)] bg-[color-mix(in_srgb,var(--accent)_14%,transparent)] " +
-  "hover:border-[color-mix(in_srgb,var(--accent)_55%,transparent)] hover:bg-[color-mix(in_srgb,var(--accent)_22%,transparent)]";
+  "leading-none tracking-[0.02em] text-brand no-underline transition-[background-color,border-color] duration-150 " +
+  "border-[color-mix(in_srgb,var(--brand)_40%,transparent)] bg-[color-mix(in_srgb,var(--brand)_14%,transparent)] " +
+  "hover:border-[color-mix(in_srgb,var(--brand)_55%,transparent)] hover:bg-[color-mix(in_srgb,var(--brand)_22%,transparent)]";
 
 export function AboutContent() {
   return (
@@ -40,7 +40,7 @@ export function AboutContent() {
                   <h2 className="min-w-0 text-sm font-semibold leading-[1.2] tracking-[-0.02em] text-editor-fg-primary">
                     {member.name}
                   </h2>
-                  <p className="text-xs font-medium leading-[1.2] text-accent">
+                  <p className="text-xs font-medium leading-[1.2] text-brand">
                     {member.role}
                   </p>
                 </div>

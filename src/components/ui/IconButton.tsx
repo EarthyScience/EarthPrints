@@ -3,22 +3,14 @@ type IconButtonProps = {
   onClick?: () => void;
   className?: string;
   "aria-label": string;
-  /** Visible hover/focus label. Falls back to aria-label when omitted. */
   tooltip?: string;
   "aria-expanded"?: boolean;
   "aria-controls"?: string;
   "aria-pressed"?: boolean;
   disabled?: boolean;
-  /** When set, renders an anchor to this URL instead of a button. */
   href?: string;
-  /**
-   * "plain" drops the border/background so the button reads as a bare icon —
-   * used inside the mobile floating islands, which already carry their own
-   * border and shadow.
-   */
   variant?: "default" | "plain";
   tooltipPlacement?: "bottom" | "left";
-  /** Anchor for the guided tour, so it can light the control and not a wrapper. */
   "data-tour"?: string;
 };
 
@@ -31,10 +23,10 @@ const ICON_BUTTON_CLASS =
 
 // Toggle buttons highlight with the accent when pressed.
 const ICON_BUTTON_PRESSED_CLASS =
-  "border-[color-mix(in_srgb,var(--accent)_45%,transparent)] " +
-  "bg-[color-mix(in_srgb,var(--accent)_16%,transparent)] text-accent " +
-  "hover:text-accent hover:border-[color-mix(in_srgb,var(--accent)_45%,transparent)] " +
-  "hover:bg-[color-mix(in_srgb,var(--accent)_16%,transparent)]";
+  "border-[color-mix(in_srgb,var(--brand)_45%,transparent)] " +
+  "bg-[color-mix(in_srgb,var(--brand)_16%,transparent)] text-brand " +
+  "hover:text-brand hover:border-[color-mix(in_srgb,var(--brand)_45%,transparent)] " +
+  "hover:bg-[color-mix(in_srgb,var(--brand)_16%,transparent)]";
 
 // Borderless variant — no border or resting background.
 const ICON_BUTTON_PLAIN_CLASS =
@@ -43,8 +35,8 @@ const ICON_BUTTON_PLAIN_CLASS =
   "hover:bg-editor-bg-secondary hover:text-editor-fg-primary";
 
 const ICON_BUTTON_PLAIN_PRESSED_CLASS =
-  "bg-[color-mix(in_srgb,var(--accent)_16%,transparent)] text-accent " +
-  "hover:text-accent hover:bg-[color-mix(in_srgb,var(--accent)_16%,transparent)]";
+  "bg-[color-mix(in_srgb,var(--brand)_16%,transparent)] text-brand " +
+  "hover:text-brand hover:bg-[color-mix(in_srgb,var(--brand)_16%,transparent)]";
 
 // Appears on hover or keyboard focus. Decorative only — the button keeps its
 // aria-label so screen readers do not double-announce.
