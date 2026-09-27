@@ -20,10 +20,10 @@ import {
 import type { MapViewMode } from "@/types/map";
 import { useTheme } from "@/providers/ThemeProvider";
 import { EditorViewTabs } from "@/components/layout/EditorViewTabs";
-import { IconButton } from "@/components/ui/IconButton";
 import { ThemeToggle } from "@/components/ui/ThemeToggle";
-import { LocateIcon } from "@/icons/LocateIcon";
+import { MapToolbar } from "@/components/layout/MapToolbar";
 import { UserPositionMarker } from "@/components/map/UserPositionMarker";
+import { MapControls } from "@/components/map/MapControls";
 
 const LOCATE_ZOOM = 8;
 const LOCATE_FLY_MS = 1000;
@@ -150,11 +150,15 @@ export function ReliefMap() {
         touchPitch={isSphere}
         maxPitch={isSphere ? 85 : 0}
         onLoad={handleMapLoad}
-        attributionControl={{ compact: true }}
+        attributionControl={false}
         style={{ width: "100%", height: "100%" }}
       >
         {userPosition ? <UserPositionMarker position={userPosition} /> : null}
       </Map>
+
+      <div className="absolute left-3 top-3 z-30">
+        <MapToolbar />
+      </div>
 
       <div className="pointer-events-none absolute inset-x-0 top-3 z-30 flex flex-col items-center gap-2 px-4">
         <div className="pointer-events-auto rounded-editor-sm shadow-editor">
@@ -190,14 +194,16 @@ export function ReliefMap() {
       </div>
 
       <div className="absolute right-4 top-3 z-30 flex items-center gap-2 max-[520px]:top-14">
-        <IconButton
-          aria-label="Go to my location"
-          disabled={locating}
-          onClick={handleLocate}
-        >
-          <LocateIcon />
-        </IconButton>
         <ThemeToggle />
+      </div>
+
+      <div className="absolute bottom-6 right-4 z-30">
+        <MapControls
+          onZoomIn={() => mapRef.current?.zoomIn()}
+          onZoomOut={() => mapRef.current?.zoomOut()}
+          onLocate={handleLocate}
+          locating={locating}
+        />
       </div>
     </div>
   );

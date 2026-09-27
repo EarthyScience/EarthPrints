@@ -108,13 +108,13 @@ export function PatchMenu({
           tabIndex={open ? 0 : -1}
           className={`flex w-full items-center gap-2 rounded-editor-sm px-2 py-1.5 text-left text-[12.5px] text-editor-fg-secondary transition-colors hover:bg-editor-bg-secondary hover:text-editor-fg-primary ${
             showPatch
-              ? "bg-[color-mix(in_srgb,var(--accent)_12%,transparent)] text-accent hover:bg-[color-mix(in_srgb,var(--accent)_16%,transparent)] hover:text-accent"
+              ? "bg-[color-mix(in_srgb,var(--brand)_12%,transparent)] text-brand hover:bg-[color-mix(in_srgb,var(--brand)_16%,transparent)] hover:text-brand"
               : ""
           }`}
           onClick={onTogglePatch}
         >
           <span
-            className={`size-1.5 shrink-0 rounded-full ${showPatch ? "bg-accent" : "bg-transparent"}`}
+            className={`size-1.5 shrink-0 rounded-full ${showPatch ? "bg-brand" : "bg-transparent"}`}
             aria-hidden="true"
           />
           Show patch on map
@@ -135,7 +135,7 @@ export function PatchMenu({
               tabIndex={open ? 0 : -1}
               className={`flex w-full items-center gap-2 rounded-editor-sm px-2 py-1.5 text-left text-[12.5px] text-editor-fg-secondary transition-colors hover:bg-editor-bg-secondary hover:text-editor-fg-primary ${
                 active
-                  ? "bg-[color-mix(in_srgb,var(--accent)_12%,transparent)] text-accent hover:bg-[color-mix(in_srgb,var(--accent)_16%,transparent)] hover:text-accent"
+                  ? "bg-[color-mix(in_srgb,var(--brand)_12%,transparent)] text-brand hover:bg-[color-mix(in_srgb,var(--brand)_16%,transparent)] hover:text-brand"
                   : ""
               }`}
               onClick={() => {
@@ -144,7 +144,7 @@ export function PatchMenu({
               }}
             >
               <span
-                className={`size-1.5 shrink-0 rounded-full ${active ? "bg-accent" : "bg-transparent"}`}
+                className={`size-1.5 shrink-0 rounded-full ${active ? "bg-brand" : "bg-transparent"}`}
                 aria-hidden="true"
               />
               <span className="flex-1">

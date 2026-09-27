@@ -32,10 +32,10 @@ export function ProgressBar({
       {...props}
     >
       {indeterminate ? (
-        <span className="progress-bar-indeterminate absolute inset-y-0 left-0 w-2/5 rounded-full bg-accent" />
+        <span className="progress-bar-indeterminate absolute inset-y-0 left-0 w-2/5 rounded-full bg-brand" />
       ) : (
         <span
-          className="absolute inset-y-0 left-0 rounded-full bg-accent transition-[width] duration-300 ease-out"
+          className="absolute inset-y-0 left-0 rounded-full bg-brand transition-[width] duration-300 ease-out"
           style={{ width: `${pct}%` }}
         />
       )}

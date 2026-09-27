@@ -137,7 +137,7 @@ export function MapSearch({ onSelect, className }: MapSearchProps) {
     <div className={`relative ${className ?? ""}`}>
       <div
         className={`flex h-10 items-center gap-2.5 rounded-editor-sm border bg-editor-bg-base px-3 shadow-editor transition-colors ${
-          open ? "border-accent" : "border-editor-border"
+          open ? "border-brand" : "border-editor-border"
         }`}
       >
         <span className="flex-shrink-0 text-editor-fg-tertiary">

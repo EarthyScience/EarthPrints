@@ -65,7 +65,7 @@ export function ColormapPicker({ value, onChange }: ColormapPickerProps) {
             title={COLORMAPS[id].description}
             className={`flex items-center gap-1.5 rounded-md border px-2 py-0.5 text-[11.5px] font-semibold transition-colors ${
               active
-                ? "border-accent bg-accent/10 text-accent"
+                ? "border-brand bg-brand/10 text-brand"
                 : "border-editor-border text-editor-fg-tertiary hover:border-editor-border-strong hover:text-editor-fg-secondary"
             }`}
           >

@@ -440,13 +440,13 @@ export function DownloadButton({
               className="flex w-full items-center justify-between rounded-md px-2 py-1.5 text-left text-[12px] font-medium text-editor-fg-secondary hover:bg-editor-bg-secondary hover:text-editor-fg-primary"
             >
               <span>Square Fingerprint Badge</span>
-              <span className="font-mono text-[10px] text-accent">
+              <span className="font-mono text-[10px] text-brand">
                 {showBadgeSizes ? "▲ .png" : "▼ .png"}
               </span>
             </button>
 
             {showBadgeSizes ? (
-              <div className="my-1 ml-2 space-y-0.5 border-l-2 border-accent/40 pl-2">
+              <div className="my-1 ml-2 space-y-0.5 border-l-2 border-brand/40 pl-2">
                 <div className="py-0.5 text-[10px] text-editor-fg-tertiary">
                   Select resolution:
                 </div>

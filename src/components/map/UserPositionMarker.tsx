@@ -12,7 +12,7 @@ export const UserPositionMarker = ({ position }: { position: UserPosition }) => 
     <span
       role="img"
       aria-label={describeAccuracy(position.accuracy)}
-      className="block size-3.5 rounded-full border-2 border-white bg-accent shadow-[0_0_0_4px_color-mix(in_srgb,var(--accent)_25%,transparent),0_1px_4px_rgba(0,0,0,0.35)]"
+      className="block size-3.5 rounded-full border-2 border-white bg-brand shadow-[0_0_0_4px_color-mix(in_srgb,var(--brand)_25%,transparent),0_1px_4px_rgba(0,0,0,0.35)]"
     />
   </Marker>
 );

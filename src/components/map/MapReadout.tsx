@@ -108,7 +108,7 @@ export function MapReadout({
           className="grid h-9 w-9 place-items-center rounded-full border border-dashed border-editor-border-strong"
           aria-hidden="true"
         >
-          <span className="block h-2 w-2 rounded-full bg-accent" />
+          <span className="block h-2 w-2 rounded-full bg-brand" />
         </div>
         <p className="text-[13.5px] font-semibold text-editor-fg-secondary">
           Click the map
@@ -292,7 +292,7 @@ function PlotViewToggle({
             onClick={() => onChange(option.id)}
             className={`rounded-[5px] px-2 py-0.5 text-[11.5px] font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${
               active
-                ? "bg-accent text-white"
+                ? "bg-brand text-white"
                 : "text-editor-fg-tertiary hover:text-editor-fg-secondary"
             }`}
           >
@@ -342,7 +342,7 @@ function TimeBasisToggle({
             onClick={() => onChange(option.id)}
             className={`rounded-[5px] px-2 py-0.5 text-[11.5px] font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${
               active
-                ? "bg-accent text-white"
+                ? "bg-brand text-white"
                 : "text-editor-fg-tertiary hover:text-editor-fg-secondary"
             }`}
           >
@@ -372,7 +372,7 @@ function SeriesLoader({ progress }: { progress: SeriesProgress | null }) {
         <span className="text-[12.5px] text-editor-fg-secondary">
           Loading time series
         </span>
-        <span className="font-mono text-[12.5px] font-semibold tabular-nums text-accent">
+        <span className="font-mono text-[12.5px] font-semibold tabular-nums text-brand">
           {pct === null ? "…" : `${pct}%`}
         </span>
       </div>

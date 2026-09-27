@@ -55,7 +55,7 @@ export function EditorViewTabs({ value, onChange }: EditorViewTabsProps) {
       style={{ ["--editor-view-tab-count" as string]: TABS.length }}
     >
       <span
-        className="pointer-events-none absolute left-0 top-[3px] z-0 h-6 rounded-[6px] border border-[color-mix(in_srgb,var(--accent)_40%,transparent)] bg-[color-mix(in_srgb,var(--accent)_14%,transparent)] transition-[transform,width] duration-[320ms] ease-[cubic-bezier(0.16,1,0.3,1)] will-change-[transform,width]"
+        className="pointer-events-none absolute left-0 top-[3px] z-0 h-6 rounded-[6px] border border-[color-mix(in_srgb,var(--brand)_40%,transparent)] bg-[color-mix(in_srgb,var(--brand)_14%,transparent)] transition-[transform,width] duration-[320ms] ease-[cubic-bezier(0.16,1,0.3,1)] will-change-[transform,width]"
         aria-hidden="true"
         style={{
           width: indicator.width,
