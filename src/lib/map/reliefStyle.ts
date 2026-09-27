@@ -14,6 +14,18 @@ const MAPTERHORN_TILES = "https://tiles.mapterhorn.com/{z}/{x}/{y}.webp";
 // regions and 404s elsewhere, which MapLibre draws as holes. Capping the
 // source makes it overzoom z12 everywhere instead.
 export const MAPTERHORN_MAX_ZOOM = 12;
+// Pre-rendered relief for zoom 0-6 (scripts/relief-tiles). Bump the version
+// whenever the palette or shading changes and upload the new archives.
+const RELIEF_TILES_URL = process.env.NEXT_PUBLIC_RELIEF_TILES_URL;
+const RELIEF_TILES_VERSION = 1;
+export const PRERENDERED_SOURCE_ID = "relief-prerendered";
+export const PRERENDERED_MAX_ZOOM = 6;
+const PRERENDERED_FADE_MS = 300;
+
+export function prerenderedReliefUrl(baseUrl: string, theme: Theme) {
+  return `pmtiles://${baseUrl.replace(/\/$/, "")}/relief-${theme}-v${RELIEF_TILES_VERSION}.pmtiles`;
+}
+
 const OPENFREEMAP_TILEJSON = "https://tiles.openfreemap.org/planet";
 const OPENFREEMAP_GLYPHS =
   "https://tiles.openfreemap.org/fonts/{fontstack}/{range}.pbf";
@@ -69,7 +81,17 @@ export const RELIEF_PALETTES: Record<Theme, ReliefPalette> = {
       "sky-horizon-blend": 0.6,
       "horizon-fog-blend": 0.7,
       "fog-ground-blend": 0.4,
-      "atmosphere-blend": ["interpolate", ["linear"], ["zoom"], 0, 1, 5, 1, 7, 0],
+      "atmosphere-blend": [
+        "interpolate",
+        ["linear"],
+        ["zoom"],
+        0,
+        1,
+        5,
+        1,
+        7,
+        0,
+      ],
     },
   },
   dark: {
@@ -104,7 +126,17 @@ export const RELIEF_PALETTES: Record<Theme, ReliefPalette> = {
       "sky-horizon-blend": 0.5,
       "horizon-fog-blend": 0.6,
       "fog-ground-blend": 0.4,
-      "atmosphere-blend": ["interpolate", ["linear"], ["zoom"], 0, 1, 5, 1, 7, 0],
+      "atmosphere-blend": [
+        "interpolate",
+        ["linear"],
+        ["zoom"],
+        0,
+        1,
+        5,
+        1,
+        7,
+        0,
+      ],
     },
   },
 };
@@ -121,8 +153,13 @@ function elevationRamp(stops: [number, string][]): ExpressionSpecification {
 const LABEL_FONT = ["Noto Sans Regular"];
 const LABEL_FONT_BOLD = ["Noto Sans Bold"];
 
-function buildStyle(theme: Theme): StyleSpecification {
+function buildStyle(
+  theme: Theme,
+  prerenderedBaseUrl?: string,
+): StyleSpecification {
   const palette = RELIEF_PALETTES[theme];
+  // With pre-rendered tiles, live relief only draws where they run out.
+  const liveMinZoom = prerenderedBaseUrl ? PRERENDERED_MAX_ZOOM : 0;
   const labelPaint = {
     "text-color": palette.label,
     "text-halo-color": palette.labelHalo,
@@ -146,6 +183,14 @@ function buildStyle(theme: Theme): StyleSpecification {
         type: "vector",
         url: OPENFREEMAP_TILEJSON,
       },
+      ...(prerenderedBaseUrl && {
+        [PRERENDERED_SOURCE_ID]: {
+          type: "raster" as const,
+          url: prerenderedReliefUrl(prerenderedBaseUrl, theme),
+          tileSize: 512,
+          attribution: MAPTERHORN_ATTRIBUTION,
+        },
+      }),
     },
     layers: [
       {
@@ -153,16 +198,28 @@ function buildStyle(theme: Theme): StyleSpecification {
         type: "background",
         paint: { "background-color": palette.ocean },
       },
+      ...(prerenderedBaseUrl
+        ? [
+            {
+              id: "relief-prerendered",
+              type: "raster" as const,
+              source: PRERENDERED_SOURCE_ID,
+              paint: { "raster-fade-duration": PRERENDERED_FADE_MS },
+            },
+          ]
+        : []),
       {
         id: "relief-tint",
         type: "color-relief",
         source: DEM_SOURCE_ID,
+        minzoom: liveMinZoom,
         paint: { "color-relief-color": elevationRamp(palette.elevation) },
       },
       {
         id: "relief-shade",
         type: "hillshade",
         source: DEM_SOURCE_ID,
+        minzoom: liveMinZoom,
         paint: {
           "hillshade-method": "multidirectional",
           // Four lights around the north-west keep the classic cartographic
@@ -217,7 +274,13 @@ function buildStyle(theme: Theme): StyleSpecification {
         type: "symbol",
         source: VECTOR_SOURCE_ID,
         "source-layer": "water_name",
-        filter: ["match", ["geometry-type"], ["MultiPoint", "Point"], true, false],
+        filter: [
+          "match",
+          ["geometry-type"],
+          ["MultiPoint", "Point"],
+          true,
+          false,
+        ],
         layout: {
           "text-field": SINGLE_LINE_LABEL_TEXT_FIELD,
           "text-font": ["Noto Sans Italic"],
@@ -237,7 +300,17 @@ function buildStyle(theme: Theme): StyleSpecification {
         layout: {
           "text-field": SINGLE_LINE_LABEL_TEXT_FIELD,
           "text-font": LABEL_FONT,
-          "text-size": ["interpolate", ["exponential", 1.2], ["zoom"], 4, 11, 7, 13, 11, 18],
+          "text-size": [
+            "interpolate",
+            ["exponential", 1.2],
+            ["zoom"],
+            4,
+            11,
+            7,
+            13,
+            11,
+            18,
+          ],
           "text-max-width": 8,
         },
         paint: labelPaint,
@@ -272,8 +345,20 @@ const styleCache = new Map<Theme, StyleSpecification>();
 export function buildReliefStyle(theme: Theme): StyleSpecification {
   let style = styleCache.get(theme);
   if (!style) {
-    style = buildStyle(theme);
+    style = buildStyle(theme, RELIEF_TILES_URL);
     styleCache.set(theme, style);
   }
   return style;
+}
+
+// The layers pre-rendered into raster tiles. Everything else stays live.
+const BAKED_LAYER_IDS = new Set(["ocean", "relief-tint", "relief-shade"]);
+
+export function buildBakedReliefStyle(theme: Theme): StyleSpecification {
+  const style = buildStyle(theme);
+  return {
+    version: 8,
+    sources: { [DEM_SOURCE_ID]: style.sources[DEM_SOURCE_ID] },
+    layers: style.layers.filter((layer) => BAKED_LAYER_IDS.has(layer.id)),
+  };
 }
