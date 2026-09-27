@@ -1,0 +1,188 @@
+"use client";
+
+import { useEffect, useMemo, useRef, useState } from "react";
+import {
+  COLORMAPS,
+  type ColormapId,
+  fingerprintColorScale,
+  formatIsoDate,
+} from "@/lib/map/fingerprintScale";
+import {
+  formatSeriesValue,
+  TIME_SERIES_PLOT_HEIGHT,
+} from "@/lib/plots/chartTheme";
+import {
+  drawFingerprint,
+  type FingerprintCell,
+  fingerprintCellAt,
+  fingerprintExtents,
+  fingerprintLayout,
+} from "@/lib/plots/fingerprint";
+import { useTheme } from "@/providers/ThemeProvider";
+
+const LEGEND_STOPS = 32;
+const TRANSPOSED_MIN_HEIGHT = 380;
+
+type FingerprintPlotProps = {
+  values: Float32Array;
+  units?: string | null;
+  hoursPerDay?: number;
+  selectedYears: number[];
+  timeBasisLabel?: string;
+  transposed: boolean;
+  colormapId: ColormapId;
+};
+
+type Hover = FingerprintCell & { left: number; top: number };
+
+export function FingerprintPlot({
+  values,
+  units,
+  hoursPerDay = 24,
+  selectedYears,
+  timeBasisLabel,
+  transposed,
+  colormapId,
+}: FingerprintPlotProps) {
+  const { isLight } = useTheme();
+  const wrapperRef = useRef<HTMLDivElement | null>(null);
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const [width, setWidth] = useState(0);
+  const [hover, setHover] = useState<Hover | null>(null);
+
+  useEffect(() => {
+    const node = wrapperRef.current;
+    if (!node) return;
+    const observer = new ResizeObserver(([entry]) => {
+      if (entry) setWidth(Math.floor(entry.contentRect.width));
+    });
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, []);
+
+  const height = transposed ? TRANSPOSED_MIN_HEIGHT : TIME_SERIES_PLOT_HEIGHT;
+  const layout = useMemo(
+    () =>
+      fingerprintLayout(
+        values,
+        hoursPerDay,
+        selectedYears,
+        { width, height },
+        transposed,
+      ),
+    [values, hoursPerDay, selectedYears, width, height, transposed],
+  );
+  const extents = useMemo(
+    () => fingerprintExtents(values, colormapId),
+    [values, colormapId],
+  );
+
+  useEffect(() => {
+    if (!canvasRef.current) return;
+    drawFingerprint(canvasRef.current, layout, {
+      colormapId,
+      extents,
+      isLight,
+      pixelRatio: window.devicePixelRatio || 1,
+    });
+  }, [layout, colormapId, extents, isLight]);
+
+  const legend = useMemo(() => {
+    const total = extents.negMax + extents.posMax;
+    const zeroFrac = total > 0 ? extents.negMax / total : 0.5;
+    const scale = fingerprintColorScale(colormapId);
+    const stops = Array.from({ length: LEGEND_STOPS }, (_, i) => {
+      const frac = i / (LEGEND_STOPS - 1);
+      const value =
+        frac <= zeroFrac
+          ? zeroFrac > 0
+            ? -extents.negMax * (1 - frac / zeroFrac)
+            : 0
+          : 1 - zeroFrac > 0
+            ? extents.posMax * ((frac - zeroFrac) / (1 - zeroFrac))
+            : 0;
+      return `${scale(value, extents.negMax, extents.posMax)} ${(frac * 100).toFixed(1)}%`;
+    });
+    return {
+      gradient: `linear-gradient(to right, ${stops.join(", ")})`,
+      zeroPct: zeroFrac * 100,
+    };
+  }, [colormapId, extents]);
+
+  if (layout.nDays === 0) return null;
+
+  const handleMove = (event: React.MouseEvent<HTMLCanvasElement>) => {
+    const rect = event.currentTarget.getBoundingClientRect();
+    const left = event.clientX - rect.left;
+    const top = event.clientY - rect.top;
+    const cell = fingerprintCellAt(layout, left, top);
+    setHover(cell ? { ...cell, left, top } : null);
+  };
+
+  return (
+    <div className="grid gap-2">
+      <div ref={wrapperRef} className="relative w-full" style={{ height }}>
+        <canvas
+          ref={canvasRef}
+          className="block size-full"
+          role="img"
+          aria-label="Diurnal fingerprint heatmap"
+          onMouseMove={handleMove}
+          onMouseLeave={() => setHover(null)}
+        />
+        {hover ? (
+          <div
+            className="pointer-events-none absolute grid -translate-x-1/2 gap-0.5 rounded-lg border bg-background px-2.5 py-1.5 text-xs whitespace-nowrap shadow-xl"
+            style={{
+              left: Math.max(48, Math.min(width - 48, hover.left)),
+              top: Math.max(0, hover.top - 52),
+            }}
+          >
+            <span className="font-medium">
+              {formatIsoDate(hover.absoluteDay)} ·{" "}
+              {String(hover.hour).padStart(2, "0")}:00
+              {timeBasisLabel ? ` ${hoverBasisSuffix(timeBasisLabel)}` : ""}
+            </span>
+            <span className="text-muted-foreground">
+              {Number.isFinite(hover.value)
+                ? `${formatSeriesValue(hover.value)}${units ? ` ${units}` : ""}`
+                : "no data"}
+            </span>
+          </div>
+        ) : null}
+      </div>
+
+      <div className="grid gap-1">
+        <div
+          className="h-2 w-full rounded-full"
+          style={{ background: legend.gradient }}
+          aria-hidden="true"
+          title={COLORMAPS[colormapId].label}
+        />
+        <div className="relative h-4 text-xs text-muted-foreground tabular-nums">
+          <span className="absolute left-0">
+            {formatSeriesValue(-extents.negMax)}
+          </span>
+          <span
+            className="absolute -translate-x-1/2"
+            style={{ left: `${legend.zeroPct.toFixed(1)}%` }}
+          >
+            0
+          </span>
+          <span className="absolute right-0">
+            {formatSeriesValue(extents.posMax)}
+          </span>
+        </div>
+      </div>
+      <p className="text-muted-foreground">
+        {Math.max(1, layout.nDays).toLocaleString()} days × {hoursPerDay} hours
+        {timeBasisLabel ? ` · ${timeBasisLabel}` : ""}
+        {units ? ` · ${units}` : ""}
+      </p>
+    </div>
+  );
+}
+
+function hoverBasisSuffix(timeBasisLabel: string): string {
+  return timeBasisLabel.startsWith("local") ? "local" : timeBasisLabel;
+}

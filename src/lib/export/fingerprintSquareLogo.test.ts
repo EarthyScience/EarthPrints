@@ -27,9 +27,8 @@ describe("fingerprintSquareLogo presets", () => {
   });
 
   it("executes buildSquareFingerprintCanvas successfully for non-contiguous years", async () => {
-    const { buildSquareFingerprintCanvas } = await import(
-      "./fingerprintSquareLogo"
-    );
+    const { buildSquareFingerprintCanvas } =
+      await import("./fingerprintSquareLogo");
     const { buildProvenance } = await import("./provenance");
 
     const mockCtx = {

@@ -579,8 +579,33 @@ export class ZarrChunkReader {
     const results: Float32Array[] = [];
     let resolvedUnits: string | undefined;
 
+    // Blocks load one after another, so blocks not yet started are estimated
+    // at the average size of the ones that have reported.
+    const cachedYears = this.getCachedYears(grid, variable);
+    const blockBytes = blocks.map((block) =>
+      block.every((year) => cachedYears.has(year))
+        ? null
+        : { loaded: 0, total: 0 },
+    );
+    const emitProgress = () => {
+      if (!onProgress) return;
+      const pending = blockBytes.filter((bytes) => bytes !== null);
+      const reported = pending.filter((bytes) => bytes.total > 0);
+      if (reported.length === 0) return;
+      const average =
+        reported.reduce((sum, bytes) => sum + bytes.total, 0) / reported.length;
+      let loaded = 0;
+      let total = 0;
+      for (const bytes of pending) {
+        loaded += bytes.loaded;
+        total += bytes.total > 0 ? bytes.total : average;
+      }
+      onProgress(loaded, Math.max(loaded, total));
+    };
+
     for (let i = 0; i < blocks.length; i++) {
       const block = blocks[i]!;
+      const bytes = blockBytes[i];
       const timeRange: AxisSlice = [
         yearToDateRange(block[0]!)[0],
         yearToDateRange(block[block.length - 1]!)[1],
@@ -589,7 +614,13 @@ export class ZarrChunkReader {
         grid,
         timeRange,
         variable,
-        undefined,
+        bytes
+          ? (loaded, total) => {
+              bytes.loaded = loaded;
+              bytes.total = total;
+              emitProgress();
+            }
+          : undefined,
         signal,
       );
       results.push(res.values);

@@ -50,7 +50,8 @@ export function buildSeriesRows(
   values: Float32Array,
   prov: ExportProvenance,
 ): SeriesRow[] {
-  const { hoursPerDay, baseDay, dayCount, selectedYears, utcOffsetHours } = prov;
+  const { hoursPerDay, baseDay, dayCount, selectedYears, utcOffsetHours } =
+    prov;
   const count = Math.min(values.length, dayCount * hoursPerDay);
   const rows: SeriesRow[] = new Array(count);
 
@@ -63,8 +64,7 @@ export function buildSeriesRows(
   for (let i = 0; i < count; i += 1) {
     const hour = i % hoursPerDay;
     const localDay = Math.floor(i / hoursPerDay);
-    const dayIndex =
-      dayMapping.absoluteDays[localDay] ?? (baseDay + localDay);
+    const dayIndex = dayMapping.absoluteDays[localDay] ?? baseDay + localDay;
     const raw = values[i];
     const timestamp = new Date(
       ZARR_TIME_ORIGIN_UTC + dayIndex * MS_PER_DAY + hour * MS_PER_HOUR,

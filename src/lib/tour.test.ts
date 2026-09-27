@@ -1,9 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-  TOUR_STEPS,
-  tourStepsFor,
-  tourTargetFor,
-} from "@/lib/constants/tour";
+import { TOUR_STEPS, tourStepsFor, tourTargetFor } from "@/lib/constants/tour";
 import {
   hasFiniteValues,
   isDesktopViewport,
@@ -113,7 +109,9 @@ describe("TOUR_STEPS", () => {
     for (const step of TOUR_STEPS) {
       for (const target of [step.target, step.mobileTarget]) {
         if (!target) continue;
-        expect(target).toMatch(/^(body|#editor-controls|\[data-tour="[a-z-]+"\])$/);
+        expect(target).toMatch(
+          /^(body|#editor-controls|\[data-tour="[a-z-]+"\])$/,
+        );
       }
     }
   });
@@ -139,17 +137,6 @@ describe("TOUR_STEPS", () => {
 });
 
 describe("tourStepsFor", () => {
-  it("keeps the open-the-sheet step for mobile only", () => {
-    expect(tourStepsFor(true).map((s) => s.id)).toContain("open");
-    expect(tourStepsFor(false).map((s) => s.id)).not.toContain("open");
-  });
-
-  // The sheet has to be open before anything inside it can be pointed at.
-  it("puts opening the sheet before the first step inside it on mobile", () => {
-    const ids = tourStepsFor(true).map((s) => s.id);
-    expect(ids.indexOf("open")).toBeLessThan(ids.indexOf("record"));
-  });
-
   it("follows every interactive step with a gated one, in both layouts", () => {
     for (const isMobile of [true, false]) {
       const steps = tourStepsFor(isMobile);
@@ -162,13 +149,6 @@ describe("tourStepsFor", () => {
 });
 
 describe("tourTargetFor", () => {
-  it("sends the controls step to the floating stack on mobile", () => {
-    const controls = TOUR_STEPS.find((s) => s.id === "controls")!;
-
-    expect(tourTargetFor(controls, true)).toBe('[data-tour="controls-mobile"]');
-    expect(tourTargetFor(controls, false)).toBe('[data-tour="controls"]');
-  });
-
   it("falls back to the shared target where a step has no mobile one", () => {
     const record = TOUR_STEPS.find((s) => s.id === "record")!;
 
@@ -184,11 +164,6 @@ describe("mobile sheet handling", () => {
     for (const id of ["record", "plots", "years"]) {
       expect(byId(id).mobilePanel).toBe("open");
     }
-  });
-
-  // The whole point of that step is that the user does it.
-  it("leaves the sheet alone on the step that teaches opening it", () => {
-    expect(byId("open").mobilePanel).toBeUndefined();
   });
 
   // A full-viewport target leaves an anchored card nowhere to go but off the

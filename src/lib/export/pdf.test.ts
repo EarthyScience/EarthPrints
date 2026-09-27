@@ -61,7 +61,12 @@ describe("buildReportPdf", () => {
   it("still renders when the map capture failed", async () => {
     const { prov, assets, values } = fixture(null);
 
-    const blob = await buildReportPdf({ prov, assets, values, attribution: "" });
+    const blob = await buildReportPdf({
+      prov,
+      assets,
+      values,
+      attribution: "",
+    });
 
     expect(blob.size).toBeGreaterThan(1000);
   });
@@ -71,7 +76,12 @@ describe("buildReportPdf", () => {
   it("crops a map whose aspect ratio does not match the box", async () => {
     const { prov, assets, values } = fixture(image(600, 1400));
 
-    const blob = await buildReportPdf({ prov, assets, values, attribution: "" });
+    const blob = await buildReportPdf({
+      prov,
+      assets,
+      values,
+      attribution: "",
+    });
 
     expect(blob.size).toBeGreaterThan(1000);
   });

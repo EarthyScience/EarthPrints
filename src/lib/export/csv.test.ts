@@ -68,9 +68,7 @@ describe("buildSeriesCsv", () => {
     const dataLines = text.split("\n").slice(-25, -1);
 
     expect(dataLines[3].endsWith(",")).toBe(true);
-    expect(dataLines[3].split(",")).toHaveLength(
-      CSV_COLUMNS.split(",").length,
-    );
+    expect(dataLines[3].split(",")).toHaveLength(CSV_COLUMNS.split(",").length);
   });
 
   it("says unspecified rather than null when units are absent", () => {
@@ -89,7 +87,9 @@ describe("buildSeriesCsv", () => {
       selectedYears: [2002, 2018],
       valueCount: (365 + 365) * ZARR_TIME.hoursPerDay,
     });
-    const values = new Float32Array((365 + 365) * ZARR_TIME.hoursPerDay).fill(0.1);
+    const values = new Float32Array((365 + 365) * ZARR_TIME.hoursPerDay).fill(
+      0.1,
+    );
     const rows = buildSeriesRows(values, prov);
     const text = buildSeriesCsv(rows, prov);
 

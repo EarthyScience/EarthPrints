@@ -1,8 +1,11 @@
 import { Marker } from "react-map-gl/maplibre";
 import { describeAccuracy, type UserPosition } from "@/lib/map/geolocate";
 
-
-export const UserPositionMarker = ({ position }: { position: UserPosition }) => (
+export const UserPositionMarker = ({
+  position,
+}: {
+  position: UserPosition;
+}) => (
   <Marker
     longitude={position.lon}
     latitude={position.lat}

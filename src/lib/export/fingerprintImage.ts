@@ -1,10 +1,5 @@
-import {
-  fingerprintLegendStops,
-} from "@/lib/map/fingerprintScale";
-import {
-  formatSeriesValue,
-  timeSeriesChartTheme,
-} from "@/components/map/timeSeriesChartConfig";
+import { fingerprintLegendStops } from "@/lib/map/fingerprintScale";
+import { formatSeriesValue, chartTickColor } from "@/lib/plots/chartTheme";
 import type { CapturedImage } from "./capture";
 
 /**
@@ -20,7 +15,8 @@ const INSET = 4;
 const BLOCK_H = GAP_TOP + BAR_H + GAP_BOTTOM;
 
 /** Same as the axis labels the canvas draws for itself. */
-const LABEL_FONT = "11px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
+const LABEL_FONT =
+  "11px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
 
 type LegendOptions = {
   absMax: number;
@@ -40,7 +36,7 @@ function drawLegend(
   const stops = fingerprintLegendStops(true);
 
   ctx.font = LABEL_FONT;
-  ctx.fillStyle = timeSeriesChartTheme(true).tick;
+  ctx.fillStyle = chartTickColor(true);
   ctx.textBaseline = "middle";
 
   // Units ride on the upper end. The on-screen legend leaves them to the

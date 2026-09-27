@@ -1,5 +1,3 @@
-import { SIDEBAR_DESKTOP_MIN_VIEWPORT } from "@/lib/sidebar";
-
 /**
  * A cookie rather than localStorage, and read on the client rather than in a
  * server component: touching cookies on the server would opt the map route out
@@ -34,9 +32,7 @@ function readoutVisible(state: TourGateState): boolean {
 
 /** Pulled out of `document.cookie` so it can be tested without a DOM. */
 export function parseGuideSeen(cookie: string): boolean {
-  return cookie
-    .split(";")
-    .some((part) => part.trim() === `${GUIDE_COOKIE}=1`);
+  return cookie.split(";").some((part) => part.trim() === `${GUIDE_COOKIE}=1`);
 }
 
 export function hasSeenGuide(): boolean {
@@ -49,16 +45,13 @@ export function markGuideSeen(): void {
   document.cookie = `${GUIDE_COOKIE}=1; path=/; max-age=${GUIDE_COOKIE_MAX_AGE_S}; SameSite=Lax`;
 }
 
-/**
- * Which arrangement the layout is in. The same constant the panel switches on
- * decides which targets the guide points at, so the two cannot disagree.
- */
+const DESKTOP_MIN_VIEWPORT = 901;
+
 export function isDesktopViewport(width: number): boolean {
-  return width >= SIDEBAR_DESKTOP_MIN_VIEWPORT;
+  return width >= DESKTOP_MIN_VIEWPORT;
 }
 
-/** Matches while the layout is in its mobile arrangement. */
-export const MOBILE_MEDIA_QUERY = `(max-width: ${SIDEBAR_DESKTOP_MIN_VIEWPORT - 1}px)`;
+export const MOBILE_MEDIA_QUERY = `(max-width: ${DESKTOP_MIN_VIEWPORT - 1}px)`;
 
 /**
  * A cell over ocean or bare ground comes back as all NaN rather than empty, so
@@ -90,12 +83,6 @@ export function stepUnlocked(gate: TourGate, state: TourGateState): boolean {
   }
 }
 
-/**
- * The `?` menu lives in the header and the tour lives inside the map, with no
- * shared ancestor holding state. One module-level subscription is cheaper than
- * threading a callback through the shell, and mirrors how the sidebar store
- * already talks across the same gap.
- */
 type GuideListener = () => void;
 const guideListeners = new Set<GuideListener>();
 

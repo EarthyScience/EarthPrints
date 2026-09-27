@@ -3,7 +3,7 @@ import {
   fingerprintColorScale,
   symmetricAbsMax,
 } from "@/lib/map/fingerprintScale";
-import { formatSeriesValue } from "@/components/map/timeSeriesChartConfig";
+import { formatSeriesValue } from "@/lib/plots/chartTheme";
 import { formatSelectedYearsLabel } from "@/lib/zarr/timeRange";
 import { formatTimeBasis } from "@/lib/zarr/localTime";
 import type { CapturedImage } from "./capture";

@@ -150,7 +150,9 @@ describe("buildProvenance", () => {
       valueCount: (365 + 365) * ZARR_TIME.hoursPerDay,
     });
 
-    const values = new Float32Array((365 + 365) * ZARR_TIME.hoursPerDay).fill(0.5);
+    const values = new Float32Array((365 + 365) * ZARR_TIME.hoursPerDay).fill(
+      0.5,
+    );
     const rows = buildSeriesRows(values, prov);
 
     expect(rows).toHaveLength((365 + 365) * ZARR_TIME.hoursPerDay);
@@ -180,7 +182,9 @@ describe("buildProvenance", () => {
       valueCount: totalDays * ZARR_TIME.hoursPerDay,
     });
 
-    const values = new Float32Array(totalDays * ZARR_TIME.hoursPerDay).fill(0.8);
+    const values = new Float32Array(totalDays * ZARR_TIME.hoursPerDay).fill(
+      0.8,
+    );
     const rows = buildSeriesRows(values, prov);
 
     expect(rows).toHaveLength(totalDays * 24);
