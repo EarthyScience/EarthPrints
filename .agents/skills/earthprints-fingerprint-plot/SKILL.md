@@ -14,10 +14,11 @@ description: >-
 | File | Role |
 |---|---|
 | `src/lib/map/fingerprintScale.ts` | Colour scale functions, CET palette data, axis helpers |
+| `src/lib/map/colormapTables.ts` | Crameri + ColorBrewer diverging lookup tables |
 | `src/components/map/FingerprintPlot.tsx` | Canvas heatmap component |
 | `src/components/map/ColormapPicker.tsx` | Palette selector UI |
 | `src/lib/settings/colormap.ts` | localStorage persistence |
-| `src/lib/map/fingerprintScale.test.ts` | 20 unit tests |
+| `src/lib/map/fingerprintScale.test.ts` | unit tests for extents, palettes, colorbar |
 
 ---
 
@@ -43,23 +44,26 @@ const css = scale(value, negMax, posMax);
 // returns "transparent" for non-finite values.
 
 // Extent helpers:
-const absMax = symmetricAbsMax(values);           // symmetric Science maps
-const { negMax, posMax } = asymmetricExtents(values); // Flux only
+const { negMax, posMax } = asymmetricExtents(values); // every palette
 ```
 
 ### Palette routing
 
 ```
-colormapId === "science-light" | "science-dark"
-  → lerpRgb(mid, endpoint, |t|)   where t = value / absMax ∈ [−1, 1]
-  → pass absMax as BOTH negMax and posMax
+colormapId === a diverging table (vik, berlin, broc, cork, roma, vanimo, rdbu)
+  → sampleTable(DIVERGING_TABLES[id], u)
+    where u = value < 0 ? 0.5·(1 − |value|/negMax) : 0.5 + 0.5·(value/posMax)
+  → u = 0.5 is the table's neutral centre stop, so zero is always neutral
+  → tables live in src/lib/map/colormapTables.ts
 
 colormapId === "flux"
   → negative values: sampleCet(CET_KBC, 1 − |value|/negMax)
                      (kbc[255] = near-zero cyan, kbc[0] = darkest blue)
   → positive values: sampleCet(CET_KRYW, 1 − value/posMax)
                      (kryw[255] = near-zero white, kryw[0] = darkest)
-  → pass separate negMax / posMax from asymmetricExtents()
+  → note: the two halves do not meet at zero (kbc ends pale cyan, kryw white),
+    so Flux has a small seam at the neutral point that the table palettes
+    do not — see the "documented discontinuity" test
 ```
 
 ---
@@ -77,6 +81,11 @@ const zeroFrac =
     : 0.5;
 // Science maps: negMax === posMax → zeroFrac === 0.5 (50%).
 // Flux asymmetric: e.g. negMax=1, posMax=3 → zeroFrac === 0.25.
+
+// Both are available as shared helpers — prefer them over re-deriving:
+//   zeroFrac(negMax, posMax)
+//   fingerprintRampSamples(colormapId, negMax, posMax, steps)
+//   fingerprintRampGradient(colormapId, negMax, posMax, steps)  // CSS
 
 // 2. Sample 32 stops, using zeroFrac as the pivot:
 const stops = Array.from({ length: 32 }, (_, i) => {

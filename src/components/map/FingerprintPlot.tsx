@@ -8,6 +8,8 @@ import {
 } from "@/components/map/timeSeriesChartConfig";
 import {
   asymmetricExtents,
+  defaultColormapId,
+  fingerprintRampGradient,
   COLORMAPS,
   type ColormapId,
   dayIndexTicks,
@@ -15,7 +17,7 @@ import {
   fingerprintColorScale,
   formatDayTick,
   formatIsoDate,
-  symmetricAbsMax,
+  zeroFrac,
 } from "@/lib/map/fingerprintScale";
 import {
   ZARR_TIME,
@@ -97,9 +99,8 @@ export function FingerprintPlot({
   colormapId: colormapIdProp,
 }: FingerprintPlotProps) {
   const { isLight } = useTheme();
-  // Default to the theme-appropriate Science palette when no explicit choice.
-  const colormapId: ColormapId =
-    colormapIdProp ?? (isLight ? "science-light" : "science-dark");
+  // Default to the theme-appropriate palette when no explicit choice.
+  const colormapId: ColormapId = colormapIdProp ?? defaultColormapId(isLight);
   const wrapperRef = useRef<HTMLDivElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [containerSize, setContainerSize] = useState<{
@@ -122,15 +123,9 @@ export function FingerprintPlot({
   const [hover, setHover] = useState<HoverCell | null>(null);
 
   const nDays = Math.floor(values.length / hoursPerDay);
-  const absMax = useMemo(() => symmetricAbsMax(values), [values]);
-  // Flux uses asymmetric extents; Science maps use symmetric absMax.
-  const extents = useMemo(
-    () =>
-      colormapId === "flux"
-        ? asymmetricExtents(values)
-        : { negMax: absMax, posMax: absMax },
-    [colormapId, values, absMax],
-  );
+  // Every palette gets the true extents: zero stays the neutral colour, and
+  // each half spans its own range so the weaker side is not washed out.
+  const extents = useMemo(() => asymmetricExtents(values), [values]);
 
   const years =
     selectedYears && selectedYears.length > 0
@@ -221,7 +216,10 @@ export function FingerprintPlot({
       const rowY = (fromTop: number) =>
         AXIS_TOP + Math.floor((fromTop * plotH) / hoursPerDay);
       for (let px = 0; px < plotW; px++) {
-        const dayLocal = Math.min(dayHi, dayLo + Math.floor((px / plotW) * nSel));
+        const dayLocal = Math.min(
+          dayHi,
+          dayLo + Math.floor((px / plotW) * nSel),
+        );
         for (let hour = 0; hour < hoursPerDay; hour++) {
           const color = cellColor(dayLocal, hour);
           if (color === "transparent") continue;
@@ -257,7 +255,10 @@ export function FingerprintPlot({
       const colX = (hour: number) =>
         axisLeft + Math.floor((hour * plotW) / hoursPerDay);
       for (let py = 0; py < plotH; py++) {
-        const dayLocal = Math.min(dayHi, dayLo + Math.floor((py / plotH) * nSel));
+        const dayLocal = Math.min(
+          dayHi,
+          dayLo + Math.floor((py / plotH) * nSel),
+        );
         for (let hour = 0; hour < hoursPerDay; hour++) {
           const color = cellColor(dayLocal, hour);
           if (color === "transparent") continue;
@@ -305,12 +306,20 @@ export function FingerprintPlot({
       ctx.textBaseline = "middle";
       for (const hour of FINGERPRINT_HOUR_TICKS) {
         const fromTop = hoursPerDay - 1 - hour;
-        ctx.fillText(String(hour), axisLeft - 6, (rowY(fromTop) + rowY(fromTop + 1)) / 2);
+        ctx.fillText(
+          String(hour),
+          axisLeft - 6,
+          (rowY(fromTop) + rowY(fromTop + 1)) / 2,
+        );
       }
       ctx.textAlign = "center";
       ctx.textBaseline = "top";
       for (const { dayLocal, label } of dayAxisTicks) {
-        const x = clampLabelX(axisLeft + dayFrac(dayLocal) * plotW, plotW, axisLeft);
+        const x = clampLabelX(
+          axisLeft + dayFrac(dayLocal) * plotW,
+          plotW,
+          axisLeft,
+        );
         ctx.fillText(label, x, AXIS_TOP + plotH + 4);
       }
     } else {
@@ -334,7 +343,6 @@ export function FingerprintPlot({
     }
   }, [
     values,
-    absMax,
     extents,
     colormapId,
     nDays,
@@ -352,36 +360,17 @@ export function FingerprintPlot({
 
   if (nDays === 0) return null;
 
-  // Zero-crossing position as a fraction of the total bar width.
-  // For symmetric Science maps negMax === posMax so this is always 0.5.
-  // For asymmetric Flux it is skewed: e.g. negMax=1, posMax=3 → 0.25 (25%).
-  const zeroFrac =
-    extents.negMax + extents.posMax > 0
-      ? extents.negMax / (extents.negMax + extents.posMax)
-      : 0.5;
-
-  // Build the colorbar gradient by sampling the actual scale function.
-  // The split between the two ramps is at zeroFrac, so the gradient's colour
-  // boundary matches the label position exactly.
-  const LEGEND_STOPS = 32;
-  const colorScale = fingerprintColorScale(colormapId);
-  const legendCssStops = Array.from({ length: LEGEND_STOPS }, (_, i) => {
-    const frac = i / (LEGEND_STOPS - 1); // 0 → 1 left to right
-    // Map bar position to a data value using zeroFrac as the pivot.
-    const value =
-      frac <= zeroFrac
-        ? zeroFrac > 0
-          ? -extents.negMax * (1 - frac / zeroFrac) // -negMax → 0
-          : 0
-        : 1 - zeroFrac > 0
-          ? extents.posMax * ((frac - zeroFrac) / (1 - zeroFrac)) // 0 → posMax
-          : 0;
-    return `${colorScale(value, extents.negMax, extents.posMax)} ${(frac * 100).toFixed(1)}%`;
-  }).join(", ");
-  const legendGradient = `linear-gradient(to right, ${legendCssStops})`;
+  // The bar is built by sampling the scale in value space, pivoting where zero
+  // falls, so the gradient's neutral point and the "0" label cannot drift apart.
+  const barZeroFrac = zeroFrac(extents.negMax, extents.posMax);
+  const legendGradient = fingerprintRampGradient(
+    colormapId,
+    extents.negMax,
+    extents.posMax,
+  );
 
   // Convert zeroFrac to a CSS percentage for the label.
-  const zeroFracPct = zeroFrac * 100;
+  const zeroFracPct = barZeroFrac * 100;
 
   const handleMove = (event: React.MouseEvent<HTMLCanvasElement>) => {
     const canvas = canvasRef.current;
@@ -403,14 +392,16 @@ export function FingerprintPlot({
     let hour: number;
     if (!transposed) {
       dayLocal = Math.min(dayHi, dayLo + Math.floor((inX / plotW) * nSel));
-      hour = hoursPerDay - 1 - Math.min(hoursPerDay - 1, Math.floor((inY / plotH) * hoursPerDay));
+      hour =
+        hoursPerDay -
+        1 -
+        Math.min(hoursPerDay - 1, Math.floor((inY / plotH) * hoursPerDay));
     } else {
       hour = Math.min(hoursPerDay - 1, Math.floor((inX / plotW) * hoursPerDay));
       dayLocal = Math.min(dayHi, dayLo + Math.floor((inY / plotH) * nSel));
     }
 
-    const absoluteDay =
-      dayMapping.absoluteDays[dayLocal] ?? dayLocal;
+    const absoluteDay = dayMapping.absoluteDays[dayLocal] ?? dayLocal;
 
     setHover({
       left: x,
@@ -430,9 +421,7 @@ export function FingerprintPlot({
           transposed && !heightProp ? "flex-1 min-h-[380px]" : ""
         }`}
         style={
-          transposed && !heightProp
-            ? undefined
-            : { height: `${height}px` }
+          transposed && !heightProp ? undefined : { height: `${height}px` }
         }
       >
         <canvas

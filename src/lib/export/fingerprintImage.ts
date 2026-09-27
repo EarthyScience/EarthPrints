@@ -1,5 +1,7 @@
 import {
-  fingerprintLegendStops,
+  type ColormapId,
+  fingerprintRampSamples,
+  zeroFrac,
 } from "@/lib/map/fingerprintScale";
 import {
   formatSeriesValue,
@@ -20,10 +22,14 @@ const INSET = 4;
 const BLOCK_H = GAP_TOP + BAR_H + GAP_BOTTOM;
 
 /** Same as the axis labels the canvas draws for itself. */
-const LABEL_FONT = "11px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
+const LABEL_FONT =
+  "11px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
 
 type LegendOptions = {
-  absMax: number;
+  /** Extents from `asymmetricExtents`, both non-negative magnitudes. */
+  negMax: number;
+  posMax: number;
+  colormapId: ColormapId;
   units?: string | null;
   /** Backing-store pixels per CSS pixel in the source canvas. */
   pixelRatio: number;
@@ -33,20 +39,21 @@ function drawLegend(
   ctx: CanvasRenderingContext2D,
   width: number,
   top: number,
-  { absMax, units }: Pick<LegendOptions, "absMax" | "units">,
+  {
+    negMax,
+    posMax,
+    colormapId,
+    units,
+  }: Pick<LegendOptions, "negMax" | "posMax" | "colormapId" | "units">,
 ) {
-  // The export always renders light, like the report, whatever theme the app
-  // is in.
-  const stops = fingerprintLegendStops(true);
-
   ctx.font = LABEL_FONT;
   ctx.fillStyle = timeSeriesChartTheme(true).tick;
   ctx.textBaseline = "middle";
 
   // Units ride on the upper end. The on-screen legend leaves them to the
   // caption below it, which a standalone image does not have.
-  const min = formatSeriesValue(-absMax);
-  const max = `${formatSeriesValue(absMax)}${units ? ` ${units}` : ""}`;
+  const min = formatSeriesValue(-negMax);
+  const max = `${formatSeriesValue(posMax)}${units ? ` ${units}` : ""}`;
   const minW = ctx.measureText(min).width;
   const maxW = ctx.measureText(max).width;
   const middle = top + BAR_H / 2;
@@ -59,15 +66,25 @@ function drawLegend(
   const barX = INSET + minW + LABEL_GAP;
   const barW = Math.max(1, width - INSET - maxW - LABEL_GAP - barX);
 
+  // Sampled from the real scale rather than from three endpoint swatches, so
+  // the bar matches the heatmap for every palette.
   const ramp = ctx.createLinearGradient(barX, 0, barX + barW, 0);
-  ramp.addColorStop(0, stops.uptake);
-  ramp.addColorStop(0.5, stops.mid);
-  ramp.addColorStop(1, stops.release);
+  for (const sample of fingerprintRampSamples(colormapId, negMax, posMax)) {
+    ramp.addColorStop(sample.frac, sample.color);
+  }
 
   ctx.fillStyle = ramp;
   ctx.beginPath();
   ctx.roundRect(barX, top, barW, BAR_H, BAR_H / 2);
   ctx.fill();
+
+  // With the halves scaled independently, zero is rarely at the middle, so the
+  // bar carries a tick where the neutral colour actually falls.
+  const pivot = zeroFrac(negMax, posMax);
+  if (pivot > 0.02 && pivot < 0.98) {
+    ctx.fillStyle = timeSeriesChartTheme(true).tick;
+    ctx.fillRect(barX + pivot * barW - 0.5, top - 1, 1, BAR_H + 2);
+  }
 }
 
 /**
@@ -80,7 +97,7 @@ function drawLegend(
  */
 export function fingerprintPngWithLegend(
   canvas: HTMLCanvasElement,
-  { absMax, units, pixelRatio }: LegendOptions,
+  { negMax, posMax, colormapId, units, pixelRatio }: LegendOptions,
 ): CapturedImage {
   if (canvas.width === 0 || canvas.height === 0) {
     throw new Error("Canvas has no size to capture");
@@ -104,7 +121,12 @@ export function fingerprintPngWithLegend(
   ctx.fillRect(0, 0, plotW, height);
   ctx.drawImage(canvas, 0, 0, plotW, plotH);
 
-  drawLegend(ctx, plotW, plotH + GAP_TOP, { absMax, units });
+  drawLegend(ctx, plotW, plotH + GAP_TOP, {
+    negMax,
+    posMax,
+    colormapId,
+    units,
+  });
 
   return {
     dataUrl: target.toDataURL("image/png"),

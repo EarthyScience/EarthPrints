@@ -1,6 +1,23 @@
-import type { ColormapId } from "@/lib/map/fingerprintScale";
+import { COLORMAPS, type ColormapId } from "@/lib/map/fingerprintScale";
 
 export const COLORMAP_STORAGE_KEY = "earthprints:colormap";
+
+/**
+ * Palette ids that shipped before the Crameri lookup tables landed. The two
+ * "science" maps were hand-rolled three-stop approximations of vik and berlin,
+ * so a stored preference carries forward to the real table rather than being
+ * dropped back to the default.
+ */
+const RENAMED: Record<string, ColormapId> = {
+  "science-light": "vik",
+  "science-dark": "berlin",
+};
+
+function asColormapId(stored: string | null): ColormapId | null {
+  if (!stored) return null;
+  if (stored in RENAMED) return RENAMED[stored];
+  return stored in COLORMAPS ? (stored as ColormapId) : null;
+}
 
 /**
  * Read the stored colormap preference. Falls back to `null` so callers can
@@ -9,18 +26,11 @@ export const COLORMAP_STORAGE_KEY = "earthprints:colormap";
 export function loadColormap(): ColormapId | null {
   if (typeof window === "undefined") return null;
   try {
-    const stored = localStorage.getItem(COLORMAP_STORAGE_KEY);
-    if (
-      stored === "science-light" ||
-      stored === "science-dark" ||
-      stored === "flux"
-    ) {
-      return stored;
-    }
+    return asColormapId(localStorage.getItem(COLORMAP_STORAGE_KEY));
   } catch {
     // Private-browsing or quota errors; ignore.
+    return null;
   }
-  return null;
 }
 
 /** Persist the selected colormap. */

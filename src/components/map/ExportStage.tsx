@@ -13,7 +13,11 @@ import {
   type CapturedImage,
 } from "@/lib/export/capture";
 import { fingerprintPngWithLegend } from "@/lib/export/fingerprintImage";
-import { symmetricAbsMax } from "@/lib/map/fingerprintScale";
+import {
+  asymmetricExtents,
+  type ColormapId,
+  defaultColormapId,
+} from "@/lib/map/fingerprintScale";
 import { FixedThemeProvider } from "@/providers/ThemeProvider";
 
 /**
@@ -49,6 +53,12 @@ type StageProps = {
   selectedYears?: number[] | null;
   /** Names the clock `values` is already on, for the fingerprint's caption. */
   timeBasisLabel?: string;
+  /**
+   * The visitor's explicit palette pick, or undefined when they have not made
+   * one. Left unresolved so the light export stage applies its own default
+   * rather than inheriting a dark-surface palette from the live theme.
+   */
+  colormapId?: ColormapId;
 };
 
 /**
@@ -60,6 +70,7 @@ function ExportStage({
   values,
   units,
   hoursPerDay,
+  colormapId,
   selectedYear,
   selectedYears,
   timeBasisLabel,
@@ -85,6 +96,7 @@ function ExportStage({
             selectedYear={selectedYear}
             selectedYears={selectedYears}
             timeBasisLabel={timeBasisLabel}
+            colormapId={colormapId}
           />
         </div>
       </div>
@@ -153,7 +165,10 @@ export async function capturePlotsForExport(
       timeSeries: await svgToPng(svg, { scale: EXPORT_PIXEL_RATIO }),
       fingerprint: canvasToPng(canvas),
       fingerprintStandalone: fingerprintPngWithLegend(canvas, {
-        absMax: symmetricAbsMax(props.values),
+        ...asymmetricExtents(props.values),
+        // The stage renders light whatever theme the app is in, so an unpicked
+        // palette resolves against the light surface, not the live one.
+        colormapId: props.colormapId ?? defaultColormapId(true),
         units: props.units,
         pixelRatio: EXPORT_PIXEL_RATIO,
       }),

@@ -40,8 +40,10 @@ npm run test        # confirm all 215 tests still pass
 ### Colour scale calls
 Every call to `fingerprintColorScale(id)` returns a function that takes
 `(value, negMax, posMax)` — three arguments, not two.  
-For symmetric Science maps pass `absMax` as **both** `negMax` and `posMax`.  
-For Flux pass separate values from `asymmetricExtents(values)`.
+Always pass both extents from `asymmetricExtents(values)`. Every palette is
+centred on zero with each half scaled to its own extent; none of them collapse
+to a symmetric `absMax` any more. Passing `absMax` as both arguments is still
+valid (it just makes the ramp symmetric) but is not the default any more.
 
 ### Colorbar gradients
 Never build a colorbar from 3 endpoint stops. Always sample the actual
