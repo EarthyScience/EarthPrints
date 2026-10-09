@@ -1,7 +1,9 @@
 import type { jsPDF } from "jspdf";
 import {
   fingerprintColorScale,
-  symmetricAbsMax,
+  asymmetricExtents,
+  defaultColormapId,
+  zeroFrac,
 } from "@/lib/map/fingerprintScale";
 import { formatSeriesValue } from "@/lib/plots/chartTheme";
 import { formatSelectedYearsLabel } from "@/lib/zarr/timeRange";
@@ -201,9 +203,15 @@ function drawPlot(
  * canvas rather than inside it. jsPDF has no gradient primitive, so the ramp is
  * sampled into thin bars from the same colour scale the plot uses.
  */
-function drawLegend(doc: jsPDF, absMax: number, y: number): number {
-  // PDF legend always renders in Science Light palette, matching the light export theme.
-  const scale = fingerprintColorScale("science-light");
+function drawLegend(
+  doc: jsPDF,
+  { negMax, posMax }: { negMax: number; posMax: number },
+  y: number,
+): number {
+  // The report always renders light whatever theme the app is in, so it keeps a
+  // fixed light-surface palette rather than following the visitor's pick.
+  const scale = fingerprintColorScale(defaultColormapId(true));
+  const pivot = zeroFrac(negMax, posMax);
   const steps = 96;
   const barW = 70;
   const barH = 2.4;
@@ -211,7 +219,17 @@ function drawLegend(doc: jsPDF, absMax: number, y: number): number {
 
   for (let i = 0; i < steps; i += 1) {
     const t = i / (steps - 1);
-    doc.setFillColor(...parseRgb(scale((t * 2 - 1) * absMax, absMax, absMax)));
+    // Walk the bar in value space, pivoting at zero, so the ramp's neutral
+    // point lands exactly where the tick below is drawn.
+    const value =
+      t <= pivot
+        ? pivot > 0
+          ? -negMax * (1 - t / pivot)
+          : 0
+        : pivot < 1
+          ? posMax * ((t - pivot) / (1 - pivot))
+          : 0;
+    doc.setFillColor(...parseRgb(scale(value, negMax, posMax)));
     // Overlap by a hair so no seams show between bars.
     doc.rect(barX + (i * barW) / steps, y, barW / steps + 0.1, barH, "F");
   }
@@ -219,8 +237,16 @@ function drawLegend(doc: jsPDF, absMax: number, y: number): number {
   doc.setFont("courier", "normal");
   doc.setFontSize(7.5);
   doc.setTextColor(...INK_SOFT);
-  doc.text(formatSeriesValue(-absMax), MARGIN, y + barH - 0.3);
-  doc.text(formatSeriesValue(absMax), barX + barW + 3, y + barH - 0.3);
+  if (pivot > 0.02 && pivot < 0.98) {
+    doc.setFillColor(...INK_SOFT);
+    doc.rect(barX + pivot * barW - 0.15, y - 0.4, 0.3, barH + 0.8, "F");
+  }
+
+  doc.setFont("courier", "normal");
+  doc.setFontSize(7.5);
+  doc.setTextColor(...INK_SOFT);
+  doc.text(formatSeriesValue(-negMax), MARGIN, y + barH - 0.3);
+  doc.text(formatSeriesValue(posMax), barX + barW + 3, y + barH - 0.3);
 
   return y + barH + 4;
 }
@@ -314,7 +340,7 @@ export async function buildReportPdf({
     cursor,
   );
 
-  drawLegend(doc, symmetricAbsMax(values), cursor);
+  drawLegend(doc, asymmetricExtents(values), cursor);
   drawFooter(doc, prov, attribution);
 
   return doc.output("blob");

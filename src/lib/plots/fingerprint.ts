@@ -1,11 +1,9 @@
 import {
-  asymmetricExtents,
   type ColormapId,
   dayIndexTicks,
   FINGERPRINT_HOUR_TICKS,
   fingerprintColorScale,
   formatDayTick,
-  symmetricAbsMax,
 } from "@/lib/map/fingerprintScale";
 import {
   getSelectedYearsDayMapping,
@@ -51,15 +49,6 @@ export function fingerprintLayout(
     height: size.height,
     transposed,
   };
-}
-
-export function fingerprintExtents(
-  values: Float32Array,
-  colormapId: ColormapId,
-): FingerprintExtents {
-  if (colormapId === "flux") return asymmetricExtents(values);
-  const absMax = symmetricAbsMax(values);
-  return { negMax: absMax, posMax: absMax };
 }
 
 function plotBox({ width, height, transposed }: FingerprintLayout) {

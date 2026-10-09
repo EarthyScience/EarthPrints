@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
+  asymmetricExtents,
   COLORMAPS,
   type ColormapId,
   fingerprintColorScale,
@@ -15,7 +16,6 @@ import {
   drawFingerprint,
   type FingerprintCell,
   fingerprintCellAt,
-  fingerprintExtents,
   fingerprintLayout,
 } from "@/lib/plots/fingerprint";
 import { useTheme } from "@/providers/ThemeProvider";
@@ -72,10 +72,7 @@ export function FingerprintPlot({
       ),
     [values, hoursPerDay, selectedYears, width, height, transposed],
   );
-  const extents = useMemo(
-    () => fingerprintExtents(values, colormapId),
-    [values, colormapId],
-  );
+  const extents = useMemo(() => asymmetricExtents(values), [values]);
 
   useEffect(() => {
     if (!canvasRef.current) return;

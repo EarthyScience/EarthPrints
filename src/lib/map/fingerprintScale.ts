@@ -2,45 +2,74 @@
  * Color scale and axis helpers for the fingerprint plot (hour-of-day x day
  * heatmap of NEE flux). NEE is signed: negative means uptake (the ecosystem is a
  * sink), positive means release (a source). We therefore use a diverging ramp
- * that is symmetric around zero, so the sign reads at a glance and midday uptake
- * separates cleanly from nighttime respiration.
+ * pinned at zero, so the sign reads at a glance and midday uptake separates
+ * cleanly from nighttime respiration.
  *
- * Three colormaps are available:
- *   - "science-light": blue→grey→red diverging, tuned for light backgrounds.
- *   - "science-dark":  lighter poles for dark backgrounds.
- *   - "flux":          Crameri/Kovesi CET perceptually-uniform palette:
- *                      negative half = linear_kbc_5_95_c73 (dark-blue → cyan),
- *                      positive half = Reverse(linear_kryw_5_100_c67) (white → dark).
- *                      Supports true asymmetric extent: negMax and posMax may differ.
+ * The ramp is centred on zero but not symmetric. Uptake and release rarely have
+ * the same magnitude (midday uptake can be several times the nighttime source),
+ * and a symmetric range spends most of one half of the ramp on values the cell
+ * never reaches. Each half is instead stretched to its own extreme, so both ends
+ * of every palette are in use and weak-side structure stays visible. The cost is
+ * that two values of equal magnitude and opposite sign do not read as equally
+ * intense, which is why every colorbar labels both real extremes and marks zero.
+ *
+ * Palettes:
+ *   - vik, berlin, broc, cork, roma, vanimo: Crameri's perceptually uniform
+ *     scientific colour maps, as real lookup tables (see `colormapTables.ts`).
+ *     vik and berlin are the defaults for light and dark surfaces.
+ *   - rdbu: ColorBrewer RdBu, a familiar non-uniform reference point.
+ *   - flux: Crameri/Kovesi CET pair, negative half = linear_kbc_5_95_c73
+ *     (dark-blue -> cyan), positive half = Reverse(linear_kryw_5_100_c67)
+ *     (white -> dark). Two sequential ramps glued at zero rather than one
+ *     diverging table, so it keeps its own branch in the scale.
  */
 
+import {
+  DIVERGING_TABLES,
+  type DivergingTableId,
+  sampleTable,
+} from "@/lib/map/colormapTables";
 import { dayIndexToUTCDate } from "@/lib/zarr/timeRange";
 
 // ---------------------------------------------------------------------------
 // Public types
 // ---------------------------------------------------------------------------
 
-export type ColormapId = "science-light" | "science-dark" | "flux";
-
-/** What the user picks; Science resolves to its light or dark variant by theme. */
-export type Palette = "science" | "flux";
-
-export function colormapFor(palette: Palette, isLight: boolean): ColormapId {
-  if (palette === "flux") return "flux";
-  return isLight ? "science-light" : "science-dark";
-}
+export type ColormapId = DivergingTableId | "flux";
 
 export const COLORMAPS: Record<
   ColormapId,
   { label: string; description: string }
 > = {
-  "science-light": {
-    label: "Science",
-    description: "Diverging blue–red, tuned for light backgrounds",
+  vik: {
+    label: "vik",
+    description: "Crameri vik: blue to white to red, tuned for light surfaces",
   },
-  "science-dark": {
-    label: "Science",
-    description: "Diverging blue–red, lifted for dark backgrounds",
+  berlin: {
+    label: "berlin",
+    description:
+      "Crameri berlin: blue to black to red, tuned for dark surfaces",
+  },
+  broc: {
+    label: "broc",
+    description: "Crameri broc: blue to white to olive",
+  },
+  cork: {
+    label: "cork",
+    description: "Crameri cork: blue to white to green",
+  },
+  roma: {
+    label: "roma",
+    description: "Crameri roma: red to yellow to blue",
+  },
+  vanimo: {
+    label: "vanimo",
+    description: "Crameri vanimo: pink to black to green, for dark surfaces",
+  },
+  rdbu: {
+    label: "RdBu",
+    description:
+      "ColorBrewer RdBu: blue to white to red, not perceptually uniform",
   },
   flux: {
     label: "Flux",
@@ -49,34 +78,19 @@ export const COLORMAPS: Record<
   },
 };
 
+/** Palette to use when the visitor has not picked one, per surface theme. */
+export function defaultColormapId(isLight: boolean): ColormapId {
+  return isLight ? "vik" : "berlin";
+}
+
+/** What the user picks; Science resolves to the theme's default table. */
+export type Palette = "science" | "flux";
+
+export function colormapFor(palette: Palette, isLight: boolean): ColormapId {
+  return palette === "flux" ? "flux" : defaultColormapId(isLight);
+}
+
 export type Rgb = readonly [number, number, number];
-
-// ---------------------------------------------------------------------------
-// Science colormap poles
-// ---------------------------------------------------------------------------
-
-/*
- * Poles follow the geoscience-standard "vik" diverging convention (Crameri's
- * perceptually uniform, colourblind-safe scientific colour maps): a cool blue
- * for uptake and a warm red for release, so warm reading as CO2 emission matches
- * how signed anomaly fields are shown in the flux/climate literature. Dark-mode
- * poles are lifted so they stay legible on the dark surface.
- */
-
-/** Uptake (negative) end: blue. */
-const UPTAKE_LIGHT: Rgb = [33, 102, 172]; // #2166ac
-const UPTAKE_DARK: Rgb = [106, 168, 224]; // #6aa8e0
-
-/** Release (positive) end: red. */
-const RELEASE_LIGHT: Rgb = [178, 24, 43]; // #b2182b
-const RELEASE_DARK: Rgb = [232, 114, 76]; // #e8724c
-
-/**
- * Zero end is a neutral gray kept distinct from both the panel background and
- * from transparent gaps, so a near-zero cell never looks like missing data.
- */
-const MID_LIGHT: Rgb = [235, 235, 231];
-const MID_DARK: Rgb = [66, 66, 64];
 
 // ---------------------------------------------------------------------------
 // Flux colormap: CET linear_kbc_5_95_c73 and Reverse(linear_kryw_5_100_c67)
@@ -261,54 +275,64 @@ export function asymmetricExtents(values: ArrayLike<number>): {
 }
 
 // ---------------------------------------------------------------------------
-// Legend stops
+// Colorbar geometry
 // ---------------------------------------------------------------------------
 
 /**
- * Endpoint swatches for a legend bar, matching what each scale produces at
- * its extreme values. Used both in the in-app legend and in the export.
+ * Where zero sits along a colorbar drawn from `-negMax` to `+posMax`. With the
+ * two halves scaled independently this is rarely 0.5, and it must drive both
+ * the gradient's split point and the "0" label, or the two drift apart.
  */
-export function fingerprintLegendStopsForColormap(colormapId: ColormapId): {
-  uptake: string;
-  mid: string;
-  release: string;
-} {
-  switch (colormapId) {
-    case "science-light":
-      return {
-        uptake: rgbString(UPTAKE_LIGHT),
-        mid: rgbString(MID_LIGHT),
-        release: rgbString(RELEASE_LIGHT),
-      };
-    case "science-dark":
-      return {
-        uptake: rgbString(UPTAKE_DARK),
-        mid: rgbString(MID_DARK),
-        release: rgbString(RELEASE_DARK),
-      };
-    case "flux":
-      // kbc[0] = most-negative (dark blue), kbc[255] = zero (light cyan)
-      // Reversed kryw: kryw[255] = zero (white), kryw[0] = most-positive (dark)
-      return {
-        uptake: rgbString(sampleCet(CET_KBC, 0)), // [0, 1, 78]
-        mid: rgbString(sampleCet(CET_KBC, 1)), // [179, 255, 246] — cyan at zero
-        release: rgbString(sampleCet(CET_KRYW, 0)), // [17, 17, 17] — dark at posMax
-      };
-  }
+export function zeroFrac(negMax: number, posMax: number): number {
+  const span = negMax + posMax;
+  if (!(span > 0)) return 0.5;
+  return negMax / span;
 }
 
+/** One sample along a colorbar: its position, the value there, and its colour. */
+export type RampSample = { frac: number; value: number; color: string };
+
 /**
- * Convenience overload for the export path, which always renders in light mode.
- * @deprecated Prefer {@link fingerprintLegendStopsForColormap}.
+ * Sample a colorbar by walking the bar in *value* space, pivoting at
+ * {@link zeroFrac}. Sampling the real scale (rather than interpolating between
+ * endpoint swatches) is what keeps the bar honest for every palette, Flux
+ * included, and puts the neutral colour exactly where the "0" label goes.
+ *
+ * `steps` must be at least 16; the in-app bar and every export use this.
  */
-export function fingerprintLegendStops(isLight: boolean): {
-  uptake: string;
-  mid: string;
-  release: string;
-} {
-  return fingerprintLegendStopsForColormap(
-    isLight ? "science-light" : "science-dark",
+export function fingerprintRampSamples(
+  colormapId: ColormapId,
+  negMax: number,
+  posMax: number,
+  steps = 32,
+): RampSample[] {
+  const scale = fingerprintColorScale(colormapId);
+  const pivot = zeroFrac(negMax, posMax);
+  const samples: RampSample[] = [];
+  for (let i = 0; i < steps; i++) {
+    const frac = i / (steps - 1);
+    let value: number;
+    if (frac <= pivot) {
+      value = pivot > 0 ? -negMax * (1 - frac / pivot) : 0;
+    } else {
+      value = pivot < 1 ? posMax * ((frac - pivot) / (1 - pivot)) : 0;
+    }
+    samples.push({ frac, value, color: scale(value, negMax, posMax) });
+  }
+  return samples;
+}
+
+/** The same ramp as a CSS gradient, for the in-app bar and picker swatches. */
+export function fingerprintRampGradient(
+  colormapId: ColormapId,
+  negMax: number,
+  posMax: number,
+  steps = 32,
+): string {
+  const stops = fingerprintRampSamples(colormapId, negMax, posMax, steps).map(
+    (s) => `${s.color} ${(s.frac * 100).toFixed(1)}%`,
   );
+  return `linear-gradient(to right, ${stops.join(", ")})`;
 }
 
 // ---------------------------------------------------------------------------
@@ -316,56 +340,55 @@ export function fingerprintLegendStops(isLight: boolean): {
 // ---------------------------------------------------------------------------
 
 /**
- * Build a diverging color function for the given colormap.
- *
- * For "science-light" and "science-dark": uses symmetric `absMax` — pass
- * `absMax` as both `negMax` and `posMax`.
- *
- * For "flux": pass separate `negMax` (the magnitude of the most-negative
- * finite value) and `posMax` (the most-positive finite value) to get the
- * true asymmetric mapping where each ramp half spans the full colour table.
- *
- * Non-finite values (NaN / ocean / missing) are returned as "transparent".
+ * Position of `value` along a diverging palette, in [0, 1] with 0.5 at zero.
+ * Each half is scaled independently, so `-negMax` lands on 0 and `+posMax` on 1
+ * however lopsided the two are. Values beyond either extreme clamp; a half with
+ * no data collapses to the neutral centre rather than dividing by zero.
+ */
+function divergingPosition(
+  value: number,
+  negMax: number,
+  posMax: number,
+): number {
+  if (value < 0) {
+    if (!(negMax > 0)) return 0.5;
+    return 0.5 * (1 - Math.min(1, -value / negMax));
+  }
+  if (!(posMax > 0)) return 0.5;
+  return 0.5 + 0.5 * Math.min(1, value / posMax);
+}
+
+/**
+ * Build the colour function for a palette. The returned function takes the
+ * cell value plus both extents from {@link asymmetricExtents}; non-finite
+ * values (NaN over ocean or missing pixels) are transparent so gaps read as
+ * gaps rather than as zero.
  */
 export function fingerprintColorScale(
   colormapId: ColormapId,
 ): (value: number, negMax: number, posMax: number) => string {
-  switch (colormapId) {
-    case "science-light":
-    case "science-dark": {
-      const uptake =
-        colormapId === "science-light" ? UPTAKE_LIGHT : UPTAKE_DARK;
-      const release =
-        colormapId === "science-light" ? RELEASE_LIGHT : RELEASE_DARK;
-      const mid = colormapId === "science-light" ? MID_LIGHT : MID_DARK;
-
-      return (value, negMax, posMax) => {
-        if (!Number.isFinite(value)) return "transparent";
-        // Science maps use symmetric absMax — whichever extent the caller
-        // computed, we take the larger one so zero stays centred.
-        const absMax = Math.max(negMax, posMax);
-        if (absMax <= 0) return rgbString(mid);
-        const t = Math.max(-1, Math.min(1, value / absMax));
-        const end = t < 0 ? uptake : release;
-        return rgbString(lerpRgb(mid, end, Math.abs(t)));
-      };
-    }
-
-    case "flux": {
-      return (value, negMax, posMax) => {
-        if (!Number.isFinite(value)) return "transparent";
-        if (value < 0) {
-          // Negative half: kbc traversed from index 255 (zero) → 0 (−negMax).
-          const t = Math.max(0, Math.min(1, -value / negMax));
-          return rgbString(sampleCet(CET_KBC, 1 - t));
-        } else {
-          // Positive half: reversed kryw traversed from index 255 (zero) → 0 (+posMax).
-          const t = Math.max(0, Math.min(1, value / posMax));
-          return rgbString(sampleCet(CET_KRYW, 1 - t));
-        }
-      };
-    }
+  if (colormapId === "flux") {
+    // Two sequential ramps meeting at zero, each spanning its own half.
+    return (value, negMax, posMax) => {
+      if (!Number.isFinite(value)) return "transparent";
+      if (value < 0) {
+        // kbc traversed from index 255 (zero) to 0 (-negMax).
+        const t = negMax > 0 ? Math.max(0, Math.min(1, -value / negMax)) : 0;
+        return rgbString(sampleCet(CET_KBC, 1 - t));
+      }
+      // Reversed kryw traversed from index 255 (zero) to 0 (+posMax).
+      const t = posMax > 0 ? Math.max(0, Math.min(1, value / posMax)) : 0;
+      return rgbString(sampleCet(CET_KRYW, 1 - t));
+    };
   }
+
+  const table = DIVERGING_TABLES[colormapId];
+  return (value, negMax, posMax) => {
+    if (!Number.isFinite(value)) return "transparent";
+    return rgbString(
+      sampleTable(table, divergingPosition(value, negMax, posMax)),
+    );
+  };
 }
 
 // ---------------------------------------------------------------------------

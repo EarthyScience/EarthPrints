@@ -1,9 +1,8 @@
-import { symmetricAbsMax } from "@/lib/map/fingerprintScale";
 import {
-  drawFingerprint,
-  fingerprintExtents,
-  fingerprintLayout,
-} from "@/lib/plots/fingerprint";
+  asymmetricExtents,
+  defaultColormapId,
+} from "@/lib/map/fingerprintScale";
+import { drawFingerprint, fingerprintLayout } from "@/lib/plots/fingerprint";
 import { canvasToPng, type CapturedImage } from "@/lib/export/capture";
 import { fingerprintPngWithLegend } from "@/lib/export/fingerprintImage";
 import {
@@ -29,6 +28,8 @@ export function captureFingerprint({
   hoursPerDay: number;
   selectedYears: number[];
 }): FingerprintCapture {
+  const colormapId = defaultColormapId(true);
+  const extents = asymmetricExtents(values);
   const canvas = document.createElement("canvas");
   drawFingerprint(
     canvas,
@@ -40,8 +41,8 @@ export function captureFingerprint({
       false,
     ),
     {
-      colormapId: "science-light",
-      extents: fingerprintExtents(values, "science-light"),
+      colormapId,
+      extents,
       isLight: true,
       pixelRatio: EXPORT_PIXEL_RATIO,
     },
@@ -50,7 +51,8 @@ export function captureFingerprint({
   return {
     image: canvasToPng(canvas),
     standalone: fingerprintPngWithLegend(canvas, {
-      absMax: symmetricAbsMax(values),
+      ...extents,
+      colormapId,
       units,
       pixelRatio: EXPORT_PIXEL_RATIO,
     }),

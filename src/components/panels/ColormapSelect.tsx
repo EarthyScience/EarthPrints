@@ -3,7 +3,7 @@
 import {
   COLORMAPS,
   colormapFor,
-  fingerprintColorScale,
+  fingerprintRampGradient,
   type ColormapId,
   type Palette,
 } from "@/lib/map/fingerprintScale";
@@ -18,21 +18,15 @@ import { useTheme } from "@/providers/ThemeProvider";
 
 const PALETTES: Palette[] = ["science", "flux"];
 
-function swatchGradient(id: ColormapId): string {
-  const scale = fingerprintColorScale(id);
-  const samples = 16;
-  const stops = Array.from({ length: samples }, (_, i) => {
-    const frac = i / (samples - 1);
-    const value = frac <= 0.5 ? -(1 - frac * 2) : frac * 2 - 1;
-    return `${scale(value, 1, 1)} ${(frac * 100).toFixed(0)}%`;
-  });
-  return `linear-gradient(to right, ${stops.join(", ")})`;
-}
+const PALETTE_LABELS: Record<Palette, string> = {
+  science: "Science",
+  flux: "Flux",
+};
 
 const SWATCHES = Object.fromEntries(
   (Object.keys(COLORMAPS) as ColormapId[]).map((id) => [
     id,
-    swatchGradient(id),
+    fingerprintRampGradient(id, 1, 1, 16),
   ]),
 ) as Record<ColormapId, string>;
 
@@ -59,7 +53,7 @@ export function ColormapSelect({ value, onChange }: ColormapSelectProps) {
       <SelectTrigger aria-label="Palette">
         <SelectValue>
           <Swatch id={selected} />
-          {COLORMAPS[selected].label}
+          {PALETTE_LABELS[value]}
         </SelectValue>
       </SelectTrigger>
       <SelectContent>
@@ -72,7 +66,7 @@ export function ColormapSelect({ value, onChange }: ColormapSelectProps) {
               title={COLORMAPS[id].description}
             >
               <Swatch id={id} />
-              {COLORMAPS[id].label}
+              {PALETTE_LABELS[palette]}
             </SelectItem>
           );
         })}
