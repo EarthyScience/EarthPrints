@@ -4,19 +4,12 @@ export type CapturedImage = {
   height: number;
 };
 
-/** Serialized SVG loses the page stylesheet, so the font has to travel with it. */
 const EXPORT_FONT_STACK =
   "ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
 
-/** How long to wait for a frame that is not coming before carrying on anyway. */
 const FRAME_FALLBACK_MS = 200;
 
-/**
- * Resolve on the next animation frame, or on a timer once it is clear no frame
- * is coming. A hidden tab is served no frames at all, and a loop that waits on
- * one there never turns again, so an export left in the background would sit on
- * "Preparing…" for good rather than finishing or failing.
- */
+// Hidden tabs get no animation frames, so a timer stands in for them.
 export function nextFrame(): Promise<void> {
   return new Promise((resolve) => {
     const settle = () => {
@@ -29,11 +22,6 @@ export function nextFrame(): Promise<void> {
   });
 }
 
-/**
- * Resolve once the tab is being rendered again. Nothing offscreen lays out,
- * paints, or loads map tiles while the tab is hidden, so an export started
- * there can only wait for the user to come back.
- */
 export function whenVisible(): Promise<void> {
   if (!document.hidden) return Promise.resolve();
 
@@ -47,14 +35,7 @@ export function whenVisible(): Promise<void> {
   });
 }
 
-/**
- * A container parked off the left edge of the page for the export-only React
- * roots to mount into. Offscreen rather than hidden: `display:none` and
- * `visibility:hidden` both stop ResizeObserver from reporting a size, which
- * every plot and the map need before they will draw.
- *
- * The caller removes it.
- */
+// Offscreen rather than hidden: display:none stops ResizeObserver reporting a size.
 export function createOffscreenHost(
   width: number,
   height?: number,
@@ -74,14 +55,12 @@ export function createOffscreenHost(
   return host;
 }
 
-/**
- * Poll on animation frames until `predicate` holds. The offscreen plots need a
- * layout pass plus a paint before their SVG/canvas has real dimensions, and
- * there is no event that fires for "Recharts has finished measuring".
- */
 export async function waitUntil(
   predicate: () => boolean,
-  { timeoutMs = 3000, label = "render" }: { timeoutMs?: number; label?: string } = {},
+  {
+    timeoutMs = 3000,
+    label = "render",
+  }: { timeoutMs?: number; label?: string } = {},
 ): Promise<void> {
   let spent = 0;
 
@@ -91,10 +70,33 @@ export async function waitUntil(
     }
     const before = performance.now();
     await nextFrame();
-    // Time the tab spent hidden does not count against the budget: nothing was
-    // being rendered, so the wait is the user's tab switch, not a stall.
     if (!document.hidden) spent += performance.now() - before;
   }
+}
+
+const PAINT_PROPERTIES = [
+  "fill",
+  "fill-opacity",
+  "stroke",
+  "stroke-opacity",
+  "stroke-width",
+  "opacity",
+  "font-size",
+  "font-weight",
+] as const;
+
+// A serialized SVG loses CSS variables and classes, so paint is inlined.
+function inlinePaint(source: SVGSVGElement, clone: SVGSVGElement) {
+  const from = source.querySelectorAll("*");
+  const to = clone.querySelectorAll("*");
+  from.forEach((element, index) => {
+    const target = to[index];
+    if (!target) return;
+    const style = getComputedStyle(element);
+    for (const property of PAINT_PROPERTIES) {
+      target.setAttribute(property, style.getPropertyValue(property));
+    }
+  });
 }
 
 function drawToPng(
@@ -120,22 +122,21 @@ function drawToPng(
   return { dataUrl: target.toDataURL("image/png"), width, height };
 }
 
-/**
- * Rasterise a live `<svg>` (the Recharts line chart) to a PNG.
- *
- * Everything Recharts styles comes through as presentation attributes, which
- * survive serialization. The font does not, so it is pinned on the clone.
- */
 export async function svgToPng(
   svg: SVGSVGElement,
-  { scale = 2, background = "#ffffff" }: { scale?: number; background?: string | null } = {},
+  {
+    scale = 2,
+    background = "#ffffff",
+  }: { scale?: number; background?: string | null } = {},
 ): Promise<CapturedImage> {
   const rect = svg.getBoundingClientRect();
   const width = Math.round(rect.width);
   const height = Math.round(rect.height);
-  if (width === 0 || height === 0) throw new Error("Chart has no size to capture");
+  if (width === 0 || height === 0)
+    throw new Error("Chart has no size to capture");
 
   const clone = svg.cloneNode(true) as SVGSVGElement;
+  inlinePaint(svg, clone);
   clone.setAttribute("xmlns", "http://www.w3.org/2000/svg");
   clone.setAttribute("width", String(width));
   clone.setAttribute("height", String(height));
@@ -155,13 +156,6 @@ export async function svgToPng(
   }
 }
 
-/**
- * Copy a canvas (the fingerprint heatmap, or the map) to a PNG.
- *
- * The source is already at device-pixel resolution, so it is copied at its
- * backing-store size and `scale` is left alone. `background` matters because
- * both sources can carry transparency that would otherwise show as black.
- */
 export function canvasToPng(
   canvas: HTMLCanvasElement,
   { background = "#ffffff" }: { background?: string | null } = {},
@@ -176,7 +170,8 @@ function loadImage(src: string): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
     const image = new Image();
     image.onload = () => resolve(image);
-    image.onerror = () => reject(new Error("Could not rasterise the chart SVG"));
+    image.onerror = () =>
+      reject(new Error("Could not rasterise the chart SVG"));
     image.src = src;
   });
 }

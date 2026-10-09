@@ -25,6 +25,7 @@ export function storeTheme(theme: Theme): void {
 
 export function applyTheme(theme: Theme): void {
   document.documentElement.classList.toggle("light", theme === "light");
+  document.documentElement.classList.toggle("dark", theme === "dark");
 }
 
 export const themeInitScript = `
@@ -38,6 +39,7 @@ export const themeInitScript = `
           ? "light"
           : "dark";
     document.documentElement.classList.toggle("light", theme === "light");
+    document.documentElement.classList.toggle("dark", theme === "dark");
   } catch (e) {}
 })();
 `.trim();

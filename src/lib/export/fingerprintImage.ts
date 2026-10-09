@@ -3,10 +3,7 @@ import {
   fingerprintRampSamples,
   zeroFrac,
 } from "@/lib/map/fingerprintScale";
-import {
-  formatSeriesValue,
-  timeSeriesChartTheme,
-} from "@/components/map/timeSeriesChartConfig";
+import { chartTickColor, formatSeriesValue } from "@/lib/plots/chartTheme";
 import type { CapturedImage } from "./capture";
 
 /**
@@ -47,7 +44,7 @@ function drawLegend(
   }: Pick<LegendOptions, "negMax" | "posMax" | "colormapId" | "units">,
 ) {
   ctx.font = LABEL_FONT;
-  ctx.fillStyle = timeSeriesChartTheme(true).tick;
+  ctx.fillStyle = chartTickColor(true);
   ctx.textBaseline = "middle";
 
   // Units ride on the upper end. The on-screen legend leaves them to the
@@ -82,7 +79,7 @@ function drawLegend(
   // bar carries a tick where the neutral colour actually falls.
   const pivot = zeroFrac(negMax, posMax);
   if (pivot > 0.02 && pivot < 0.98) {
-    ctx.fillStyle = timeSeriesChartTheme(true).tick;
+    ctx.fillStyle = chartTickColor(true);
     ctx.fillRect(barX + pivot * barW - 0.5, top - 1, 1, BAR_H + 2);
   }
 }

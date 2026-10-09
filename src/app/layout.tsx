@@ -1,9 +1,7 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { SITE_DESCRIPTION, SITE_NAME } from "@/lib/constants/site";
-import { Footer } from "@/components/layout/Footer";
 import { ThemeProvider } from "@/providers/ThemeProvider";
-import { sidebarInitScript } from "@/lib/sidebar";
 import { themeInitScript } from "@/lib/theme";
 import "./globals.css";
 
@@ -53,13 +51,9 @@ export default function RootLayout({
     >
       <head>
         <script dangerouslySetInnerHTML={{ __html: themeInitScript }} />
-        <script dangerouslySetInnerHTML={{ __html: sidebarInitScript }} />
       </head>
       <body>
-        <ThemeProvider>
-          {children}
-          <Footer />
-        </ThemeProvider>
+        <ThemeProvider>{children}</ThemeProvider>
       </body>
     </html>
   );

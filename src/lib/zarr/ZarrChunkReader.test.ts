@@ -582,4 +582,36 @@ describe("ZarrChunkReader", () => {
     expect(result.values).toBeInstanceOf(Float32Array);
     expect(result.variable).toBe("NEE");
   });
+
+  it("reports byte progress across years that are not adjacent", async () => {
+    const decode = vi.fn<
+      (
+        request: DecodeRequest,
+        onProgress?: (loaded: number, total: number) => void,
+      ) => Promise<DecodedChunk>
+    >(async (request, onProgress) => {
+      onProgress?.(50, 100);
+      onProgress?.(100, 100);
+      return makeDecodedChunk(request);
+    });
+    mockCreateWorker.mockReturnValue({
+      decode,
+      terminate: vi.fn(),
+    } as unknown as ChunkWorkerClient);
+
+    const reader = new ZarrChunkReader(ds);
+    const onProgress = vi.fn();
+    await reader.getTimeSeriesForYears(
+      makeGrid(50, 50),
+      [2005, 2018],
+      undefined,
+      onProgress,
+    );
+
+    const byteCalls = onProgress.mock.calls.filter(([, total]) => total > 1);
+    expect(byteCalls.length).toBeGreaterThan(1);
+    const loaded = byteCalls.map(([value]) => value);
+    expect(loaded).toEqual([...loaded].sort((a, b) => a - b));
+    expect(byteCalls[0]![1]).toBeGreaterThan(byteCalls[0]![0]);
+  });
 });

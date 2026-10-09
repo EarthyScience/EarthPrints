@@ -10,12 +10,12 @@ import {
 } from "react-joyride";
 import {
   EMPTY_CELL_HINT,
+  PICKED_FOR_USER_BODY,
   tourSpotlightFor,
   tourSpotlightPaddingFor,
   tourStepsFor,
   tourTargetFor,
 } from "@/lib/constants/tour";
-import { getSidebarState, setSidebarState } from "@/lib/sidebar";
 import {
   hasFiniteValues,
   hasSeenGuide,
@@ -26,18 +26,22 @@ import {
   subscribeGuideRequests,
   type TourGateState,
 } from "@/lib/tour";
+import { Button } from "@/components/ui/button";
 
 type MapTourProps = {
+  /** The map picked the user's own cell, so there is nothing to ask them to pick. */
+  pickedForUser: boolean;
   hasSelection: boolean;
   loadingSeries: boolean;
   seriesValues: Float32Array | null;
-  /** The mobile bottom sheet is open. Ignored above the desktop breakpoint. */
+  /** The chart panel is open. */
   panelOpen: boolean;
   onPanelOpenChange: (open: boolean) => void;
 };
 
-/** Above the icon tooltips at z-200, which are the highest thing in the app. */
+/** Above the floating panels and their popovers. */
 const TOUR_Z_INDEX = 300;
+const CURSOR_HINT_GAP = 14;
 
 /**
  * The mobile sheet's own transition, plus a frame. Nothing emits an event when
@@ -77,6 +81,55 @@ function resolvePadding(value: SpotlightPadding | number | undefined): Insets {
  * browser, so the outline is drawn as its own element against the same rect
  * Joyride lights.
  */
+/**
+ * A label that follows the pointer over the map while the guide waits for the
+ * first pick, so the instruction sits where the click has to happen.
+ */
+function CursorHint() {
+  const [point, setPoint] = useState<{ x: number; y: number } | null>(null);
+  const [bounds, setBounds] = useState<DOMRect | null>(null);
+  const [size, setSize] = useState({ width: 0, height: 0 });
+
+  useEffect(() => {
+    const map = document.querySelector<HTMLElement>('[data-tour="map"]');
+    if (!map) return;
+    const move = (event: PointerEvent) => {
+      setBounds(map.getBoundingClientRect());
+      setPoint({ x: event.clientX, y: event.clientY });
+    };
+    const leave = () => setPoint(null);
+    map.addEventListener("pointermove", move);
+    map.addEventListener("pointerleave", leave);
+    return () => {
+      map.removeEventListener("pointermove", move);
+      map.removeEventListener("pointerleave", leave);
+    };
+  }, []);
+
+  const measure = useCallback((node: HTMLDivElement | null) => {
+    if (node) setSize({ width: node.offsetWidth, height: node.offsetHeight });
+  }, []);
+
+  if (!point || !bounds) return null;
+
+  // Pinned against the map's right and bottom edges rather than flipped, so
+  // the label never runs past them and never jumps sides.
+  const left = Math.min(point.x + CURSOR_HINT_GAP, bounds.right - size.width);
+  const top = Math.min(point.y + CURSOR_HINT_GAP, bounds.bottom - size.height);
+
+  return createPortal(
+    <div
+      ref={measure}
+      aria-hidden
+      className="pointer-events-none fixed whitespace-nowrap rounded-md bg-popover px-2 py-1 text-xs text-popover-foreground shadow-md ring-1 ring-border"
+      style={{ left, top, zIndex: TOUR_Z_INDEX + 1 }}
+    >
+      Click to pick a place
+    </div>,
+    document.body,
+  );
+}
+
 function SpotlightOutline({
   selector,
   padding,
@@ -90,28 +143,27 @@ function SpotlightOutline({
     const target = document.querySelector(selector);
     if (!target) return;
 
+    // Polled per frame because the panel can move without resizing (slide-in,
+    // content above it settling), which no observer or event reports.
+    let frame = 0;
+    let last = "";
     const measure = () => {
       const rect = target.getBoundingClientRect();
-      setBox({
-        top: rect.top - padding.top,
-        left: rect.left - padding.left,
-        right: rect.width + padding.left + padding.right,
-        bottom: rect.height + padding.top + padding.bottom,
-      });
+      const key = `${rect.top},${rect.left},${rect.width},${rect.height}`;
+      if (key !== last) {
+        last = key;
+        setBox({
+          top: rect.top - padding.top,
+          left: rect.left - padding.left,
+          right: rect.width + padding.left + padding.right,
+          bottom: rect.height + padding.top + padding.bottom,
+        });
+      }
+      frame = requestAnimationFrame(measure);
     };
+    frame = requestAnimationFrame(measure);
 
-    const frame = requestAnimationFrame(measure);
-    const observer = new ResizeObserver(measure);
-    observer.observe(target);
-    window.addEventListener("resize", measure);
-    window.addEventListener("scroll", measure, true);
-
-    return () => {
-      cancelAnimationFrame(frame);
-      observer.disconnect();
-      window.removeEventListener("resize", measure);
-      window.removeEventListener("scroll", measure, true);
-    };
+    return () => cancelAnimationFrame(frame);
   }, [selector, padding.top, padding.right, padding.bottom, padding.left]);
 
   if (!box) return null;
@@ -139,15 +191,6 @@ const PULSE_SIZE = 16;
 /** Matches the scrim behind the mobile drawer, so the dim reads as the app's. */
 const OVERLAY_COLOR = "rgba(0, 0, 0, 0.55)";
 
-const BUTTON_BASE =
-  "rounded-md px-2.5 py-1 text-[11.5px] font-semibold transition-colors focus-visible:outline-offset-1 focus-visible:[outline:2px_solid_var(--accent-solid)]";
-
-/** Secondary: the panel's plain bordered button. */
-const BACK_BUTTON = `${BUTTON_BASE} border border-editor-border bg-editor-bg-primary text-editor-fg-primary hover:border-editor-border-strong`;
-
-/** Primary: solid accent, matching the plot tabs and the selected year chips. */
-const PRIMARY_BUTTON = `${BUTTON_BASE} border border-transparent bg-accent text-white hover:opacity-90`;
-
 function TourCard({
   backProps,
   index,
@@ -157,7 +200,9 @@ function TourCard({
   step,
   tooltipProps,
 }: TooltipRenderProps) {
-  const waiting = Boolean((step.data as { waiting?: boolean } | undefined)?.waiting);
+  const waiting = Boolean(
+    (step.data as { waiting?: boolean } | undefined)?.waiting,
+  );
 
   // A deep shadow would fall across the lit area, which on a phone is often
   // directly below the card. The border and the dimmed page already lift it.
@@ -188,20 +233,20 @@ function TourCard({
 
         <div className="flex items-center gap-2">
           {index > 0 ? (
-            <button {...backProps} type="button" title={undefined} className={BACK_BUTTON}>
+            <Button
+              {...backProps}
+              variant="outline"
+              size="sm"
+              title={undefined}
+            >
               Back
-            </button>
+            </Button>
           ) : null}
           {/* An interactive step is finished by doing the thing, not by a button. */}
           {waiting ? null : (
-            <button
-              {...primaryProps}
-              type="button"
-              title={undefined}
-              className={PRIMARY_BUTTON}
-            >
+            <Button {...primaryProps} size="sm" title={undefined}>
               {isLastStep ? "Done" : index === 0 ? "Show me" : "Next"}
-            </button>
+            </Button>
           )}
         </div>
       </div>
@@ -224,6 +269,7 @@ function TourPulse() {
 }
 
 export function MapTour({
+  pickedForUser,
   hasSelection,
   loadingSeries,
   seriesValues,
@@ -241,17 +287,23 @@ export function MapTour({
   );
   const [stepIndex, setStepIndex] = useState(0);
 
+  const hasData = hasFiniteValues(seriesValues);
   const gateState: TourGateState = {
     hasSelection,
     loadingSeries,
-    hasData: hasFiniteValues(seriesValues),
+    hasData,
     isMobile,
     panelOpen,
   };
 
   // Steps that only make sense in one arrangement drop out of the other, so
-  // the indices below and the "n / m" counter both stay honest.
-  const activeSteps = tourStepsFor(isMobile);
+  // the indices below and the "n / m" counter both stay honest. An empty
+  // auto-picked cell brings the pick step back in at the current index, so the
+  // tour lands on it showing the empty-cell hint.
+  const skipPick = pickedForUser && (loadingSeries || !seriesValues || hasData);
+  const activeSteps = tourStepsFor(isMobile).filter(
+    (spec) => !(skipPick && spec.id === "pick"),
+  );
   const current = activeSteps[stepIndex];
   const next = activeSteps[stepIndex + 1];
   const wantsPanel = isMobile ? current?.mobilePanel : undefined;
@@ -285,17 +337,12 @@ export function MapTour({
     return () => query.removeEventListener("change", onChange);
   }, []);
 
-  // The panel can be collapsed from a previous visit, and at desktop widths a
-  // collapsed panel is `visibility: hidden`, so every step from the third on
-  // would light up nothing. On mobile the sheet is the user's to open, which is
-  // what the "Open the record" step is for.
+  // The user may have closed the panel, and a step pointing into it would then
+  // light up nothing.
   useEffect(() => {
-    if (!run || isMobile) return;
-    if ((current?.gate ?? "none") === "none") return;
-
-    const sidebar = getSidebarState();
-    if (sidebar.collapsed) setSidebarState({ ...sidebar, collapsed: false });
-  }, [run, isMobile, current]);
+    if (!run || isMobile || current?.mobilePanel !== "open") return;
+    if (!panelOpen) onPanelOpenChange(true);
+  }, [run, isMobile, current, panelOpen, onPanelOpenChange]);
 
   // Interactive steps have no Next button: they end when the app says the user
   // did the thing. That is a fact about the current props rather than a side
@@ -305,12 +352,7 @@ export function MapTour({
   // Only once per step. The gate stays satisfied after the user acts, so
   // without this, stepping back into an interactive step would bounce straight
   // forward again and the card would never be readable a second time.
-  if (
-    run &&
-    current?.interactive &&
-    actionDone &&
-    advancedFrom !== stepIndex
-  ) {
+  if (run && current?.interactive && actionDone && advancedFrom !== stepIndex) {
     setAdvancedFrom(stepIndex);
     setStepIndex(stepIndex + 1);
   }
@@ -339,29 +381,34 @@ export function MapTour({
         : {}),
       // The sheet slides for 380ms and Joyride measures the target once, so a
       // step entered mid-slide lights the wrong rectangle and stays wrong.
-      ...(isMobile && spec.mobilePanel
-        ? { before: () => sheetSettled() }
-        : {}),
+      ...(isMobile && spec.mobilePanel ? { before: () => sheetSettled() } : {}),
       title: spec.title,
-      content: emptyCell ? [EMPTY_CELL_HINT] : spec.body,
+      content: emptyCell
+        ? [EMPTY_CELL_HINT]
+        : skipPick && spec.id === "record"
+          ? PICKED_FOR_USER_BODY
+          : spec.body,
+      floatingOptions: {
+        ...(spec.placement && !isMobile ? { flipOptions: false as const } : {}),
+        // The whole map is lit on this step, so the pulse has no edge to mark.
+        hideArrow: spec.id === "pick",
+      },
       placement:
         index === 0
           ? "center"
           : isMobile
             ? (spec.mobilePlacement ?? "auto")
-            : "auto",
+            : (spec.placement ?? "auto"),
       data: {
-        waiting:
-          !!spec.interactive &&
-          index === stepIndex &&
-          !actionDone,
+        waiting: !!spec.interactive && index === stepIndex && !actionDone,
       },
     };
   });
 
   const outlineTarget =
     current && current.target !== "body"
-      ? tourSpotlightFor(current, isMobile) ?? tourTargetFor(current, isMobile)
+      ? (tourSpotlightFor(current, isMobile) ??
+        tourTargetFor(current, isMobile))
       : null;
 
   return (
@@ -373,68 +420,75 @@ export function MapTour({
           padding={resolvePadding(paddingFor(current))}
         />
       ) : null}
+      {!isMobile && current?.id === "pick" && !actionDone ? (
+        <CursorHint />
+      ) : null}
       <Joyride
-      steps={steps}
-      run={run}
-      stepIndex={stepIndex}
-      continuous
-      tooltipComponent={TourCard}
-      arrowComponent={TourPulse}
-      options={{
-        overlayColor: OVERLAY_COLOR,
-        spotlightPadding: SPOTLIGHT_PADDING,
-        spotlightRadius: SPOTLIGHT_RADIUS,
-        // Put the pulse on the lit border rather than in the gap beside it.
-        // Joyride offsets the card by `offset + spotlightPadding + arrowSize`
-        // and the arrow box protrudes `arrowSize` back toward the target, so
-        // the box centre sits at `offset + spotlightPadding + arrowSize / 2`
-        // from the target edge. The border is at `spotlightPadding`, which
-        // leaves offset at minus half the arrow. The card still clears the
-        // border by `arrowSize / 2`.
-        arrowBase: PULSE_SIZE,
-        arrowSize: PULSE_SIZE,
-        offset: -PULSE_SIZE / 2,
-        zIndex: TOUR_Z_INDEX,
-        // Without this the overlay swallows the click the step is asking for.
-        blockTargetInteraction: false,
-        // No skip button on the card: clicking the dimmed area is the way out.
-        // Clicks inside the lit area still reach the app, so the steps that ask
-        // for one are unaffected.
-        overlayClickAction: "close",
-        // Focus is not trapped, so nothing is focused on open and the reader can
-        // still tab to the map or the tabs a step is pointing at.
-        disableFocusTrap: true,
-        skipBeacon: true,
-        targetWaitTimeout: 8000,
-      }}
-      onEvent={(data) => {
-        // `error:target_not_found` is not fatal: Joyride emits it while it
-        // polls for a target that has not mounted or is not visible yet, and
-        // `targetWaitTimeout` decides when to give up. Ending the tour here
-        // killed it whenever a step advanced a frame before its target
-        // committed, which is exactly what happens when a pick populates the
-        // panel.
-        if (data.status === "finished" || data.status === "skipped") {
-          finish();
-          return;
-        }
+        steps={steps}
+        run={run}
+        stepIndex={stepIndex}
+        continuous
+        tooltipComponent={TourCard}
+        arrowComponent={TourPulse}
+        options={{
+          overlayColor: OVERLAY_COLOR,
+          spotlightPadding: SPOTLIGHT_PADDING,
+          spotlightRadius: SPOTLIGHT_RADIUS,
+          // Put the pulse on the lit border rather than in the gap beside it.
+          // Joyride offsets the card by `offset + spotlightPadding + arrowSize`
+          // and the arrow box protrudes `arrowSize` back toward the target, so
+          // the box centre sits at `offset + spotlightPadding + arrowSize / 2`
+          // from the target edge. The border is at `spotlightPadding`, which
+          // leaves offset at minus half the arrow. The card still clears the
+          // border by `arrowSize / 2`.
+          arrowBase: PULSE_SIZE,
+          arrowSize: PULSE_SIZE,
+          offset: -PULSE_SIZE / 2,
+          zIndex: TOUR_Z_INDEX,
+          // Without this the overlay swallows the click the step is asking for.
+          blockTargetInteraction: false,
+          // No skip button on the card: clicking the dimmed area is the way out.
+          // Clicks inside the lit area still reach the app, so the steps that ask
+          // for one are unaffected.
+          overlayClickAction: "close",
+          // Focus is not trapped, so nothing is focused on open and the reader can
+          // still tab to the map or the tabs a step is pointing at.
+          disableFocusTrap: true,
+          skipBeacon: true,
+          // The shell is pinned to the viewport with overflow hidden, but a
+          // script can still scroll it. Joyride did, pushing the whole app up
+          // and leaving an empty band below the map.
+          skipScroll: !isMobile,
+          targetWaitTimeout: 8000,
+        }}
+        onEvent={(data) => {
+          // `error:target_not_found` is not fatal: Joyride emits it while it
+          // polls for a target that has not mounted or is not visible yet, and
+          // `targetWaitTimeout` decides when to give up. Ending the tour here
+          // killed it whenever a step advanced a frame before its target
+          // committed, which is exactly what happens when a pick populates the
+          // panel.
+          if (data.status === "finished" || data.status === "skipped") {
+            finish();
+            return;
+          }
 
-        if (data.type !== "step:after") return;
+          if (data.type !== "step:after") return;
 
-        if (data.action === "close" || data.action === "skip") {
-          finish();
-          return;
-        }
-        if (data.action === "prev") {
-          setStepIndex((index) => Math.max(0, index - 1));
-          return;
-        }
-        if (stepIndex >= activeSteps.length - 1) {
-          finish();
-          return;
-        }
-        setStepIndex((index) => index + 1);
-      }}
+          if (data.action === "close" || data.action === "skip") {
+            finish();
+            return;
+          }
+          if (data.action === "prev") {
+            setStepIndex((index) => Math.max(0, index - 1));
+            return;
+          }
+          if (stepIndex >= activeSteps.length - 1) {
+            finish();
+            return;
+          }
+          setStepIndex((index) => index + 1);
+        }}
       />
     </>
   );

@@ -1,4 +1,8 @@
 @import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+
+@custom-variant dark (&:is(.dark *));
 
 /* ============================================================
    EarthPrints design system
@@ -7,7 +11,7 @@
    Design tokens live as CSS custom properties so the theme can be
    swapped at runtime by toggling `.light` on :root. They are aliased
    into Tailwind's theme via `@theme inline` below, which keeps the
-   generated utilities (bg-accent, text-editor-fg-primary, …) pointing
+   generated utilities (bg-brand, text-editor-fg-primary, …) pointing
    at the live variables so they react to the theme switch.
    ============================================================ */
 :root {
@@ -35,11 +39,10 @@
     255,
     0.34
   ); /* 2.3:1 — decorative only, never body */
-  --border: rgba(220, 219, 214, 0.12);
   --border-strong: rgba(220, 219, 214, 0.18);
   /** Brand dark teal — icons on white chips, light-mode accent. */
   --accent-solid: #006c66;
-  --accent: #52d4c8;
+  --brand: #52d4c8;
   --accent-bright: #7df5e8;
   --accent-on-dark: #52d4c8;
   /** The guide keeps the dark accent in both themes, so it reads as one thing. */
@@ -58,30 +61,49 @@
   --editor-radius-lg: 16px; /* Lovable rounded-4 on preview frame */
   --editor-shadow: 0 18px 40px -24px rgba(0, 0, 0, 0.65);
 
-  /* Width of the open left panel, matching SIDEBAR_DEFAULT_WIDTH in
-     src/lib/sidebar.ts. The drag handle overwrites this inline on the root
-     element, and the boot script restores the stored value before first
-     paint. */
-  --editor-sidebar-width: 400px;
-  /* What the layout actually reserves: zero once the panel is collapsed, so
-     the panel keeps its own width and slides out from under the map. */
-  --editor-sidebar-track: var(--editor-sidebar-width);
+  --chart-1: oklch(0.87 0 0);
+  --chart-2: oklch(0.556 0 0);
+  --chart-3: oklch(0.439 0 0);
+  --chart-4: oklch(0.371 0 0);
+  --chart-5: oklch(0.269 0 0);
+  --radius: var(--editor-radius-sm);
+  --sidebar: oklch(0.985 0 0);
+  --sidebar-foreground: oklch(0.145 0 0);
+  --sidebar-primary: oklch(0.205 0 0);
+  --sidebar-primary-foreground: oklch(0.985 0 0);
+  --sidebar-accent: oklch(0.97 0 0);
+  --sidebar-accent-foreground: oklch(0.205 0 0);
+  --sidebar-border: oklch(0.922 0 0);
+  --sidebar-ring: oklch(0.708 0 0);
 }
 
-:root[data-sidebar-collapsed="true"] {
-  --editor-sidebar-track: 0px;
+/* shadcn tokens point at the editor tokens, so they switch with the theme.
+   Redeclared under .theme-light because the export renders light plots
+   while the page itself may be dark. */
+:root,
+.theme-light {
+  --background: var(--editor-bg-primary);
+  --foreground: var(--editor-fg-primary);
+  --card: var(--editor-bg-primary);
+  --card-foreground: var(--editor-fg-primary);
+  --popover: var(--editor-bg-primary);
+  --popover-foreground: var(--editor-fg-primary);
+  --primary: var(--brand);
+  --primary-foreground: var(--editor-bg-primary);
+  --secondary: var(--editor-bg-secondary);
+  --secondary-foreground: var(--editor-fg-primary);
+  --muted: var(--editor-bg-secondary);
+  --muted-foreground: var(--editor-fg-tertiary);
+  --accent: color-mix(in srgb, var(--editor-fg-primary) 8%, var(--editor-bg-primary));
+  --accent-foreground: var(--editor-fg-primary);
+  --border: var(--editor-border);
+  --destructive: oklch(0.577 0.245 27.325);
+  --input: var(--editor-border);
+  --ring: var(--accent-solid);
 }
 
-/* A panel clipped to zero width still holds its tab stops, so fold it out of
-   the document too. visibility flips discretely at the ends of a transition,
-   which leaves the slide-out itself visible on the way. */
-@media (min-width: 901px) {
-  :root[data-sidebar-collapsed="true"] .editor-sidebar {
-    visibility: hidden;
-  }
-}
-
-:root.light {
+:root.light,
+.theme-light {
   --bg: #ffffff;
   --bg-deep: #f4f4f2;
   --surface: #ffffff;
@@ -96,10 +118,9 @@
   ); /* 5.0:1 — AA body text, subtitles */
   --text-muted: rgba(10, 10, 10, 0.56); /* 3.8:1 — AA large text only (18px+) */
   --text-dim: rgba(10, 10, 10, 0.36); /* 2.4:1 — decorative only, never body */
-  --border: rgba(45, 45, 42, 0.12);
   --border-strong: rgba(45, 45, 42, 0.17);
   --accent-solid: #006c66;
-  --accent: #006c66;
+  --brand: #006c66;
   --accent-bright: #00837b;
   --accent-on-dark: #006c66;
   --editor-bg-depth: #ececea;
@@ -124,7 +145,7 @@
   --color-text-dim: var(--text-dim);
   --color-border: var(--border);
   --color-border-strong: var(--border-strong);
-  --color-accent: var(--accent);
+  --color-brand: var(--brand);
   --color-accent-solid: var(--accent-solid);
   --color-accent-bright: var(--accent-bright);
   --color-editor-bg-base: var(--editor-bg-base);
@@ -148,6 +169,44 @@
   --font-mono:
     var(--font-geist-mono), "Geist Mono", "Geist Mono Fallback", ui-monospace,
     monospace;
+  --font-heading: var(--font-sans);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-chart-5: var(--chart-5);
+  --color-chart-4: var(--chart-4);
+  --color-chart-3: var(--chart-3);
+  --color-chart-2: var(--chart-2);
+  --color-chart-1: var(--chart-1);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-destructive: var(--destructive);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  --color-foreground: var(--foreground);
+  --color-background: var(--background);
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
+  --radius-3xl: calc(var(--radius) * 2.2);
+  --radius-4xl: calc(var(--radius) * 2.6);
 }
 
 @layer base {
@@ -166,6 +225,7 @@
     transition:
       background 0.5s ease,
       color 0.5s ease;
+    @apply bg-background text-foreground;
   }
 
   /* The app only ever renders the editor shell, which owns the viewport. */
@@ -176,12 +236,6 @@
     overscroll-behavior: none;
   }
 
-  /* The footer is rendered by the root layout on every route, but the app
-     only ever shows the editor, which hides it. */
-  body:has(.editor-shell) .site-footer {
-    display: none;
-  }
-
   a {
     color: inherit;
     text-decoration: none;
@@ -190,90 +244,27 @@
   button {
     cursor: pointer;
   }
-}
-
-/* ============================================================
-   Custom classes — only for what utilities can't express cleanly:
-   the theme-driven icon swap and styling the third-party MapLibre
-   canvas inside our stage.
-   ============================================================ */
-
-/* While the seam is being dragged the pointer is captured, so the col-resize
-   cursor has to be forced across the whole document and text selection
-   suppressed or the drag paints a blue smear over the panel. */
-:root[data-sidebar-resizing="true"] {
-  cursor: col-resize;
-}
-
-:root[data-sidebar-resizing="true"] * {
-  cursor: col-resize !important;
-  user-select: none !important;
-}
-
-/* Collapsing eases; dragging must not, or the panel lags a frame behind the
-   seam the whole way across. */
-:root[data-sidebar-resizing="true"] .editor-sidebar {
-  transition: none;
-}
-
-.theme-icon-moon {
-  display: none;
-}
-
-:root.light .theme-icon-moon {
-  display: block;
-}
-
-:root.light .theme-icon-sun {
-  display: none;
-}
-
-.map-stage .maplibregl-map {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-}
-
-.map-stage canvas {
-  outline: none;
-}
-
-@keyframes zoomToSelectionIn {
-  from {
-    opacity: 0;
-    transform: scale(0.8);
+  * {
+    @apply border-border outline-ring/50;
   }
-  to {
-    opacity: 1;
-    transform: scale(1);
+  html {
+    @apply font-sans;
   }
 }
 
-/* Indeterminate progress: a segment sweeping across the track while a
-   download is in flight. We show motion rather than a fabricated percent,
-   since the pixel fetch is a single slice request with no per-chunk hook. */
-@keyframes progressIndeterminate {
-  from {
-    transform: translateX(-100%);
-  }
-  to {
-    transform: translateX(250%);
-  }
+.dark {
+  --destructive: oklch(0.704 0.191 22.216);
+  --chart-1: oklch(0.87 0 0);
+  --chart-2: oklch(0.556 0 0);
+  --chart-3: oklch(0.439 0 0);
+  --chart-4: oklch(0.371 0 0);
+  --chart-5: oklch(0.269 0 0);
+  --sidebar: oklch(0.205 0 0);
+  --sidebar-foreground: oklch(0.985 0 0);
+  --sidebar-primary: oklch(0.488 0.243 264.376);
+  --sidebar-primary-foreground: oklch(0.985 0 0);
+  --sidebar-accent: oklch(0.269 0 0);
+  --sidebar-accent-foreground: oklch(0.985 0 0);
+  --sidebar-border: oklch(1 0 0 / 10%);
+  --sidebar-ring: oklch(0.556 0 0);
 }
-
-.progress-bar-indeterminate {
-  animation: progressIndeterminate 1.4s cubic-bezier(0.4, 0, 0.2, 1) infinite;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .progress-bar-indeterminate {
-    animation: none;
-    width: 100%;
-    opacity: 0.55;
-  }
-}
-
-/* The guide draws its own outline around the lit area (see MapTour), because
-   Joyride's overlay is a single path holding the cutout and an outer rectangle
-   the size of the viewport: stroking it frames the whole page. */

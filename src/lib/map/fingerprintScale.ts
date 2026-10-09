@@ -83,6 +83,13 @@ export function defaultColormapId(isLight: boolean): ColormapId {
   return isLight ? "vik" : "berlin";
 }
 
+/** What the user picks; Science resolves to the theme's default table. */
+export type Palette = "science" | "flux";
+
+export function colormapFor(palette: Palette, isLight: boolean): ColormapId {
+  return palette === "flux" ? "flux" : defaultColormapId(isLight);
+}
+
 export type Rgb = readonly [number, number, number];
 
 // ---------------------------------------------------------------------------

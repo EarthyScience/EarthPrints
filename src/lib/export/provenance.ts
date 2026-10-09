@@ -118,7 +118,11 @@ export function isoDate(date: Date): string {
   return date.toISOString().slice(0, 10);
 }
 
-function coordinateTag(value: number, positive: string, negative: string): string {
+function coordinateTag(
+  value: number,
+  positive: string,
+  negative: string,
+): string {
   return `${Math.abs(value).toFixed(3)}${value >= 0 ? positive : negative}`;
 }
 

@@ -7,7 +7,7 @@ import {
   formatDayTick,
   FINGERPRINT_HOUR_TICKS,
 } from "@/lib/map/fingerprintScale";
-import { formatSeriesValue } from "@/components/map/timeSeriesChartConfig";
+import { formatSeriesValue } from "@/lib/plots/chartTheme";
 import {
   formatSelectedYearsLabel,
   getSelectedYearsDayMapping,
@@ -42,7 +42,7 @@ export type SquareFingerprintOptions = {
   watermarkText?: string;
   selectedYear?: number | null;
   selectedYears?: number[] | null;
-  /** Which colour palette to use. Defaults to "science-light" (light export standard). */
+  /** Which colour palette to use. Defaults to the theme's Science table. */
   colormapId?: ColormapId;
 };
 
