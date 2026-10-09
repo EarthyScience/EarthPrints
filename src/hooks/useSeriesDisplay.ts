@@ -9,30 +9,33 @@ import {
   type TimeBasis,
 } from "@/lib/zarr/localTime";
 import { hasFiniteValues } from "@/lib/zarr/series";
-import type { ColormapId } from "@/lib/map/fingerprintScale";
-import { loadColormap, saveColormap } from "@/lib/settings/colormap";
+import { colormapFor, type Palette } from "@/lib/map/fingerprintScale";
+import { loadPalette, savePalette } from "@/lib/settings/colormap";
 import { useTheme } from "@/providers/ThemeProvider";
 import type { CellSeries } from "@/hooks/useCellSeries";
 
 export type PlotView = "line" | "fingerprint";
 
-export function useSeriesDisplay({
-  selection,
-  selectedYears,
-  values,
-  loading,
-}: Pick<CellSeries, "selection" | "selectedYears" | "values" | "loading">) {
+export function useSeriesDisplay(
+  {
+    selection,
+    selectedYears,
+    values,
+    loading,
+  }: Pick<CellSeries, "selection" | "selectedYears" | "values" | "loading">,
+  timeBasis: TimeBasis,
+) {
   const { isLight } = useTheme();
   const [plotView, setPlotView] = useState<PlotView>("line");
   const [transposed, setTransposed] = useState(false);
-  const [timeBasis, setTimeBasis] = useState<TimeBasis>("local");
-  const [colormapId, setColormapIdState] = useState<ColormapId>(
-    () => loadColormap() ?? (isLight ? "science-light" : "science-dark"),
+  const [palette, setPaletteState] = useState<Palette>(
+    () => loadPalette() ?? "science",
   );
+  const colormapId = colormapFor(palette, isLight);
 
-  const setColormapId = (id: ColormapId) => {
-    setColormapIdState(id);
-    saveColormap(id);
+  const setPalette = (next: Palette) => {
+    setPaletteState(next);
+    savePalette(next);
   };
 
   // Checked before the local-time shift, which blanks a few edge hours.
@@ -65,11 +68,11 @@ export function useSeriesDisplay({
     transposed,
     setTransposed,
     timeBasis,
-    setTimeBasis,
     utcOffsetHours,
     timeBasisLabel,
+    palette,
+    setPalette,
     colormapId,
-    setColormapId,
     hasPlottableData,
     isEmptyCell,
     displayValues,

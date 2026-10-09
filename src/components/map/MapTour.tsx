@@ -90,28 +90,27 @@ function SpotlightOutline({
     const target = document.querySelector(selector);
     if (!target) return;
 
+    // Polled per frame because the panel can move without resizing (slide-in,
+    // content above it settling), which no observer or event reports.
+    let frame = 0;
+    let last = "";
     const measure = () => {
       const rect = target.getBoundingClientRect();
-      setBox({
-        top: rect.top - padding.top,
-        left: rect.left - padding.left,
-        right: rect.width + padding.left + padding.right,
-        bottom: rect.height + padding.top + padding.bottom,
-      });
+      const key = `${rect.top},${rect.left},${rect.width},${rect.height}`;
+      if (key !== last) {
+        last = key;
+        setBox({
+          top: rect.top - padding.top,
+          left: rect.left - padding.left,
+          right: rect.width + padding.left + padding.right,
+          bottom: rect.height + padding.top + padding.bottom,
+        });
+      }
+      frame = requestAnimationFrame(measure);
     };
+    frame = requestAnimationFrame(measure);
 
-    const frame = requestAnimationFrame(measure);
-    const observer = new ResizeObserver(measure);
-    observer.observe(target);
-    window.addEventListener("resize", measure);
-    window.addEventListener("scroll", measure, true);
-
-    return () => {
-      cancelAnimationFrame(frame);
-      observer.disconnect();
-      window.removeEventListener("resize", measure);
-      window.removeEventListener("scroll", measure, true);
-    };
+    return () => cancelAnimationFrame(frame);
   }, [selector, padding.top, padding.right, padding.bottom, padding.left]);
 
   if (!box) return null;
@@ -384,6 +383,10 @@ export function MapTour({
           // still tab to the map or the tabs a step is pointing at.
           disableFocusTrap: true,
           skipBeacon: true,
+          // The shell is pinned to the viewport with overflow hidden, but a
+          // script can still scroll it. Joyride did, pushing the whole app up
+          // and leaving an empty band below the map.
+          skipScroll: !isMobile,
           targetWaitTimeout: 8000,
         }}
         onEvent={(data) => {

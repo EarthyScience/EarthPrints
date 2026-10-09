@@ -1,6 +1,6 @@
 "use client";
 
-import { Moon, Sun } from "lucide-react";
+import { Compass, Moon, Sun } from "lucide-react";
 import {
   allYearsBytesFor,
   formatBytes,
@@ -8,11 +8,14 @@ import {
   type PatchWindowSize,
 } from "@/lib/settings/patchWindow";
 import type { Theme } from "@/lib/theme";
+import { requestGuide } from "@/lib/tour";
+import type { TimeBasis } from "@/lib/zarr/localTime";
 import type { MapViewMode } from "@/types/map";
 import type { MapSettings } from "@/hooks/useMapSettings";
 import { useTheme } from "@/providers/ThemeProvider";
 import { FloatingPanel } from "@/components/panels/FloatingPanel";
 import { ViewModeTabs } from "@/components/map/ViewModeTabs";
+import { Button } from "@/components/ui/button";
 import {
   Field,
   FieldContent,
@@ -32,12 +35,18 @@ const THEMES = [
   { value: "dark", label: "Dark", icon: Moon },
 ] as const;
 
+const TIME_BASES = [
+  { value: "local", label: "Local" },
+  { value: "utc", label: "UTC" },
+] as const;
+
 type SettingsPanelProps = {
   settings: MapSettings;
   patchWindow: PatchWindowSize;
   onPatchWindowChange: (size: PatchWindowSize) => void;
   viewMode: MapViewMode;
   onViewModeChange: (mode: MapViewMode) => void;
+  onClose: () => void;
 };
 
 export function SettingsPanel({
@@ -46,6 +55,7 @@ export function SettingsPanel({
   onPatchWindowChange,
   viewMode,
   onViewModeChange,
+  onClose,
 }: SettingsPanelProps) {
   const { theme, toggleTheme } = useTheme();
 
@@ -66,6 +76,19 @@ export function SettingsPanel({
             />
           </div>
         </FieldSet>
+
+        <FieldSeparator />
+
+        <Field orientation="horizontal">
+          <FieldLabel>Plot hours in</FieldLabel>
+          <SegmentedTabs<TimeBasis>
+            value={settings.timeBasis}
+            onChange={settings.setTimeBasis}
+            options={TIME_BASES}
+            aria-label="Time basis"
+            className="w-32 shrink-0"
+          />
+        </Field>
 
         <FieldSeparator />
 
@@ -130,6 +153,29 @@ export function SettingsPanel({
             ))}
           </RadioGroup>
         </FieldSet>
+
+        <FieldSeparator />
+
+        <Field orientation="horizontal">
+          <FieldContent>
+            <FieldLabel>Guide</FieldLabel>
+            <FieldDescription>
+              Six steps on picking a cell, reading its plots, and choosing
+              years.
+            </FieldDescription>
+          </FieldContent>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              onClose();
+              requestGuide();
+            }}
+          >
+            <Compass />
+            Restart
+          </Button>
+        </Field>
       </FieldGroup>
     </FloatingPanel>
   );

@@ -4,6 +4,7 @@ import { MousePointerClick } from "lucide-react";
 import { cn } from "cn";
 import type { CellSeries } from "@/hooks/useCellSeries";
 import { useSeriesDisplay } from "@/hooks/useSeriesDisplay";
+import type { TimeBasis } from "@/lib/zarr/localTime";
 import { CellView } from "@/components/panels/CellView";
 import { CellExport } from "@/components/panels/CellExport";
 import { FloatingPanel } from "@/components/panels/FloatingPanel";
@@ -20,8 +21,13 @@ import {
 } from "@/components/ui/segmented-tabs";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
-export function CellPanel({ series }: { series: CellSeries }) {
-  const display = useSeriesDisplay(series);
+type CellPanelProps = {
+  series: CellSeries;
+  timeBasis: TimeBasis;
+};
+
+export function CellPanel({ series, timeBasis }: CellPanelProps) {
+  const display = useSeriesDisplay(series, timeBasis);
 
   if (!series.selection) {
     return (

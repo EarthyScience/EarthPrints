@@ -82,7 +82,7 @@ export const TOUR_STEPS: TourStepSpec[] = [
     target: '[data-tour="plot"]',
     title: "Two views of the same numbers",
     body: [
-      "Line is the daily mean, one point per day. Fingerprint keeps all 24 hours: columns are days, rows are hours in the cell's own local time, blue for uptake and red for release.",
+      "Line is the daily mean, one point per day. Fingerprint keeps all 24 hours: columns are days, rows are hours in local time (or UTC, set in Settings), blue for uptake and red for release.",
       "The Export tab downloads a zip: a PDF report, the hourly numbers as XLSX and CSV, and both plots as images.",
     ],
     gate: "series",

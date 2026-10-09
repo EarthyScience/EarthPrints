@@ -242,7 +242,9 @@ export function ReliefMap() {
         <div className="pointer-events-auto relative">
           <MapToolbar openPanel={openPanel} onOpenPanelChange={setOpenPanel} />
           <div className="absolute left-0 top-full mt-2">
-            {openPanel === "chart" ? <CellPanel series={series} /> : null}
+            {openPanel === "chart" ? (
+              <CellPanel series={series} timeBasis={settings.timeBasis} />
+            ) : null}
             {openPanel === "settings" ? (
               <SettingsPanel
                 settings={settings}
@@ -250,6 +252,7 @@ export function ReliefMap() {
                 onPatchWindowChange={series.setPatchWindow}
                 viewMode={viewMode}
                 onViewModeChange={handleViewModeChange}
+                onClose={() => setOpenPanel(null)}
               />
             ) : null}
             {openPanel === "help" ? (

@@ -20,7 +20,6 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Toggle } from "@/components/ui/toggle";
-import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 
 type CellViewProps = {
   series: CellSeries;
@@ -54,72 +53,46 @@ export function CellView({ series, display }: CellViewProps) {
       />
 
       <section aria-live="polite" data-tour="plot" className="grid gap-3">
-        <div className="flex flex-wrap items-center gap-2">
-          <Tabs
-            value={display.plotView}
-            onValueChange={(value) => display.setPlotView(value as PlotView)}
-          >
-            <TabsList>
-              <TabsTrigger
-                value="line"
-                disabled={disabled}
-                className="data-active:bg-brand/15 data-active:text-brand dark:data-active:bg-brand/15 dark:data-active:text-brand"
-              >
-                Line
-              </TabsTrigger>
-              <TabsTrigger
-                value="fingerprint"
-                disabled={disabled}
-                className="data-active:bg-brand/15 data-active:text-brand dark:data-active:bg-brand/15 dark:data-active:text-brand"
-              >
-                Fingerprint
-              </TabsTrigger>
-            </TabsList>
-          </Tabs>
-
-          <ToggleGroup
-            value={[display.timeBasis]}
-            onValueChange={(value) => {
-              if (value[0]) display.setTimeBasis(value[0] as "local" | "utc");
-            }}
-            aria-label="Time basis"
-            title={`Hours read in ${display.timeBasisLabel}, or as stored in UTC`}
-          >
-            <ToggleGroupItem
-              value="local"
+        <Tabs
+          value={display.plotView}
+          onValueChange={(value) => display.setPlotView(value as PlotView)}
+        >
+          <TabsList>
+            <TabsTrigger
+              value="line"
               disabled={disabled}
-              className="aria-pressed:bg-brand/15 aria-pressed:text-brand"
+              className="data-active:bg-brand/15 data-active:text-brand dark:data-active:bg-brand/15 dark:data-active:text-brand"
             >
-              Local
-            </ToggleGroupItem>
-            <ToggleGroupItem
-              value="utc"
+              Line
+            </TabsTrigger>
+            <TabsTrigger
+              value="fingerprint"
               disabled={disabled}
-              className="aria-pressed:bg-brand/15 aria-pressed:text-brand"
+              className="data-active:bg-brand/15 data-active:text-brand dark:data-active:bg-brand/15 dark:data-active:text-brand"
             >
-              UTC
-            </ToggleGroupItem>
-          </ToggleGroup>
+              Fingerprint
+            </TabsTrigger>
+          </TabsList>
+        </Tabs>
 
-          {display.plotView === "fingerprint" ? (
+        {display.plotView === "fingerprint" ? (
+          <div className="flex flex-wrap items-center gap-2">
             <Toggle
               pressed={display.transposed}
               onPressedChange={display.setTransposed}
               disabled={disabled}
               title="Swap the hour and day axes"
-              className="aria-pressed:bg-brand/15 aria-pressed:text-brand"
+              variant="outline"
+              className="dark:bg-input/30 dark:hover:bg-input/50 aria-pressed:bg-brand/15 aria-pressed:text-brand dark:aria-pressed:bg-brand/15"
             >
               <ArrowLeftRight />
               Flip axes
             </Toggle>
-          ) : null}
-        </div>
-
-        {display.plotView === "fingerprint" ? (
-          <ColormapSelect
-            value={display.colormapId}
-            onChange={display.setColormapId}
-          />
+            <ColormapSelect
+              value={display.palette}
+              onChange={display.setPalette}
+            />
+          </div>
         ) : null}
 
         <PlotArea series={series} display={display} />

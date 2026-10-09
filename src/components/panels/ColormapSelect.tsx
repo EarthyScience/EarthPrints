@@ -2,8 +2,10 @@
 
 import {
   COLORMAPS,
+  colormapFor,
   fingerprintColorScale,
   type ColormapId,
+  type Palette,
 } from "@/lib/map/fingerprintScale";
 import {
   Select,
@@ -12,8 +14,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { useTheme } from "@/providers/ThemeProvider";
 
-const COLORMAP_IDS: ColormapId[] = ["science-light", "science-dark", "flux"];
+const PALETTES: Palette[] = ["science", "flux"];
 
 function swatchGradient(id: ColormapId): string {
   const scale = fingerprintColorScale(id);
@@ -27,7 +30,10 @@ function swatchGradient(id: ColormapId): string {
 }
 
 const SWATCHES = Object.fromEntries(
-  COLORMAP_IDS.map((id) => [id, swatchGradient(id)]),
+  (Object.keys(COLORMAPS) as ColormapId[]).map((id) => [
+    id,
+    swatchGradient(id),
+  ]),
 ) as Record<ColormapId, string>;
 
 function Swatch({ id }: { id: ColormapId }) {
@@ -41,29 +47,35 @@ function Swatch({ id }: { id: ColormapId }) {
 }
 
 type ColormapSelectProps = {
-  value: ColormapId;
-  onChange: (id: ColormapId) => void;
+  value: Palette;
+  onChange: (palette: Palette) => void;
 };
 
 export function ColormapSelect({ value, onChange }: ColormapSelectProps) {
+  const { isLight } = useTheme();
+  const selected = colormapFor(value, isLight);
   return (
-    <Select
-      value={value}
-      onValueChange={(next) => onChange(next as ColormapId)}
-    >
+    <Select value={value} onValueChange={(next) => onChange(next as Palette)}>
       <SelectTrigger aria-label="Palette">
         <SelectValue>
-          <Swatch id={value} />
-          {COLORMAPS[value].label}
+          <Swatch id={selected} />
+          {COLORMAPS[selected].label}
         </SelectValue>
       </SelectTrigger>
       <SelectContent>
-        {COLORMAP_IDS.map((id) => (
-          <SelectItem key={id} value={id} title={COLORMAPS[id].description}>
-            <Swatch id={id} />
-            {COLORMAPS[id].label}
-          </SelectItem>
-        ))}
+        {PALETTES.map((palette) => {
+          const id = colormapFor(palette, isLight);
+          return (
+            <SelectItem
+              key={palette}
+              value={palette}
+              title={COLORMAPS[id].description}
+            >
+              <Swatch id={id} />
+              {COLORMAPS[id].label}
+            </SelectItem>
+          );
+        })}
       </SelectContent>
     </Select>
   );
