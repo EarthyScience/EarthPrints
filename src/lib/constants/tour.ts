@@ -11,6 +11,8 @@ export type TourStepSpec = {
   only?: "mobile" | "desktop";
   /** Where the light falls below the desktop breakpoint. */
   mobileSpotlightTarget?: string;
+  /** Overrides automatic placement at the desktop breakpoint and above. */
+  placement?: "right";
   /** Overrides automatic placement below the desktop breakpoint. */
   mobilePlacement?: "center" | "top";
   /** Overrides the padding around the lit area below the desktop breakpoint. */
@@ -36,6 +38,12 @@ export type TourStepSpec = {
 /** Shown in place of step two's body when the picked cell holds no data. */
 export const EMPTY_CELL_HINT =
   "That cell is empty, which happens over water and bare ground. Try one over land.";
+
+/** Step three's body when the map picked the user's own cell for them. */
+export const PICKED_FOR_USER_BODY = [
+  "The map picked the 0.05° cell you are in, roughly 5km across, and the panel now holds that cell's record: an hourly estimate of net ecosystem exchange, a measure of the carbon a place takes in and the carbon it breathes back out.",
+  "Click anywhere on land to see another place.",
+];
 
 export const TOUR_STEPS: TourStepSpec[] = [
   {
@@ -70,6 +78,7 @@ export const TOUR_STEPS: TourStepSpec[] = [
     id: "record",
     mobilePanel: "open",
     target: '[data-tour="record"]',
+    placement: "right",
     title: "What a click fetches",
     body: [
       "Your click snapped to the nearest 0.05° cell, roughly 5km across, and the panel now holds that cell's record: an hourly estimate of net ecosystem exchange, a measure of the carbon a place takes in and the carbon it breathes back out.",

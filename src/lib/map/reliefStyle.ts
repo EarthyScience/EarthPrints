@@ -1,5 +1,6 @@
 import type {
   ExpressionSpecification,
+  LayerSpecification,
   SkySpecification,
   StyleSpecification,
 } from "maplibre-gl";
@@ -42,6 +43,9 @@ type ReliefPalette = {
   accent: string;
   exaggeration: number | ExpressionSpecification;
   boundary: string;
+  road: string;
+  roadMajor: string;
+  building: string;
   label: string;
   labelHalo: string;
   waterLabel: string;
@@ -71,6 +75,9 @@ export const RELIEF_PALETTES: Record<Theme, ReliefPalette> = {
     // Full strength at globe scale, where slopes are only a few pixels wide.
     exaggeration: ["interpolate", ["linear"], ["zoom"], 0, 1, 6, 0.7],
     boundary: "rgba(92, 98, 122, 0.3)",
+    road: "rgba(92, 98, 122, 0.22)",
+    roadMajor: "rgba(92, 98, 122, 0.38)",
+    building: "rgba(92, 98, 122, 0.14)",
     label: "#4a4f5e",
     labelHalo: "rgba(246, 247, 250, 0.9)",
     waterLabel: "#7d8399",
@@ -116,6 +123,9 @@ export const RELIEF_PALETTES: Record<Theme, ReliefPalette> = {
     accent: "rgba(0, 0, 0, 0.4)",
     exaggeration: 0.5,
     boundary: "rgba(210, 220, 230, 0.22)",
+    road: "rgba(210, 220, 230, 0.16)",
+    roadMajor: "rgba(210, 220, 230, 0.28)",
+    building: "rgba(210, 220, 230, 0.1)",
     label: "#ffffff",
     labelHalo: "rgba(0, 0, 0, 0.92)",
     waterLabel: "#7f9bb3",
@@ -151,6 +161,28 @@ function elevationRamp(stops: [number, string][]): ExpressionSpecification {
 }
 
 const LABEL_FONT = ["Noto Sans Regular"];
+
+// Each road tier fades in once it is dense enough to read, so the relief
+// stays the subject at regional zoom.
+const ROAD_TIERS = [
+  { id: "road-major", classes: ["motorway", "trunk", "primary"], minzoom: 6 },
+  { id: "road-mid", classes: ["secondary", "tertiary"], minzoom: 9 },
+  { id: "road-minor", classes: ["minor", "service"], minzoom: 12 },
+] as const;
+
+function roadWidth(base: number): ExpressionSpecification {
+  return [
+    "interpolate",
+    ["exponential", 1.5],
+    ["zoom"],
+    6,
+    base * 0.3,
+    12,
+    base,
+    18,
+    base * 10,
+  ];
+}
 const LABEL_FONT_BOLD = ["Noto Sans Bold"];
 
 function buildStyle(
@@ -254,6 +286,46 @@ function buildStyle(
         },
       },
       {
+        id: "building",
+        type: "fill",
+        source: VECTOR_SOURCE_ID,
+        "source-layer": "building",
+        minzoom: 13,
+        paint: {
+          "fill-color": palette.building,
+          "fill-opacity": ["interpolate", ["linear"], ["zoom"], 13, 0, 14, 1],
+        },
+      },
+      ...[...ROAD_TIERS]
+        .reverse()
+        .map((tier, index, tiers): LayerSpecification => ({
+          id: tier.id,
+          type: "line",
+          source: VECTOR_SOURCE_ID,
+          "source-layer": "transportation",
+          minzoom: tier.minzoom,
+          filter: [
+            "all",
+            ["match", ["get", "class"], [...tier.classes], true, false],
+            ["!=", ["get", "brunnel"], "tunnel"],
+          ],
+          layout: { "line-cap": "round", "line-join": "round" },
+          paint: {
+            "line-color":
+              index === tiers.length - 1 ? palette.roadMajor : palette.road,
+            "line-width": roadWidth(tiers.length - index),
+            "line-opacity": [
+              "interpolate",
+              ["linear"],
+              ["zoom"],
+              tier.minzoom,
+              0,
+              tier.minzoom + 1,
+              1,
+            ],
+          },
+        })),
+      {
         id: "boundary-country",
         type: "line",
         source: VECTOR_SOURCE_ID,
@@ -295,7 +367,7 @@ function buildStyle(
         type: "symbol",
         source: VECTOR_SOURCE_ID,
         "source-layer": "place",
-        minzoom: 4,
+        minzoom: 3,
         filter: ["==", ["get", "class"], "city"],
         layout: {
           "text-field": SINGLE_LINE_LABEL_TEXT_FIELD,
@@ -304,14 +376,32 @@ function buildStyle(
             "interpolate",
             ["exponential", 1.2],
             ["zoom"],
-            4,
-            11,
+            3,
+            10,
             7,
             13,
             11,
             18,
           ],
           "text-max-width": 8,
+          // Lower rank is a larger city, so it wins label collisions.
+          "symbol-sort-key": ["get", "rank"],
+        },
+        paint: labelPaint,
+      },
+      {
+        id: "label-town",
+        type: "symbol",
+        source: VECTOR_SOURCE_ID,
+        "source-layer": "place",
+        minzoom: 8,
+        filter: ["==", ["get", "class"], "town"],
+        layout: {
+          "text-field": SINGLE_LINE_LABEL_TEXT_FIELD,
+          "text-font": LABEL_FONT,
+          "text-size": ["interpolate", ["linear"], ["zoom"], 8, 10, 12, 14],
+          "text-max-width": 8,
+          "symbol-sort-key": ["get", "rank"],
         },
         paint: labelPaint,
       },

@@ -10,6 +10,7 @@ import {
 } from "react-joyride";
 import {
   EMPTY_CELL_HINT,
+  PICKED_FOR_USER_BODY,
   tourSpotlightFor,
   tourSpotlightPaddingFor,
   tourStepsFor,
@@ -28,6 +29,8 @@ import {
 import { Button } from "@/components/ui/button";
 
 type MapTourProps = {
+  /** The map picked the user's own cell, so there is nothing to ask them to pick. */
+  pickedForUser: boolean;
   hasSelection: boolean;
   loadingSeries: boolean;
   seriesValues: Float32Array | null;
@@ -38,6 +41,7 @@ type MapTourProps = {
 
 /** Above the floating panels and their popovers. */
 const TOUR_Z_INDEX = 300;
+const CURSOR_HINT_GAP = 14;
 
 /**
  * The mobile sheet's own transition, plus a frame. Nothing emits an event when
@@ -77,6 +81,55 @@ function resolvePadding(value: SpotlightPadding | number | undefined): Insets {
  * browser, so the outline is drawn as its own element against the same rect
  * Joyride lights.
  */
+/**
+ * A label that follows the pointer over the map while the guide waits for the
+ * first pick, so the instruction sits where the click has to happen.
+ */
+function CursorHint() {
+  const [point, setPoint] = useState<{ x: number; y: number } | null>(null);
+  const [bounds, setBounds] = useState<DOMRect | null>(null);
+  const [size, setSize] = useState({ width: 0, height: 0 });
+
+  useEffect(() => {
+    const map = document.querySelector<HTMLElement>('[data-tour="map"]');
+    if (!map) return;
+    const move = (event: PointerEvent) => {
+      setBounds(map.getBoundingClientRect());
+      setPoint({ x: event.clientX, y: event.clientY });
+    };
+    const leave = () => setPoint(null);
+    map.addEventListener("pointermove", move);
+    map.addEventListener("pointerleave", leave);
+    return () => {
+      map.removeEventListener("pointermove", move);
+      map.removeEventListener("pointerleave", leave);
+    };
+  }, []);
+
+  const measure = useCallback((node: HTMLDivElement | null) => {
+    if (node) setSize({ width: node.offsetWidth, height: node.offsetHeight });
+  }, []);
+
+  if (!point || !bounds) return null;
+
+  // Pinned against the map's right and bottom edges rather than flipped, so
+  // the label never runs past them and never jumps sides.
+  const left = Math.min(point.x + CURSOR_HINT_GAP, bounds.right - size.width);
+  const top = Math.min(point.y + CURSOR_HINT_GAP, bounds.bottom - size.height);
+
+  return createPortal(
+    <div
+      ref={measure}
+      aria-hidden
+      className="pointer-events-none fixed whitespace-nowrap rounded-md bg-popover px-2 py-1 text-xs text-popover-foreground shadow-md ring-1 ring-border"
+      style={{ left, top, zIndex: TOUR_Z_INDEX + 1 }}
+    >
+      Click to pick a place
+    </div>,
+    document.body,
+  );
+}
+
 function SpotlightOutline({
   selector,
   padding,
@@ -216,6 +269,7 @@ function TourPulse() {
 }
 
 export function MapTour({
+  pickedForUser,
   hasSelection,
   loadingSeries,
   seriesValues,
@@ -233,17 +287,23 @@ export function MapTour({
   );
   const [stepIndex, setStepIndex] = useState(0);
 
+  const hasData = hasFiniteValues(seriesValues);
   const gateState: TourGateState = {
     hasSelection,
     loadingSeries,
-    hasData: hasFiniteValues(seriesValues),
+    hasData,
     isMobile,
     panelOpen,
   };
 
   // Steps that only make sense in one arrangement drop out of the other, so
-  // the indices below and the "n / m" counter both stay honest.
-  const activeSteps = tourStepsFor(isMobile);
+  // the indices below and the "n / m" counter both stay honest. An empty
+  // auto-picked cell brings the pick step back in at the current index, so the
+  // tour lands on it showing the empty-cell hint.
+  const skipPick = pickedForUser && (loadingSeries || !seriesValues || hasData);
+  const activeSteps = tourStepsFor(isMobile).filter(
+    (spec) => !(skipPick && spec.id === "pick"),
+  );
   const current = activeSteps[stepIndex];
   const next = activeSteps[stepIndex + 1];
   const wantsPanel = isMobile ? current?.mobilePanel : undefined;
@@ -323,13 +383,22 @@ export function MapTour({
       // step entered mid-slide lights the wrong rectangle and stays wrong.
       ...(isMobile && spec.mobilePanel ? { before: () => sheetSettled() } : {}),
       title: spec.title,
-      content: emptyCell ? [EMPTY_CELL_HINT] : spec.body,
+      content: emptyCell
+        ? [EMPTY_CELL_HINT]
+        : skipPick && spec.id === "record"
+          ? PICKED_FOR_USER_BODY
+          : spec.body,
+      floatingOptions: {
+        ...(spec.placement && !isMobile ? { flipOptions: false as const } : {}),
+        // The whole map is lit on this step, so the pulse has no edge to mark.
+        hideArrow: spec.id === "pick",
+      },
       placement:
         index === 0
           ? "center"
           : isMobile
             ? (spec.mobilePlacement ?? "auto")
-            : "auto",
+            : (spec.placement ?? "auto"),
       data: {
         waiting: !!spec.interactive && index === stepIndex && !actionDone,
       },
@@ -350,6 +419,9 @@ export function MapTour({
           selector={outlineTarget}
           padding={resolvePadding(paddingFor(current))}
         />
+      ) : null}
+      {!isMobile && current?.id === "pick" && !actionDone ? (
+        <CursorHint />
       ) : null}
       <Joyride
         steps={steps}

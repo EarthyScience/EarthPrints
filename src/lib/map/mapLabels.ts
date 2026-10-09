@@ -17,12 +17,16 @@ export const DARK_MAP_LABEL_HALO_COLOR = "rgba(0, 0, 0, 0.92)";
 
 export const DARK_MAP_LABEL_HALO_WIDTH = 1.6;
 
-/** English/Latin only — avoids stacked bilingual lines that crowd the map. */
+/**
+ * English/Latin only, avoiding stacked bilingual lines that crowd the map.
+ * A one-letter `name_en` is a broken OSM tag (Turkey ships as "T"), so it
+ * falls through to `name_int`.
+ */
 export const SINGLE_LINE_LABEL_TEXT_FIELD: ExpressionSpecification = [
-  "coalesce",
+  "case",
+  [">", ["length", ["coalesce", ["get", "name_en"], ""]], 1],
   ["get", "name_en"],
-  ["get", "name:latin"],
-  ["get", "name"],
+  ["coalesce", ["get", "name_int"], ["get", "name:latin"], ["get", "name"]],
 ];
 
 const PRIMARY_DARK_LABEL_LAYERS = new Set([
@@ -109,7 +113,9 @@ export function loadDarkMapStyle(): Promise<StyleSpecification> {
     darkMapStylePromise = fetch(MAP_BASE_STYLES.dark)
       .then((response) => {
         if (!response.ok) {
-          throw new Error(`Could not load dark map style (${response.status}).`);
+          throw new Error(
+            `Could not load dark map style (${response.status}).`,
+          );
         }
         return response.json() as Promise<StyleSpecification>;
       })
@@ -135,7 +141,11 @@ export function brightenDarkMapPlaceLabels(map: MapLibreMap): void {
       "text-color",
       isPrimary ? DARK_MAP_PRIMARY_LABEL_COLOR : DARK_MAP_SECONDARY_LABEL_COLOR,
     );
-    map.setPaintProperty(layer.id, "text-halo-color", DARK_MAP_LABEL_HALO_COLOR);
+    map.setPaintProperty(
+      layer.id,
+      "text-halo-color",
+      DARK_MAP_LABEL_HALO_COLOR,
+    );
     map.setPaintProperty(
       layer.id,
       "text-halo-width",

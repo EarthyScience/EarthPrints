@@ -11,7 +11,11 @@ import { X } from "lucide-react";
 import "maplibre-gl/dist/maplibre-gl.css";
 import "@/lib/map/initMaplibre";
 import { geoPointToZarrGrid } from "@/lib/map/geogrid";
-import type { UserPosition } from "@/lib/map/geolocate";
+import {
+  readConnectionHint,
+  shouldWarmCache,
+  type UserPosition,
+} from "@/lib/map/geolocate";
 import { buildReliefStyle } from "@/lib/map/reliefStyle";
 import { attachSmoothWheelZoom } from "@/lib/map/smoothWheelZoom";
 import {
@@ -65,6 +69,9 @@ export function ReliefMap() {
   const [viewState, setViewState] = useState<MapViewState>(DEFAULT_MAP_VIEW);
   const [mapSize, setMapSize] = useState({ width: 0, height: 0 });
   const [openPanel, setOpenPanel] = useState<ToolbarPanel | null>(null);
+  /** The first cell came from the user's location rather than a click. */
+  const [pickedForUser, setPickedForUser] = useState(false);
+  const [dragging, setDragging] = useState(false);
 
   const series = useCellSeries();
   const settings = useMapSettings();
@@ -134,29 +141,31 @@ export function ReliefMap() {
 
   // Refs, because the permission dialog can take seconds and the map moves.
   const pickRef = useRef(pick);
-  const centerOnPositionRef = useRef<(position: UserPosition) => void>(
-    () => {},
-  );
+  const pickPositionRef = useRef<(position: UserPosition) => void>(() => {});
   useEffect(() => {
     pickRef.current = pick;
-    centerOnPositionRef.current = (position) => {
+    pickPositionRef.current = (position) => {
       if (series.selection) return;
-      flyToCell(geoPointToZarrGrid(position, series.gridSpec));
+      // A record is tens of megabytes, too much to fetch unasked on a metered
+      // or slow link, so there the map only centres on the user.
+      if (!shouldWarmCache(readConnectionHint())) {
+        flyToCell(geoPointToZarrGrid(position, series.gridSpec));
+        return;
+      }
+      setPickedForUser(true);
+      pick(position.lon, position.lat, { fly: true });
     };
   }, [flyToCell, pick, series.gridSpec, series.selection]);
 
   const { request: requestPosition } = geolocation;
-  const { warm } = series;
 
   useEffect(() => {
     if (didAutoLocateRef.current) return;
     didAutoLocateRef.current = true;
     void requestPosition(false).then((position) => {
-      if (!position) return;
-      centerOnPositionRef.current(position);
-      void warm(position);
+      if (position) pickPositionRef.current(position);
     });
-  }, [requestPosition, warm]);
+  }, [requestPosition]);
 
   // Flies even with auto-zoom off: going there is the point of the button.
   const handleLocate = useCallback(async () => {
@@ -212,7 +221,9 @@ export function ReliefMap() {
           onResize={(event) => measure(event.target)}
           onMove={handleMove}
           onClick={handleClick}
-          cursor="crosshair"
+          onDragStart={() => setDragging(true)}
+          onDragEnd={() => setDragging(false)}
+          cursor={dragging ? "grabbing" : "crosshair"}
           attributionControl={false}
           style={{ width: "100%", height: "100%" }}
         >
@@ -294,6 +305,7 @@ export function ReliefMap() {
       </div>
 
       <MapTour
+        pickedForUser={pickedForUser}
         hasSelection={selection !== null}
         loadingSeries={series.loading}
         seriesValues={series.values}

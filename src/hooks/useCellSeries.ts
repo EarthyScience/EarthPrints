@@ -2,11 +2,6 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { geoPointToZarrGrid } from "@/lib/map/geogrid";
-import {
-  readConnectionHint,
-  shouldWarmCache,
-  type UserPosition,
-} from "@/lib/map/geolocate";
 import { openZarrStore } from "@/lib/zarr/store";
 import { ZarrChunkReader } from "@/lib/zarr/ZarrChunkReader";
 import {
@@ -26,8 +21,6 @@ export function useCellSeries() {
   const readerPromiseRef = useRef<Promise<ZarrChunkReader> | null>(null);
   const requestIdRef = useRef(0);
   const seriesAbortRef = useRef<AbortController | null>(null);
-  // The decode worker runs one job at a time, so a real pick aborts the warm-up.
-  const warmAbortRef = useRef<AbortController | null>(null);
   const patchWindowRef = useRef<PatchWindowSize>(DEFAULT_PATCH_WINDOW);
 
   const [gridSpec, setGridSpec] = useState<GridSpec>(DEFAULT_GRID_SPEC);
@@ -132,7 +125,6 @@ export function useCellSeries() {
         click: { lon, lat },
         grid: geoPointToZarrGrid({ lon, lat }, gridSpec),
       };
-      warmAbortRef.current?.abort();
       setSelection(nextSelection);
       void load(nextSelection, selectedYears);
       return nextSelection;
@@ -147,33 +139,6 @@ export function useCellSeries() {
     },
     [load, selection],
   );
-
-  const warm = useCallback(
-    async (position: UserPosition) => {
-      if (!shouldWarmCache(readConnectionHint())) return;
-      warmAbortRef.current?.abort();
-      const abort = new AbortController();
-      warmAbortRef.current = abort;
-      try {
-        const reader = await ensureReader();
-        const spec = await reader.getGridSpec();
-        if (abort.signal.aborted) return;
-        await reader.getTimeSeriesForYears(
-          geoPointToZarrGrid(position, spec),
-          selectedYears,
-          undefined,
-          undefined,
-          abort.signal,
-        );
-      } catch {
-      } finally {
-        if (warmAbortRef.current === abort) warmAbortRef.current = null;
-      }
-    },
-    [ensureReader, selectedYears],
-  );
-
-  useEffect(() => () => warmAbortRef.current?.abort(), []);
 
   useEffect(() => {
     const stored = loadPatchWindow();
@@ -217,7 +182,6 @@ export function useCellSeries() {
     error,
     values,
     units,
-    warm,
   };
 }
 
