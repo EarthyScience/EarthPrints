@@ -147,9 +147,9 @@ export function MapSearch({ onSelect }: MapSearchProps) {
           spellCheck={false}
           showTrigger={false}
           showClear={Boolean(query)}
-          className="h-10 rounded-xl bg-background dark:bg-background has-[[data-slot=input-group-control]:focus-visible]:ring-0"
+          className="h-10 rounded-xl max-md:h-12 max-md:rounded-full max-md:px-2 max-md:shadow-lg bg-background dark:bg-background has-[[data-slot=input-group-control]:focus-visible]:ring-0"
         >
-          <InputGroupAddon>
+          <InputGroupAddon className="text-foreground max-md:[&_svg]:size-5">
             <Search />
           </InputGroupAddon>
           {query ? null : (
@@ -159,7 +159,7 @@ export function MapSearch({ onSelect }: MapSearchProps) {
           )}
         </ComboboxInput>
       </div>
-      <ComboboxContent anchor={anchor} className="rounded-xl">
+      <ComboboxContent anchor={anchor} className="rounded-xl max-md:rounded-3xl">
         <ComboboxEmpty>
           {status === "loading"
             ? "Searching…"

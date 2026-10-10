@@ -29,34 +29,27 @@ import {
 import { Button } from "@/components/ui/button";
 
 type MapTourProps = {
-  /** The map picked the user's own cell, so there is nothing to ask them to pick. */
   pickedForUser: boolean;
   hasSelection: boolean;
   loadingSeries: boolean;
   seriesValues: Float32Array | null;
-  /** The chart panel is open. */
   panelOpen: boolean;
   onPanelOpenChange: (open: boolean) => void;
+  onPanelExpandChange: (expand: boolean) => void;
+  onCoverBottomChange: (cover: boolean) => void;
 };
 
-/** Above the floating panels and their popovers. */
 const TOUR_Z_INDEX = 300;
 const CURSOR_HINT_GAP = 14;
 
-/**
- * The mobile sheet's own transition, plus a frame. Nothing emits an event when
- * it lands, so a step pointing into it waits this out before being measured.
- */
 const SHEET_TRANSITION_MS = 420;
 
 function sheetSettled(): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, SHEET_TRANSITION_MS));
 }
 
-/** Breathing room between the target and the lit edge. */
 const SPOTLIGHT_PADDING = 8;
 
-/** Corner rounding of the lit area, shared by the cutout and its outline. */
 const SPOTLIGHT_RADIUS = 12;
 
 type Insets = { top: number; right: number; bottom: number; left: number };
@@ -72,19 +65,6 @@ function resolvePadding(value: SpotlightPadding | number | undefined): Insets {
   };
 }
 
-/**
- * The outline around the lit area.
- *
- * Joyride's overlay is one path holding both the cutout and an outer rectangle
- * the size of the viewport, so stroking it draws a frame around the whole page
- * as well. Trimming that frame with a clip worked here but not on every
- * browser, so the outline is drawn as its own element against the same rect
- * Joyride lights.
- */
-/**
- * A label that follows the pointer over the map while the guide waits for the
- * first pick, so the instruction sits where the click has to happen.
- */
 function CursorHint() {
   const [point, setPoint] = useState<{ x: number; y: number } | null>(null);
   const [bounds, setBounds] = useState<DOMRect | null>(null);
@@ -112,8 +92,6 @@ function CursorHint() {
 
   if (!point || !bounds) return null;
 
-  // Pinned against the map's right and bottom edges rather than flipped, so
-  // the label never runs past them and never jumps sides.
   const left = Math.min(point.x + CURSOR_HINT_GAP, bounds.right - size.width);
   const top = Math.min(point.y + CURSOR_HINT_GAP, bounds.bottom - size.height);
 
@@ -143,8 +121,7 @@ function SpotlightOutline({
     const target = document.querySelector(selector);
     if (!target) return;
 
-    // Polled per frame because the panel can move without resizing (slide-in,
-    // content above it settling), which no observer or event reports.
+    // Polled: the panel moves without resizing, which no observer reports.
     let frame = 0;
     let last = "";
     const measure = () => {
@@ -185,10 +162,8 @@ function SpotlightOutline({
   );
 }
 
-/** Pulse box, in px. Kept in sync with the `h-4 w-4` on the span below. */
 const PULSE_SIZE = 16;
 
-/** Matches the scrim behind the mobile drawer, so the dim reads as the app's. */
 const OVERLAY_COLOR = "rgba(0, 0, 0, 0.55)";
 
 function TourCard({
@@ -204,12 +179,10 @@ function TourCard({
     (step.data as { waiting?: boolean } | undefined)?.waiting,
   );
 
-  // A deep shadow would fall across the lit area, which on a phone is often
-  // directly below the card. The border and the dimmed page already lift it.
   return (
     <div
       {...tooltipProps}
-      className="w-[min(360px,calc(100vw-2rem))] rounded-editor-md border border-[color-mix(in_srgb,var(--tour-accent)_45%,transparent)] bg-editor-bg-primary p-4 shadow-[0_2px_12px_rgba(0,0,0,0.35)]"
+      className="w-[min(360px,calc(100vw-2rem))] rounded-editor-md border border-[color-mix(in_srgb,var(--tour-accent)_45%,transparent)] bg-editor-bg-primary p-4 shadow-lg"
     >
       <p className="text-[13.5px] font-semibold text-editor-fg-primary">
         {step.title}
@@ -242,7 +215,6 @@ function TourCard({
               Back
             </Button>
           ) : null}
-          {/* An interactive step is finished by doing the thing, not by a button. */}
           {waiting ? null : (
             <Button {...primaryProps} size="sm" title={undefined}>
               {isLastStep ? "Done" : index === 0 ? "Show me" : "Next"}
@@ -254,11 +226,6 @@ function TourCard({
   );
 }
 
-/**
- * Replaces the card's arrow. Joyride positions this where the card meets the
- * highlight, which is the one spot that keeps the same relation to the card as
- * targets change size and side, so it never reads as an arbitrary corner.
- */
 function TourPulse() {
   return (
     <span className="relative grid h-4 w-4 place-items-center">
@@ -275,11 +242,9 @@ export function MapTour({
   seriesValues,
   panelOpen,
   onPanelOpenChange,
+  onPanelExpandChange,
+  onCoverBottomChange,
 }: MapTourProps) {
-  // The map subtree is client-only (`ssr: false` in MapExperience), so reading
-  // the viewport and the cookie during the first render is safe and avoids an
-  // effect that would set state on mount.
-  /** Last interactive step the tour advanced out of on its own. */
   const [advancedFrom, setAdvancedFrom] = useState<number | null>(null);
   const [run, setRun] = useState(() => !hasSeenGuide());
   const [isMobile, setIsMobile] = useState(
@@ -296,10 +261,6 @@ export function MapTour({
     panelOpen,
   };
 
-  // Steps that only make sense in one arrangement drop out of the other, so
-  // the indices below and the "n / m" counter both stay honest. An empty
-  // auto-picked cell brings the pick step back in at the current index, so the
-  // tour lands on it showing the empty-cell hint.
   const skipPick = pickedForUser && (loadingSeries || !seriesValues || hasData);
   const activeSteps = tourStepsFor(isMobile).filter(
     (spec) => !(skipPick && spec.id === "pick"),
@@ -320,16 +281,22 @@ export function MapTour({
 
   useEffect(() => subscribeGuideRequests(start), [start]);
 
-  // Reopening matters on the way back: once the user has learned to open the
-  // sheet, a step pointing into it should not stall because they closed it.
   useEffect(() => {
     if (!run || !wantsPanel) return;
     const shouldBeOpen = wantsPanel === "open";
     if (panelOpen !== shouldBeOpen) onPanelOpenChange(shouldBeOpen);
   }, [run, wantsPanel, panelOpen, onPanelOpenChange]);
 
-  // Which arrangement the layout is in decides both the step list and where
-  // several steps point, so it has to be watched rather than read once.
+  const expandPanel = run && wantsPanel === "open";
+  useEffect(() => {
+    onPanelExpandChange(expandPanel);
+  }, [expandPanel, onPanelExpandChange]);
+
+  const coverBottom = run && isMobile && current?.id === "pick";
+  useEffect(() => {
+    onCoverBottomChange(coverBottom);
+  }, [coverBottom, onCoverBottomChange]);
+
   useEffect(() => {
     const query = window.matchMedia(MOBILE_MEDIA_QUERY);
     const onChange = (event: MediaQueryListEvent) => setIsMobile(event.matches);
@@ -337,21 +304,14 @@ export function MapTour({
     return () => query.removeEventListener("change", onChange);
   }, []);
 
-  // The user may have closed the panel, and a step pointing into it would then
-  // light up nothing.
   useEffect(() => {
     if (!run || isMobile || current?.mobilePanel !== "open") return;
     if (!panelOpen) onPanelOpenChange(true);
   }, [run, isMobile, current, panelOpen, onPanelOpenChange]);
 
-  // Interactive steps have no Next button: they end when the app says the user
-  // did the thing. That is a fact about the current props rather than a side
-  // effect, so it is settled during render instead of in an effect.
   const actionDone = next ? stepUnlocked(next.gate, gateState) : true;
 
-  // Only once per step. The gate stays satisfied after the user acts, so
-  // without this, stepping back into an interactive step would bounce straight
-  // forward again and the card would never be readable a second time.
+  // Once per step, so Back into an interactive step doesn't bounce forward.
   if (run && current?.interactive && actionDone && advancedFrom !== stepIndex) {
     setAdvancedFrom(stepIndex);
     setStepIndex(stepIndex + 1);
@@ -373,15 +333,16 @@ export function MapTour({
     return {
       target: tourTargetFor(spec, isMobile),
       spotlightTarget: tourSpotlightFor(spec, isMobile),
-      // Only when the step overrides it. Joyride picks this key off the step
-      // and merges it over `options`, so passing `undefined` on the other
-      // steps wiped out the shared padding instead of falling back to it.
+      // Joyride merges this over `options`, so `undefined` would wipe the shared padding.
       ...(paddingFor(spec) !== undefined
         ? { spotlightPadding: paddingFor(spec) }
         : {}),
-      // The sheet slides for 380ms and Joyride measures the target once, so a
-      // step entered mid-slide lights the wrong rectangle and stays wrong.
-      ...(isMobile && spec.mobilePanel ? { before: () => sheetSettled() } : {}),
+      ...(isMobile &&
+      spec.mobilePanel &&
+      (activeSteps[index - 1]?.mobilePanel !== spec.mobilePanel ||
+        activeSteps[index + 1]?.mobilePanel !== spec.mobilePanel)
+        ? { before: () => sheetSettled() }
+        : {}),
       title: spec.title,
       content: emptyCell
         ? [EMPTY_CELL_HINT]
@@ -390,7 +351,6 @@ export function MapTour({
           : spec.body,
       floatingOptions: {
         ...(spec.placement && !isMobile ? { flipOptions: false as const } : {}),
-        // The whole map is lit on this step, so the pulse has no edge to mark.
         hideArrow: spec.id === "pick",
       },
       placement:
@@ -400,7 +360,11 @@ export function MapTour({
             ? (spec.mobilePlacement ?? "auto")
             : (spec.placement ?? "auto"),
       data: {
-        waiting: !!spec.interactive && index === stepIndex && !actionDone,
+        waiting:
+          !!spec.interactive &&
+          index === stepIndex &&
+          !actionDone &&
+          !(spec.id === "pick" && hasSelection),
       },
     };
   });
@@ -424,50 +388,34 @@ export function MapTour({
         <CursorHint />
       ) : null}
       <Joyride
+        // A late location fix drops the pick step; remount so the new step waits for the sheet.
+        key={skipPick ? "picked-for-user" : "pick"}
         steps={steps}
         run={run}
         stepIndex={stepIndex}
         continuous
         tooltipComponent={TourCard}
+        loaderComponent={null}
+        // Joyride's drop-shadow filter doubles the card's shadow.
+        styles={{ floater: { filter: "none" } }}
         arrowComponent={TourPulse}
         options={{
           overlayColor: OVERLAY_COLOR,
           spotlightPadding: SPOTLIGHT_PADDING,
           spotlightRadius: SPOTLIGHT_RADIUS,
-          // Put the pulse on the lit border rather than in the gap beside it.
-          // Joyride offsets the card by `offset + spotlightPadding + arrowSize`
-          // and the arrow box protrudes `arrowSize` back toward the target, so
-          // the box centre sits at `offset + spotlightPadding + arrowSize / 2`
-          // from the target edge. The border is at `spotlightPadding`, which
-          // leaves offset at minus half the arrow. The card still clears the
-          // border by `arrowSize / 2`.
           arrowBase: PULSE_SIZE,
           arrowSize: PULSE_SIZE,
           offset: -PULSE_SIZE / 2,
           zIndex: TOUR_Z_INDEX,
-          // Without this the overlay swallows the click the step is asking for.
           blockTargetInteraction: false,
-          // No skip button on the card: clicking the dimmed area is the way out.
-          // Clicks inside the lit area still reach the app, so the steps that ask
-          // for one are unaffected.
           overlayClickAction: "close",
-          // Focus is not trapped, so nothing is focused on open and the reader can
-          // still tab to the map or the tabs a step is pointing at.
           disableFocusTrap: true,
           skipBeacon: true,
-          // The shell is pinned to the viewport with overflow hidden, but a
-          // script can still scroll it. Joyride did, pushing the whole app up
-          // and leaving an empty band below the map.
-          skipScroll: !isMobile,
+          skipScroll: true,
           targetWaitTimeout: 8000,
         }}
         onEvent={(data) => {
-          // `error:target_not_found` is not fatal: Joyride emits it while it
-          // polls for a target that has not mounted or is not visible yet, and
-          // `targetWaitTimeout` decides when to give up. Ending the tour here
-          // killed it whenever a step advanced a frame before its target
-          // committed, which is exactly what happens when a pick populates the
-          // panel.
+          // `error:target_not_found` fires while Joyride polls for a target; not fatal.
           if (data.status === "finished" || data.status === "skipped") {
             finish();
             return;
@@ -482,6 +430,9 @@ export function MapTour({
           if (data.action === "prev") {
             setStepIndex((index) => Math.max(0, index - 1));
             return;
+          }
+          if (current?.interactive && !actionDone && !panelOpen) {
+            onPanelOpenChange(true);
           }
           if (stepIndex >= activeSteps.length - 1) {
             finish();

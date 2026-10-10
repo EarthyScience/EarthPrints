@@ -60,6 +60,7 @@
   --editor-radius-md: 16px;
   --editor-radius-lg: 16px; /* Lovable rounded-4 on preview frame */
   --editor-shadow: 0 18px 40px -24px rgba(0, 0, 0, 0.65);
+  --map-space: #03070d;
 
   --chart-1: oklch(0.87 0 0);
   --chart-2: oklch(0.556 0 0);
@@ -133,10 +134,12 @@
   --editor-border: rgba(45, 45, 42, 0.13);
   --editor-border-strong: rgba(45, 45, 42, 0.18);
   --editor-shadow: 0 16px 36px -24px rgba(23, 23, 22, 0.18);
+  --map-space: #e9ebf1;
 }
 
 @theme inline {
   --color-bg: var(--bg);
+  --color-map-space: var(--map-space);
   --color-surface: var(--surface);
   --color-surface-2: var(--surface-2);
   --color-text: var(--text);
