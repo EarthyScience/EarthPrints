@@ -201,7 +201,7 @@ export function ReliefMap() {
 
   return (
     <div className="editor-shell relative h-dvh w-full overflow-hidden bg-background">
-      <div data-tour="map" className="absolute inset-0">
+      <div data-tour="map" className="absolute inset-0 bg-map-space">
         <Map
           ref={mapRef}
           mapStyle={buildReliefStyle(theme)}
@@ -249,12 +249,16 @@ export function ReliefMap() {
         />
       </div>
 
-      <div className="pointer-events-none absolute inset-x-3 top-3 z-30 flex flex-wrap items-start gap-2">
+      <div className="pointer-events-none absolute inset-x-3 top-3 z-30 flex max-md:z-40 flex-wrap items-start gap-2">
         <div className="pointer-events-auto relative">
           <MapToolbar openPanel={openPanel} onOpenPanelChange={setOpenPanel} />
-          <div className="absolute left-0 top-full mt-2">
+          <div className="absolute left-0 top-full mt-2 max-md:fixed max-md:inset-x-0 max-md:top-auto max-md:bottom-0 max-md:z-10 max-md:mt-0">
             {openPanel === "chart" ? (
-              <CellPanel series={series} timeBasis={settings.timeBasis} />
+              <CellPanel
+                series={series}
+                timeBasis={settings.timeBasis}
+                onClose={() => setOpenPanel(null)}
+              />
             ) : null}
             {openPanel === "settings" ? (
               <SettingsPanel
@@ -272,7 +276,7 @@ export function ReliefMap() {
           </div>
         </div>
 
-        <div className="pointer-events-auto order-last grid w-full gap-2 md:absolute md:left-1/2 md:w-[360px] md:-translate-x-1/2">
+        <div className="pointer-events-auto order-first grid w-full gap-2 md:absolute md:left-1/2 md:w-[360px] md:-translate-x-1/2">
           <MapSearch onSelect={pick} />
           {geolocation.error ? (
             <Alert role="status" className="bg-background">
@@ -292,7 +296,7 @@ export function ReliefMap() {
         </div>
       </div>
 
-      <div className="absolute bottom-6 right-4 z-30">
+      <div className="absolute bottom-6 right-4 z-30 max-md:right-3 max-md:bottom-[calc(max(--spacing(3),env(safe-area-inset-bottom))+--spacing(16))]">
         <MapControls
           onZoomIn={() => mapRef.current?.zoomIn()}
           onZoomOut={() => mapRef.current?.zoomOut()}

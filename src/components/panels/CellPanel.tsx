@@ -24,14 +24,15 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 type CellPanelProps = {
   series: CellSeries;
   timeBasis: TimeBasis;
+  onClose: () => void;
 };
 
-export function CellPanel({ series, timeBasis }: CellPanelProps) {
+export function CellPanel({ series, timeBasis, onClose }: CellPanelProps) {
   const display = useSeriesDisplay(series, timeBasis);
 
   if (!series.selection) {
     return (
-      <FloatingPanel label="Chart">
+      <FloatingPanel label="Chart" onClose={onClose}>
         <Empty>
           <EmptyHeader>
             <EmptyMedia variant="icon">
@@ -46,9 +47,9 @@ export function CellPanel({ series, timeBasis }: CellPanelProps) {
   }
 
   return (
-    <FloatingPanel label="Chart">
+    <FloatingPanel label="Chart" onClose={onClose}>
       <Tabs defaultValue="view">
-        <TabsList className={cn("w-full", segmentedListClass)}>
+        <TabsList className={cn("w-full max-md:mb-3", segmentedListClass)}>
           <TabsTrigger value="view" className={segmentedTriggerClass}>
             View
           </TabsTrigger>
