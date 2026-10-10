@@ -7,7 +7,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 export const FLOATING_PANEL_WIDTH = "w-[min(380px,calc(100vw-24px))]";
 
 const TAP_DISTANCE = 6;
-const PEEK_FRACTION = 0.45;
+const PEEK_FRACTION = 0.35;
 // px per ms; a flick this fast snaps in its direction regardless of position.
 const FLICK_VELOCITY = 0.4;
 // Expanded sheet stops 16px under the search field (top 12 + height 40).
@@ -18,6 +18,8 @@ type FloatingPanelProps = {
   label: string;
   children: React.ReactNode;
   onClose: () => void;
+  /** Open the phone sheet to full height, e.g. while the guide points into it. */
+  expand?: boolean;
   scrollClassName?: string;
 };
 
@@ -37,13 +39,25 @@ export function FloatingPanel({
   label,
   children,
   onClose,
+  expand = false,
   scrollClassName = "[&>[data-slot=scroll-area-viewport]]:max-h-[calc(100dvh-8rem)] max-md:min-h-0 max-md:flex-1 max-md:[&>[data-slot=scroll-area-viewport]]:max-h-none",
 }: FloatingPanelProps) {
   const cardRef = useRef<HTMLDivElement>(null);
   const handleRef = useRef<HTMLDivElement>(null);
-  const [expanded, setExpanded] = useState(false);
+  const [expanded, setExpanded] = useState(expand);
+  const [prevExpand, setPrevExpand] = useState(expand);
+  if (expand !== prevExpand) {
+    setPrevExpand(expand);
+    if (expand) setExpanded(true);
+  }
   const expandedRef = useRef(expanded);
   const onCloseRef = useRef(onClose);
+  useEffect(() => {
+    if (!expand) return;
+    cardRef.current
+      ?.querySelector("[data-slot=scroll-area-viewport]")
+      ?.scrollTo({ top: 0 });
+  }, [expand]);
   useEffect(() => {
     expandedRef.current = expanded;
     onCloseRef.current = onClose;
@@ -62,9 +76,7 @@ export function FloatingPanel({
         return;
       }
       const touch = event.touches[0];
-      const viewport = card.querySelector(
-        "[data-slot=scroll-area-viewport]",
-      );
+      const viewport = card.querySelector("[data-slot=scroll-area-viewport]");
       gesture = {
         startX: touch.clientX,
         startY: touch.clientY,
@@ -148,7 +160,7 @@ export function FloatingPanel({
     <Card
       ref={cardRef}
       aria-label={label}
-      className={`${FLOATING_PANEL_WIDTH} origin-top-left animate-in fade-in-0 zoom-in-95 slide-in-from-top-2 duration-150 ease-out motion-reduce:animate-none max-md:w-full max-md:gap-0 max-md:rounded-t-[2rem] max-md:rounded-b-none max-md:[--card-spacing:--spacing(5)] max-md:pt-0 max-md:pb-[env(safe-area-inset-bottom)] max-md:shadow-lg max-md:zoom-in-100 max-md:slide-in-from-bottom-full max-md:duration-200 max-md:transition-[height] ${expanded ? "max-md:h-[calc(100dvh-68px)]" : "max-md:h-[45dvh]"}`}
+      className={`${FLOATING_PANEL_WIDTH} origin-top-left animate-in fade-in-0 zoom-in-95 slide-in-from-top-2 duration-150 ease-out motion-reduce:animate-none max-md:w-full max-md:gap-0 max-md:rounded-t-[2rem] max-md:rounded-b-none max-md:[--card-spacing:--spacing(5)] max-md:pt-0 max-md:pb-[env(safe-area-inset-bottom)] max-md:shadow-lg max-md:zoom-in-100 max-md:slide-in-from-bottom-full max-md:duration-200 max-md:transition-[height] ${expanded ? "max-md:h-[calc(100dvh-68px)]" : "max-md:h-[35dvh]"}`}
     >
       <div
         ref={handleRef}

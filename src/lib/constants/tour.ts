@@ -58,6 +58,8 @@ export const TOUR_STEPS: TourStepSpec[] = [
   },
   {
     id: "pick",
+    // Back from the sheet steps lands here, and the sheet would hide the map.
+    mobilePanel: "closed",
     target: '[data-tour="map"]',
     // The map is the whole screen on a phone. Anchoring the card to the foot
     // of it keeps the card on screen and leaves the map above it tappable,

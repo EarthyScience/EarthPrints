@@ -37,6 +37,10 @@ type MapTourProps = {
   /** The chart panel is open. */
   panelOpen: boolean;
   onPanelOpenChange: (open: boolean) => void;
+  /** Whether the phone sheet should open to full height for the current step. */
+  onPanelExpandChange: (expand: boolean) => void;
+  /** The phone's pick card sits where the bottom nav and controls are. */
+  onCoverBottomChange: (cover: boolean) => void;
 };
 
 /** Above the floating panels and their popovers. */
@@ -204,12 +208,10 @@ function TourCard({
     (step.data as { waiting?: boolean } | undefined)?.waiting,
   );
 
-  // A deep shadow would fall across the lit area, which on a phone is often
-  // directly below the card. The border and the dimmed page already lift it.
   return (
     <div
       {...tooltipProps}
-      className="w-[min(360px,calc(100vw-2rem))] rounded-editor-md border border-[color-mix(in_srgb,var(--tour-accent)_45%,transparent)] bg-editor-bg-primary p-4 shadow-[0_2px_12px_rgba(0,0,0,0.35)]"
+      className="w-[min(360px,calc(100vw-2rem))] rounded-editor-md border border-[color-mix(in_srgb,var(--tour-accent)_45%,transparent)] bg-editor-bg-primary p-4 shadow-lg"
     >
       <p className="text-[13.5px] font-semibold text-editor-fg-primary">
         {step.title}
@@ -275,6 +277,8 @@ export function MapTour({
   seriesValues,
   panelOpen,
   onPanelOpenChange,
+  onPanelExpandChange,
+  onCoverBottomChange,
 }: MapTourProps) {
   // The map subtree is client-only (`ssr: false` in MapExperience), so reading
   // the viewport and the cookie during the first render is safe and avoids an
@@ -327,6 +331,18 @@ export function MapTour({
     const shouldBeOpen = wantsPanel === "open";
     if (panelOpen !== shouldBeOpen) onPanelOpenChange(shouldBeOpen);
   }, [run, wantsPanel, panelOpen, onPanelOpenChange]);
+
+  // The sheet's resting height cuts off the coordinate and the plot that the
+  // sheet steps point at, so those steps show it at full height.
+  const expandPanel = run && wantsPanel === "open";
+  useEffect(() => {
+    onPanelExpandChange(expandPanel);
+  }, [expandPanel, onPanelExpandChange]);
+
+  const coverBottom = run && isMobile && current?.id === "pick";
+  useEffect(() => {
+    onCoverBottomChange(coverBottom);
+  }, [coverBottom, onCoverBottomChange]);
 
   // Which arrangement the layout is in decides both the step list and where
   // several steps point, so it has to be watched rather than read once.
@@ -381,7 +397,13 @@ export function MapTour({
         : {}),
       // The sheet slides for 380ms and Joyride measures the target once, so a
       // step entered mid-slide lights the wrong rectangle and stays wrong.
-      ...(isMobile && spec.mobilePanel ? { before: () => sheetSettled() } : {}),
+      // Steps whose neighbours leave the sheet where it is skip the wait.
+      ...(isMobile &&
+      spec.mobilePanel &&
+      (activeSteps[index - 1]?.mobilePanel !== spec.mobilePanel ||
+        activeSteps[index + 1]?.mobilePanel !== spec.mobilePanel)
+        ? { before: () => sheetSettled() }
+        : {}),
       title: spec.title,
       content: emptyCell
         ? [EMPTY_CELL_HINT]
@@ -400,7 +422,13 @@ export function MapTour({
             ? (spec.mobilePlacement ?? "auto")
             : (spec.placement ?? "auto"),
       data: {
-        waiting: !!spec.interactive && index === stepIndex && !actionDone,
+        // A closed panel leaves the pick step unfinished, but with a cell
+        // already picked Next can carry on from it.
+        waiting:
+          !!spec.interactive &&
+          index === stepIndex &&
+          !actionDone &&
+          !(spec.id === "pick" && hasSelection),
       },
     };
   });
@@ -429,6 +457,12 @@ export function MapTour({
         stepIndex={stepIndex}
         continuous
         tooltipComponent={TourCard}
+        // A step waiting for the sheet to settle would otherwise flash a
+        // spinner between cards.
+        loaderComponent={null}
+        // Joyride wraps the card in a drop-shadow filter that doubles the
+        // card's own shadow into a grey halo.
+        styles={{ floater: { filter: "none" } }}
         arrowComponent={TourPulse}
         options={{
           overlayColor: OVERLAY_COLOR,
@@ -457,8 +491,10 @@ export function MapTour({
           skipBeacon: true,
           // The shell is pinned to the viewport with overflow hidden, but a
           // script can still scroll it. Joyride did, pushing the whole app up
-          // and leaving an empty band below the map.
-          skipScroll: !isMobile,
+          // and leaving an empty band below the map. On a phone it also
+          // scrolled the sheet past the coordinate; the sheet opens to full
+          // height for its steps instead, which fits every target.
+          skipScroll: true,
           targetWaitTimeout: 8000,
         }}
         onEvent={(data) => {
@@ -482,6 +518,10 @@ export function MapTour({
           if (data.action === "prev") {
             setStepIndex((index) => Math.max(0, index - 1));
             return;
+          }
+          // The next card points into the panel, which may have been closed.
+          if (current?.interactive && !actionDone && !panelOpen) {
+            onPanelOpenChange(true);
           }
           if (stepIndex >= activeSteps.length - 1) {
             finish();

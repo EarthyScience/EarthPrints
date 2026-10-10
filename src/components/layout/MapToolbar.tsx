@@ -17,6 +17,7 @@ const PANELS = [
 type MapToolbarProps = {
   openPanel: ToolbarPanel | null;
   onOpenPanelChange: (panel: ToolbarPanel | null) => void;
+  hideOnMobile?: boolean;
 };
 
 export function SiteMark() {
@@ -41,7 +42,11 @@ export function SiteMark() {
   );
 }
 
-export function MapToolbar({ openPanel, onOpenPanelChange }: MapToolbarProps) {
+export function MapToolbar({
+  openPanel,
+  onOpenPanelChange,
+  hideOnMobile = false,
+}: MapToolbarProps) {
   return (
     <div className="flex items-start gap-2">
       <Card className="[--card-spacing:--spacing(1)] max-md:hidden">
@@ -53,7 +58,7 @@ export function MapToolbar({ openPanel, onOpenPanelChange }: MapToolbarProps) {
       <Card
         role="navigation"
         aria-label="Map tools"
-        className={`[--card-spacing:--spacing(1)] ${openPanel ? "max-md:hidden" : ""} max-md:fixed max-md:inset-x-3 max-md:bottom-[max(--spacing(3),env(safe-area-inset-bottom))] max-md:rounded-full max-md:shadow-lg`}
+        className={`[--card-spacing:--spacing(1)] ${openPanel || hideOnMobile ? "max-md:hidden" : ""} max-md:fixed max-md:inset-x-3 max-md:bottom-[max(--spacing(3),env(safe-area-inset-bottom))] max-md:rounded-full max-md:shadow-lg`}
       >
         <CardContent>
           <ToggleGroup

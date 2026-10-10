@@ -25,14 +25,20 @@ type CellPanelProps = {
   series: CellSeries;
   timeBasis: TimeBasis;
   onClose: () => void;
+  expand?: boolean;
 };
 
-export function CellPanel({ series, timeBasis, onClose }: CellPanelProps) {
+export function CellPanel({
+  series,
+  timeBasis,
+  onClose,
+  expand,
+}: CellPanelProps) {
   const display = useSeriesDisplay(series, timeBasis);
 
   if (!series.selection) {
     return (
-      <FloatingPanel label="Chart" onClose={onClose}>
+      <FloatingPanel label="Chart" onClose={onClose} expand={expand}>
         <Empty>
           <EmptyHeader>
             <EmptyMedia variant="icon">
@@ -47,7 +53,7 @@ export function CellPanel({ series, timeBasis, onClose }: CellPanelProps) {
   }
 
   return (
-    <FloatingPanel label="Chart" onClose={onClose}>
+    <FloatingPanel label="Chart" onClose={onClose} expand={expand}>
       <Tabs defaultValue="view">
         <TabsList className={cn("w-full max-md:mb-3", segmentedListClass)}>
           <TabsTrigger value="view" className={segmentedTriggerClass}>
