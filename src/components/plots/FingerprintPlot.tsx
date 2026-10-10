@@ -19,6 +19,13 @@ import {
   fingerprintLayout,
 } from "@/lib/plots/fingerprint";
 import { useTheme } from "@/providers/ThemeProvider";
+import {
+  anchorBesidePanel,
+  MapSideTooltip,
+  useDesktop,
+  type TooltipAnchor,
+  type TooltipPoint,
+} from "@/components/plots/MapSideTooltip";
 
 const LEGEND_STOPS = 32;
 const TRANSPOSED_MIN_HEIGHT = 380;
@@ -33,7 +40,11 @@ type FingerprintPlotProps = {
   colormapId: ColormapId;
 };
 
-type Hover = FingerprintCell & { left: number; top: number };
+type Hover = FingerprintCell & {
+  left: number;
+  top: number;
+  anchor: TooltipAnchor | null;
+};
 
 export function FingerprintPlot({
   values,
@@ -49,6 +60,13 @@ export function FingerprintPlot({
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [width, setWidth] = useState(0);
   const [hover, setHover] = useState<Hover | null>(null);
+  const [pinned, setPinned] = useState<Hover | null>(null);
+  const [pinnedValues, setPinnedValues] = useState(values);
+  if (pinnedValues !== values) {
+    setPinnedValues(values);
+    setPinned(null);
+  }
+  const desktop = useDesktop();
 
   useEffect(() => {
     const node = wrapperRef.current;
@@ -113,8 +131,35 @@ export function FingerprintPlot({
     const left = event.clientX - rect.left;
     const top = event.clientY - rect.top;
     const cell = fingerprintCellAt(layout, left, top);
-    setHover(cell ? { ...cell, left, top } : null);
+    const anchor = anchorBesidePanel(wrapperRef.current, event.clientY);
+    setHover(cell ? { ...cell, left, top, anchor } : null);
   };
+
+  const pointAt = (
+    dayLocal: number,
+    hour: number,
+    short: "time" | "full",
+  ): TooltipPoint | undefined => {
+    if (dayLocal < 0 || hour < 0) return undefined;
+    const day = layout.mapping.absoluteDays[dayLocal] ?? dayLocal;
+    const time = `${String(hour).padStart(2, "0")}:00`;
+    const suffix = timeBasisLabel ? ` ${hoverBasisSuffix(timeBasisLabel)}` : "";
+    return {
+      label: `${formatIsoDate(day)} · ${time}${suffix}`,
+      shortLabel: short === "time" ? time : `${formatIsoDate(day)} ${time}`,
+      value: layout.values[dayLocal * hoursPerDay + hour] as number,
+    };
+  };
+  const previousOf = (cell: FingerprintCell) =>
+    cell.hour > 0
+      ? pointAt(cell.dayLocal, cell.hour - 1, "time")
+      : pointAt(cell.dayLocal - 1, hoursPerDay - 1, "full");
+
+  const shown = pinned ?? hover;
+  const comparing =
+    pinned &&
+    hover &&
+    (hover.dayLocal !== pinned.dayLocal || hover.hour !== pinned.hour);
 
   return (
     <div className="grid gap-2">
@@ -126,8 +171,11 @@ export function FingerprintPlot({
           aria-label="Diurnal fingerprint heatmap"
           onMouseMove={handleMove}
           onMouseLeave={() => setHover(null)}
+          onClick={() => {
+            if (desktop && hover?.anchor) setPinned(hover);
+          }}
         />
-        {hover ? (
+        {!desktop && hover ? (
           <div
             className="pointer-events-none absolute grid -translate-x-1/2 gap-0.5 rounded-lg border bg-background px-2.5 py-1.5 text-xs whitespace-nowrap shadow-xl"
             style={{
@@ -148,6 +196,18 @@ export function FingerprintPlot({
           </div>
         ) : null}
       </div>
+      {desktop && shown?.anchor ? (
+        <MapSideTooltip
+          point={pointAt(shown.dayLocal, shown.hour, "full")!}
+          previous={previousOf(shown)}
+          compared={
+            comparing ? pointAt(hover.dayLocal, hover.hour, "full") : undefined
+          }
+          anchor={shown.anchor}
+          units={units}
+          onClose={pinned ? () => setPinned(null) : undefined}
+        />
+      ) : null}
 
       <div className="grid gap-1">
         <div
