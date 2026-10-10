@@ -8,9 +8,7 @@ export const FLOATING_PANEL_WIDTH = "w-[min(380px,calc(100vw-24px))]";
 
 const TAP_DISTANCE = 6;
 const PEEK_FRACTION = 0.35;
-// px per ms; a flick this fast snaps in its direction regardless of position.
 const FLICK_VELOCITY = 0.4;
-// Expanded sheet stops 16px under the search field (top 12 + height 40).
 const EXPANDED_TOP = 68;
 const SHEET_QUERY = "(width < 48rem)";
 
@@ -18,7 +16,6 @@ type FloatingPanelProps = {
   label: string;
   children: React.ReactNode;
   onClose: () => void;
-  /** Open the phone sheet to full height, e.g. while the guide points into it. */
   expand?: boolean;
   scrollClassName?: string;
 };
