@@ -21,7 +21,7 @@ export function MapControls({
 }: MapControlsProps) {
   return (
     <div data-tour="controls" className="flex flex-col items-center gap-2">
-      <ButtonGroup orientation="vertical">
+      <ButtonGroup orientation="vertical" className="max-md:hidden">
         <Button
           variant="outline"
           size="icon-lg"
@@ -47,7 +47,7 @@ export function MapControls({
           size="icon-lg"
           aria-label="Zoom to selection"
           onClick={onZoomToSelection}
-          className="bg-background dark:bg-background"
+          className="bg-background dark:bg-background max-md:size-12 max-md:rounded-full max-md:shadow-lg max-md:[&_svg]:size-5"
         >
           <Crosshair />
         </Button>
@@ -58,7 +58,7 @@ export function MapControls({
         aria-label="Go to my location"
         disabled={locating}
         onClick={onLocate}
-        className="bg-background dark:bg-background"
+        className="bg-background dark:bg-background max-md:size-12 max-md:rounded-full max-md:shadow-lg max-md:[&_svg]:size-5"
       >
         <Navigation />
       </Button>

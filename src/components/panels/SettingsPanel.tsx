@@ -1,6 +1,6 @@
 "use client";
 
-import { Compass, Moon, Sun } from "lucide-react";
+import { Moon, Sun } from "lucide-react";
 import {
   allYearsBytesFor,
   formatBytes,
@@ -8,14 +8,12 @@ import {
   type PatchWindowSize,
 } from "@/lib/settings/patchWindow";
 import type { Theme } from "@/lib/theme";
-import { requestGuide } from "@/lib/tour";
 import type { TimeBasis } from "@/lib/zarr/localTime";
 import type { MapViewMode } from "@/types/map";
 import type { MapSettings } from "@/hooks/useMapSettings";
 import { useTheme } from "@/providers/ThemeProvider";
 import { FloatingPanel } from "@/components/panels/FloatingPanel";
 import { ViewModeTabs } from "@/components/map/ViewModeTabs";
-import { Button } from "@/components/ui/button";
 import {
   Field,
   FieldContent,
@@ -60,7 +58,7 @@ export function SettingsPanel({
   const { theme, toggleTheme } = useTheme();
 
   return (
-    <FloatingPanel label="Settings">
+    <FloatingPanel label="Settings" onClose={onClose}>
       <FieldGroup>
         <FieldSet>
           <FieldLegend variant="label">Appearance</FieldLegend>
@@ -153,29 +151,6 @@ export function SettingsPanel({
             ))}
           </RadioGroup>
         </FieldSet>
-
-        <FieldSeparator />
-
-        <Field orientation="horizontal">
-          <FieldContent>
-            <FieldLabel>Guide</FieldLabel>
-            <FieldDescription>
-              Six steps on picking a cell, reading its plots, and choosing
-              years.
-            </FieldDescription>
-          </FieldContent>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => {
-              onClose();
-              requestGuide();
-            }}
-          >
-            <Compass />
-            Restart
-          </Button>
-        </Field>
       </FieldGroup>
     </FloatingPanel>
   );

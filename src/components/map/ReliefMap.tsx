@@ -69,6 +69,8 @@ export function ReliefMap() {
   const [viewState, setViewState] = useState<MapViewState>(DEFAULT_MAP_VIEW);
   const [mapSize, setMapSize] = useState({ width: 0, height: 0 });
   const [openPanel, setOpenPanel] = useState<ToolbarPanel | null>(null);
+  const [tourExpandsPanel, setTourExpandsPanel] = useState(false);
+  const [tourCoversBottom, setTourCoversBottom] = useState(false);
   /** The first cell came from the user's location rather than a click. */
   const [pickedForUser, setPickedForUser] = useState(false);
   const [dragging, setDragging] = useState(false);
@@ -201,7 +203,7 @@ export function ReliefMap() {
 
   return (
     <div className="editor-shell relative h-dvh w-full overflow-hidden bg-background">
-      <div data-tour="map" className="absolute inset-0">
+      <div data-tour="map" className="absolute inset-0 bg-map-space">
         <Map
           ref={mapRef}
           mapStyle={buildReliefStyle(theme)}
@@ -245,16 +247,25 @@ export function ReliefMap() {
         <div
           aria-hidden="true"
           data-tour="map-foot"
-          className="pointer-events-none absolute inset-x-0 bottom-0 h-px"
+          className="pointer-events-none absolute inset-x-0 bottom-[calc(max(--spacing(4),env(safe-area-inset-bottom))+--spacing(2))] h-px"
         />
       </div>
 
-      <div className="pointer-events-none absolute inset-x-3 top-3 z-30 flex flex-wrap items-start gap-2">
+      <div className="pointer-events-none absolute inset-x-3 top-3 z-30 flex max-md:z-40 flex-wrap items-start gap-2">
         <div className="pointer-events-auto relative">
-          <MapToolbar openPanel={openPanel} onOpenPanelChange={setOpenPanel} />
-          <div className="absolute left-0 top-full mt-2">
+          <MapToolbar
+            openPanel={openPanel}
+            onOpenPanelChange={setOpenPanel}
+            hideOnMobile={tourCoversBottom}
+          />
+          <div className="absolute left-0 top-full mt-2 max-md:fixed max-md:inset-x-0 max-md:top-auto max-md:bottom-0 max-md:z-10 max-md:mt-0">
             {openPanel === "chart" ? (
-              <CellPanel series={series} timeBasis={settings.timeBasis} />
+              <CellPanel
+                series={series}
+                timeBasis={settings.timeBasis}
+                onClose={() => setOpenPanel(null)}
+                expand={tourExpandsPanel}
+              />
             ) : null}
             {openPanel === "settings" ? (
               <SettingsPanel
@@ -272,7 +283,7 @@ export function ReliefMap() {
           </div>
         </div>
 
-        <div className="pointer-events-auto order-last grid w-full gap-2 md:absolute md:left-1/2 md:w-[360px] md:-translate-x-1/2">
+        <div className="pointer-events-auto order-first grid w-full gap-2 md:absolute md:left-1/2 md:w-[360px] md:-translate-x-1/2">
           <MapSearch onSelect={pick} />
           {geolocation.error ? (
             <Alert role="status" className="bg-background">
@@ -292,7 +303,9 @@ export function ReliefMap() {
         </div>
       </div>
 
-      <div className="absolute bottom-6 right-4 z-30">
+      <div
+        className={`absolute bottom-6 right-4 z-30 ${tourCoversBottom ? "max-md:hidden" : ""} max-md:right-3 max-md:bottom-[calc(max(--spacing(3),env(safe-area-inset-bottom))+--spacing(16))]`}
+      >
         <MapControls
           onZoomIn={() => mapRef.current?.zoomIn()}
           onZoomOut={() => mapRef.current?.zoomOut()}
@@ -311,6 +324,8 @@ export function ReliefMap() {
         seriesValues={series.values}
         panelOpen={openPanel === "chart"}
         onPanelOpenChange={(open) => setOpenPanel(open ? "chart" : null)}
+        onPanelExpandChange={setTourExpandsPanel}
+        onCoverBottomChange={setTourCoversBottom}
       />
     </div>
   );

@@ -160,7 +160,9 @@ describe("mobile sheet handling", () => {
   const byId = (id: string) => TOUR_STEPS.find((step) => step.id === id)!;
 
   it("brings the sheet down for the step beside it, and up for the ones inside it", () => {
-    expect(byId("controls").mobilePanel).toBe("closed");
+    for (const id of ["pick", "controls"]) {
+      expect(byId(id).mobilePanel).toBe("closed");
+    }
     for (const id of ["record", "plots", "years"]) {
       expect(byId(id).mobilePanel).toBe("open");
     }
