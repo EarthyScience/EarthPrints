@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 
 const DESKTOP_QUERY = "(width >= 48rem)";
 const TOOLTIP_GAP = 12;
+const TOOLTIP_ROOM = 220;
 
 function subscribeDesktop(onChange: () => void) {
   const query = matchMedia(DESKTOP_QUERY);
@@ -27,14 +28,18 @@ export type TooltipAnchor = { left: number; top: number };
 
 export function anchorBesidePanel(
   plot: Element | null,
+  clientX: number,
   clientY: number,
 ): TooltipAnchor | null {
   const panel = plot?.closest("[data-slot=card]");
   if (!panel) return null;
-  return {
-    left: panel.getBoundingClientRect().right + TOOLTIP_GAP,
-    top: clientY,
-  };
+  const besidePanel = panel.getBoundingClientRect().right + TOOLTIP_GAP;
+  // A panel as wide as the screen leaves no room beside it, so follow the cursor.
+  const left =
+    besidePanel + TOOLTIP_ROOM <= window.innerWidth
+      ? besidePanel
+      : Math.min(clientX + TOOLTIP_GAP, window.innerWidth - TOOLTIP_ROOM);
+  return { left, top: clientY };
 }
 
 export type TooltipPoint = { label: string; shortLabel: string; value: number };

@@ -38,6 +38,7 @@ type FingerprintPlotProps = {
   timeBasisLabel?: string;
   transposed: boolean;
   colormapId: ColormapId;
+  height?: number;
 };
 
 type Hover = FingerprintCell & {
@@ -54,6 +55,7 @@ export function FingerprintPlot({
   timeBasisLabel,
   transposed,
   colormapId,
+  height: heightOverride,
 }: FingerprintPlotProps) {
   const { isLight } = useTheme();
   const wrapperRef = useRef<HTMLDivElement | null>(null);
@@ -78,7 +80,9 @@ export function FingerprintPlot({
     return () => observer.disconnect();
   }, []);
 
-  const height = transposed ? TRANSPOSED_MIN_HEIGHT : TIME_SERIES_PLOT_HEIGHT;
+  const height =
+    heightOverride ??
+    (transposed ? TRANSPOSED_MIN_HEIGHT : TIME_SERIES_PLOT_HEIGHT);
   const layout = useMemo(
     () =>
       fingerprintLayout(
@@ -131,7 +135,11 @@ export function FingerprintPlot({
     const left = event.clientX - rect.left;
     const top = event.clientY - rect.top;
     const cell = fingerprintCellAt(layout, left, top);
-    const anchor = anchorBesidePanel(wrapperRef.current, event.clientY);
+    const anchor = anchorBesidePanel(
+      wrapperRef.current,
+      event.clientX,
+      event.clientY,
+    );
     setHover(cell ? { ...cell, left, top, anchor } : null);
   };
 

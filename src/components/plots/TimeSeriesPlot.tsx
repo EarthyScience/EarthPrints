@@ -75,8 +75,12 @@ export function TimeSeriesPlot({
 
   if (data.length === 0) return null;
 
-  const readoutAt = (index: unknown, clientY: number): Readout | null => {
-    const anchor = anchorBesidePanel(wrapperRef.current, clientY);
+  const readoutAt = (
+    index: unknown,
+    clientX: number,
+    clientY: number,
+  ): Readout | null => {
+    const anchor = anchorBesidePanel(wrapperRef.current, clientX, clientY);
     const at = Number(index);
     if (index == null || !Number.isInteger(at) || !anchor) return null;
     return { ...anchor, index: at };
@@ -98,7 +102,7 @@ export function TimeSeriesPlot({
           data={data}
           margin={TIME_SERIES_CHART_MARGIN}
           onMouseMove={(state, event) =>
-            setHover(readoutAt(state.activeIndex, event.clientY))
+            setHover(readoutAt(state.activeIndex, event.clientX, event.clientY))
           }
           onMouseLeave={() => setHover(null)}
           // Recharts reports no active index on click, so pin the hovered day.
