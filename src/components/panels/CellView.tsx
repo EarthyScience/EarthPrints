@@ -1,8 +1,10 @@
 "use client";
 
-import { ArrowLeftRight } from "lucide-react";
+import { useState } from "react";
+import { Collapsible } from "@base-ui/react/collapsible";
+import { ArrowLeftRight, ChevronDown } from "lucide-react";
 import { formatLatitude, formatLongitude } from "@/lib/map/geogrid";
-import { ZARR_TIME } from "@/lib/zarr/timeRange";
+import { formatSelectedYearsLabel, ZARR_TIME } from "@/lib/zarr/timeRange";
 import { TIME_SERIES_PLOT_HEIGHT } from "@/lib/plots/chartTheme";
 import type { CellSeries, SeriesProgress } from "@/hooks/useCellSeries";
 import type { PlotView, SeriesDisplay } from "@/hooks/useSeriesDisplay";
@@ -24,33 +26,58 @@ import { Toggle } from "@/components/ui/toggle";
 type CellViewProps = {
   series: CellSeries;
   display: SeriesDisplay;
+  openDetails?: boolean;
 };
 
-export function CellView({ series, display }: CellViewProps) {
+export function CellView({
+  series,
+  display,
+  openDetails = false,
+}: CellViewProps) {
   const { selection, patchWindow } = series;
+  const [detailsOpen, setDetailsOpen] = useState(openDetails);
+  const [prevOpenDetails, setPrevOpenDetails] = useState(openDetails);
+  if (openDetails !== prevOpenDetails) {
+    setPrevOpenDetails(openDetails);
+    if (openDetails) setDetailsOpen(true);
+  }
   if (!selection) return null;
 
   const disabled = display.isEmptyCell;
 
   return (
     <div className="grid gap-4">
-      <div data-tour="record" className="grid gap-1">
-        <CardTitle>
-          {formatLongitude(selection.grid.lon)},{" "}
-          {formatLatitude(selection.grid.lat)}
-        </CardTitle>
-        <CardDescription>
-          Hourly net ecosystem exchange for this 0.05° cell. The dashed box
-          marks the {patchWindow}×{patchWindow} cells around it kept in memory.
-        </CardDescription>
-      </div>
-
-      <YearPicker
-        selectedYears={series.selectedYears}
-        cachedYears={series.cachedYears}
-        loading={series.loading}
-        onSelectYears={series.selectYears}
-      />
+      <Collapsible.Root
+        open={detailsOpen}
+        onOpenChange={setDetailsOpen}
+        className="grid"
+      >
+        <div data-tour="record" className="grid gap-1">
+          <CardTitle>
+            {formatLongitude(selection.grid.lon)},{" "}
+            {formatLatitude(selection.grid.lat)}
+          </CardTitle>
+          <Collapsible.Trigger className="group flex w-fit items-center gap-1 rounded-sm text-sm text-muted-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/50">
+            Details · Years {formatSelectedYearsLabel(series.selectedYears)}
+            <ChevronDown className="size-4 transition-transform group-data-panel-open:rotate-180" />
+          </Collapsible.Trigger>
+        </div>
+        <Collapsible.Panel className="h-(--collapsible-panel-height) overflow-hidden transition-[height] duration-150 ease-out data-ending-style:h-0 data-starting-style:h-0 motion-reduce:transition-none">
+          <div className="grid gap-4 pt-3">
+            <CardDescription>
+              Hourly net ecosystem exchange for this 0.05° cell. The dashed box
+              marks the {patchWindow}×{patchWindow} cells around it kept in
+              memory.
+            </CardDescription>
+            <YearPicker
+              selectedYears={series.selectedYears}
+              cachedYears={series.cachedYears}
+              loading={series.loading}
+              onSelectYears={series.selectYears}
+            />
+          </div>
+        </Collapsible.Panel>
+      </Collapsible.Root>
 
       <section aria-live="polite" data-tour="plot" className="grid gap-3">
         <Tabs

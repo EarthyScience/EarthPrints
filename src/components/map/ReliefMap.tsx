@@ -71,6 +71,7 @@ export function ReliefMap() {
   const [openPanel, setOpenPanel] = useState<ToolbarPanel | null>(null);
   const [tourExpandsPanel, setTourExpandsPanel] = useState(false);
   const [tourCoversBottom, setTourCoversBottom] = useState(false);
+  const [tourOpensDetails, setTourOpensDetails] = useState(false);
   /** The first cell came from the user's location rather than a click. */
   const [pickedForUser, setPickedForUser] = useState(false);
   const [dragging, setDragging] = useState(false);
@@ -265,6 +266,7 @@ export function ReliefMap() {
                 timeBasis={settings.timeBasis}
                 onClose={() => setOpenPanel(null)}
                 expand={tourExpandsPanel}
+                openDetails={tourOpensDetails}
               />
             ) : null}
             {openPanel === "settings" ? (
@@ -326,6 +328,7 @@ export function ReliefMap() {
         onPanelOpenChange={(open) => setOpenPanel(open ? "chart" : null)}
         onPanelExpandChange={setTourExpandsPanel}
         onCoverBottomChange={setTourCoversBottom}
+        onDetailsOpenChange={setTourOpensDetails}
       />
     </div>
   );

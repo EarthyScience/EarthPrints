@@ -37,6 +37,7 @@ type MapTourProps = {
   onPanelOpenChange: (open: boolean) => void;
   onPanelExpandChange: (expand: boolean) => void;
   onCoverBottomChange: (cover: boolean) => void;
+  onDetailsOpenChange: (open: boolean) => void;
 };
 
 const TOUR_Z_INDEX = 300;
@@ -244,6 +245,7 @@ export function MapTour({
   onPanelOpenChange,
   onPanelExpandChange,
   onCoverBottomChange,
+  onDetailsOpenChange,
 }: MapTourProps) {
   const [advancedFrom, setAdvancedFrom] = useState<number | null>(null);
   const [run, setRun] = useState(() => !hasSeenGuide());
@@ -296,6 +298,11 @@ export function MapTour({
   useEffect(() => {
     onCoverBottomChange(coverBottom);
   }, [coverBottom, onCoverBottomChange]);
+
+  const openDetails = run && current?.id === "years";
+  useEffect(() => {
+    onDetailsOpenChange(openDetails);
+  }, [openDetails, onDetailsOpenChange]);
 
   useEffect(() => {
     const query = window.matchMedia(MOBILE_MEDIA_QUERY);

@@ -12,6 +12,12 @@ const FLICK_VELOCITY = 0.4;
 const EXPANDED_TOP = 68;
 const SHEET_QUERY = "(width < 48rem)";
 
+const collapseListeners = new Set<() => void>();
+
+export function collapseSheets(): void {
+  for (const listener of collapseListeners) listener();
+}
+
 type FloatingPanelProps = {
   label: string;
   children: React.ReactNode;
@@ -55,6 +61,13 @@ export function FloatingPanel({
       ?.querySelector("[data-slot=scroll-area-viewport]")
       ?.scrollTo({ top: 0 });
   }, [expand]);
+  useEffect(() => {
+    const collapse = () => setExpanded(false);
+    collapseListeners.add(collapse);
+    return () => {
+      collapseListeners.delete(collapse);
+    };
+  }, []);
   useEffect(() => {
     expandedRef.current = expanded;
     onCloseRef.current = onClose;
