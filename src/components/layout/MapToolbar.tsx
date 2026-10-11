@@ -126,7 +126,6 @@ export function MapToolbar({
   hideChart = false,
   hideOnMobile = false,
 }: MapToolbarProps) {
-  // The data view already shows the chart, so the chart panel would repeat it.
   const panels = hideChart
     ? PANELS.filter(({ value }) => value !== "chart")
     : PANELS;

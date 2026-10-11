@@ -159,9 +159,10 @@ type PlotAreaProps = {
   series: CellSeries;
   display: SeriesDisplay;
   height?: number;
+  pinLimit?: number;
 };
 
-export function PlotArea({ series, display, height }: PlotAreaProps) {
+export function PlotArea({ series, display, height, pinLimit }: PlotAreaProps) {
   if (series.loading) {
     return (
       <div className="grid gap-3">
@@ -198,6 +199,7 @@ export function PlotArea({ series, display, height }: PlotAreaProps) {
       units={series.units}
       hoursPerDay={ZARR_TIME.hoursPerDay}
       height={height}
+      pinLimit={pinLimit}
     />
   ) : (
     <FingerprintPlot
@@ -209,6 +211,7 @@ export function PlotArea({ series, display, height }: PlotAreaProps) {
       transposed={display.transposed}
       colormapId={display.colormapId}
       height={height}
+      pinLimit={pinLimit}
     />
   );
 }

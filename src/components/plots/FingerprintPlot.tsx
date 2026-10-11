@@ -22,6 +22,9 @@ import { useTheme } from "@/providers/ThemeProvider";
 import {
   anchorBesidePanel,
   MapSideTooltip,
+  PinnedTooltip,
+  pinPosition,
+  togglePin,
   useDesktop,
   type TooltipAnchor,
   type TooltipPoint,
@@ -39,13 +42,18 @@ type FingerprintPlotProps = {
   transposed: boolean;
   colormapId: ColormapId;
   height?: number;
+  pinLimit?: number;
 };
 
 type Hover = FingerprintCell & {
   left: number;
   top: number;
+  flip: boolean;
   anchor: TooltipAnchor | null;
 };
+
+const sameCell = (a: Hover, b: Hover) =>
+  a.dayLocal === b.dayLocal && a.hour === b.hour;
 
 export function FingerprintPlot({
   values,
@@ -56,17 +64,18 @@ export function FingerprintPlot({
   transposed,
   colormapId,
   height: heightOverride,
+  pinLimit = 1,
 }: FingerprintPlotProps) {
   const { isLight } = useTheme();
   const wrapperRef = useRef<HTMLDivElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [width, setWidth] = useState(0);
   const [hover, setHover] = useState<Hover | null>(null);
-  const [pinned, setPinned] = useState<Hover | null>(null);
+  const [pins, setPins] = useState<Hover[]>([]);
   const [pinnedValues, setPinnedValues] = useState(values);
   if (pinnedValues !== values) {
     setPinnedValues(values);
-    setPinned(null);
+    setPins([]);
   }
   const desktop = useDesktop();
 
@@ -140,7 +149,12 @@ export function FingerprintPlot({
       event.clientX,
       event.clientY,
     );
-    setHover(cell ? { ...cell, left, top, anchor } : null);
+    const { flip } = pinPosition(
+      event.currentTarget,
+      event.clientX,
+      event.clientY,
+    );
+    setHover(cell ? { ...cell, left, top, flip, anchor } : null);
   };
 
   const pointAt = (
@@ -163,6 +177,9 @@ export function FingerprintPlot({
       ? pointAt(cell.dayLocal, cell.hour - 1, "time")
       : pointAt(cell.dayLocal - 1, hoursPerDay - 1, "full");
 
+  const separate = pinLimit > 1;
+  const pinned = separate ? null : (pins[0] ?? null);
+  const lastPin = pins.at(-1);
   const shown = pinned ?? hover;
   const comparing =
     pinned &&
@@ -180,9 +197,39 @@ export function FingerprintPlot({
           onMouseMove={handleMove}
           onMouseLeave={() => setHover(null)}
           onClick={() => {
-            if (desktop && hover?.anchor) setPinned(hover);
+            if (desktop && hover?.anchor) {
+              setPins((current) =>
+                togglePin(current, hover, pinLimit, sameCell),
+              );
+            }
           }}
         />
+        {desktop && separate
+          ? pins.map((pin) => (
+              <PinnedTooltip
+                key={`${pin.dayLocal}-${pin.hour}`}
+                point={pointAt(pin.dayLocal, pin.hour, "full")!}
+                previous={previousOf(pin)}
+                position={{ x: pin.left, y: pin.top, flip: pin.flip }}
+                units={units}
+                onClose={() =>
+                  setPins((current) =>
+                    current.filter((other) => !sameCell(other, pin)),
+                  )
+                }
+              />
+            ))
+          : null}
+        {desktop && separate
+          ? pins.map((pin) => (
+              <span
+                key={`${pin.dayLocal}-${pin.hour}`}
+                aria-hidden="true"
+                className="pointer-events-none absolute size-2 -translate-1/2 rounded-full bg-foreground ring-2 ring-background"
+                style={{ left: pin.left, top: pin.top }}
+              />
+            ))
+          : null}
         {!desktop && hover ? (
           <div
             className="pointer-events-none absolute grid -translate-x-1/2 gap-0.5 rounded-lg border bg-background px-2.5 py-1.5 text-xs whitespace-nowrap shadow-xl"
@@ -204,7 +251,22 @@ export function FingerprintPlot({
           </div>
         ) : null}
       </div>
-      {desktop && shown?.anchor ? (
+      {desktop &&
+      separate &&
+      hover?.anchor &&
+      !pins.some((pin) => sameCell(pin, hover)) ? (
+        <MapSideTooltip
+          point={pointAt(hover.dayLocal, hover.hour, "full")!}
+          previous={
+            lastPin
+              ? pointAt(lastPin.dayLocal, lastPin.hour, "full")
+              : previousOf(hover)
+          }
+          anchor={hover.anchor}
+          units={units}
+        />
+      ) : null}
+      {desktop && !separate && shown?.anchor ? (
         <MapSideTooltip
           point={pointAt(shown.dayLocal, shown.hour, "full")!}
           previous={previousOf(shown)}
@@ -213,7 +275,7 @@ export function FingerprintPlot({
           }
           anchor={shown.anchor}
           units={units}
-          onClose={pinned ? () => setPinned(null) : undefined}
+          onClose={pinned ? () => setPins([]) : undefined}
         />
       ) : null}
 

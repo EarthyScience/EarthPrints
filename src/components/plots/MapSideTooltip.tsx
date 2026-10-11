@@ -3,6 +3,7 @@
 import { useSyncExternalStore } from "react";
 import { createPortal } from "react-dom";
 import { X } from "lucide-react";
+import { cn } from "cn";
 import { formatSeriesValue } from "@/lib/plots/chartTheme";
 import { Button } from "@/components/ui/button";
 
@@ -34,13 +35,43 @@ export function anchorBesidePanel(
   const panel = plot?.closest("[data-slot=card]");
   if (!panel) return null;
   const besidePanel = panel.getBoundingClientRect().right + TOOLTIP_GAP;
-  // A panel as wide as the screen leaves no room beside it, so follow the cursor.
   const left =
     besidePanel + TOOLTIP_ROOM <= window.innerWidth
       ? besidePanel
       : Math.min(clientX + TOOLTIP_GAP, window.innerWidth - TOOLTIP_ROOM);
   return { left, top: clientY };
 }
+
+export type PinPosition = { x: number; y: number; flip: boolean };
+
+export function pinPosition(
+  plot: Element,
+  clientX: number,
+  clientY: number,
+): PinPosition {
+  const rect = plot.getBoundingClientRect();
+  const x = clientX - rect.left;
+  return {
+    x,
+    y: clientY - rect.top,
+    flip: x + TOOLTIP_GAP + TOOLTIP_ROOM > rect.width,
+  };
+}
+
+export function togglePin<T>(
+  pins: T[],
+  pin: T,
+  limit: number,
+  same: (a: T, b: T) => boolean,
+): T[] {
+  if (pins.some((existing) => same(existing, pin))) {
+    return pins.filter((existing) => !same(existing, pin));
+  }
+  return [...pins, pin].slice(-limit);
+}
+
+const tooltipBoxClass =
+  "z-40 grid min-w-40 -translate-y-4 gap-1.5 rounded-lg border border-border/50 bg-background px-2.5 py-1.5 text-xs whitespace-nowrap shadow-xl";
 
 export type TooltipPoint = { label: string; shortLabel: string; value: number };
 
@@ -73,6 +104,64 @@ function PointRows({
   );
 }
 
+function TooltipHeader({
+  point,
+  onClose,
+}: {
+  point: TooltipPoint;
+  onClose?: () => void;
+}) {
+  return (
+    <div className="flex items-center justify-between gap-3">
+      <span className="font-medium">{point.label}</span>
+      {onClose ? (
+        <Button
+          variant="ghost"
+          size="icon-xs"
+          aria-label="Unpin"
+          className="-mr-1"
+          onClick={onClose}
+        >
+          <X />
+        </Button>
+      ) : null}
+    </div>
+  );
+}
+
+export function PinnedTooltip({
+  point,
+  previous,
+  position,
+  units,
+  onClose,
+}: {
+  point: TooltipPoint;
+  previous?: TooltipPoint;
+  position: PinPosition;
+  units?: string | null;
+  onClose: () => void;
+}) {
+  return (
+    <div
+      className={cn(
+        "absolute",
+        tooltipBoxClass,
+        position.flip && "-translate-x-full",
+      )}
+      style={{
+        left: position.flip
+          ? position.x - TOOLTIP_GAP
+          : position.x + TOOLTIP_GAP,
+        top: position.y,
+      }}
+    >
+      <TooltipHeader point={point} onClose={onClose} />
+      <PointRows point={point} base={previous} units={units} />
+    </div>
+  );
+}
+
 export function MapSideTooltip({
   point,
   previous,
@@ -90,23 +179,10 @@ export function MapSideTooltip({
 }) {
   return createPortal(
     <div
-      className="fixed z-40 grid min-w-40 -translate-y-4 gap-1.5 rounded-lg border border-border/50 bg-background px-2.5 py-1.5 text-xs whitespace-nowrap shadow-xl"
-      style={anchor}
+      className={cn("fixed", tooltipBoxClass)}
+      style={{ left: anchor.left, top: anchor.top }}
     >
-      <div className="flex items-center justify-between gap-3">
-        <span className="font-medium">{point.label}</span>
-        {onClose ? (
-          <Button
-            variant="ghost"
-            size="icon-xs"
-            aria-label="Unpin"
-            className="-mr-1"
-            onClick={onClose}
-          >
-            <X />
-          </Button>
-        ) : null}
-      </div>
+      <TooltipHeader point={point} onClose={onClose} />
       <PointRows point={point} base={previous} units={units} />
       {compared ? (
         <div className="grid gap-1.5 border-t border-border/50 pt-1.5">
