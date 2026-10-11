@@ -1,17 +1,14 @@
 "use client";
 
-import { Moon, Sun } from "lucide-react";
 import {
   allYearsBytesFor,
   formatBytes,
   PATCH_WINDOW_SIZES,
   type PatchWindowSize,
 } from "@/lib/settings/patchWindow";
-import type { Theme } from "@/lib/theme";
 import type { TimeBasis } from "@/lib/zarr/localTime";
 import type { MapViewMode } from "@/types/map";
 import type { MapSettings } from "@/hooks/useMapSettings";
-import { useTheme } from "@/providers/ThemeProvider";
 import { FloatingPanel } from "@/components/panels/FloatingPanel";
 import { ViewModeTabs } from "@/components/map/ViewModeTabs";
 import {
@@ -27,11 +24,6 @@ import {
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { SegmentedTabs } from "@/components/ui/segmented-tabs";
 import { Switch } from "@/components/ui/switch";
-
-const THEMES = [
-  { value: "light", label: "Light", icon: Sun },
-  { value: "dark", label: "Dark", icon: Moon },
-] as const;
 
 const TIME_BASES = [
   { value: "local", label: "Local" },
@@ -55,38 +47,24 @@ export function SettingsPanel({
   onViewModeChange,
   onClose,
 }: SettingsPanelProps) {
-  const { theme, toggleTheme } = useTheme();
-
   return (
     <FloatingPanel label="Settings" onClose={onClose}>
       <FieldGroup>
-        <FieldSet>
-          <FieldLegend variant="label">Appearance</FieldLegend>
-          <div className="grid grid-cols-2 gap-2">
+        <div className="grid grid-cols-2 gap-4">
+          <FieldSet>
+            <FieldLegend variant="label">Projection</FieldLegend>
             <ViewModeTabs value={viewMode} onChange={onViewModeChange} />
-            <SegmentedTabs<Theme>
-              value={theme}
-              onChange={(next) => {
-                if (next !== theme) toggleTheme();
-              }}
-              options={THEMES}
-              aria-label="Theme"
+          </FieldSet>
+          <FieldSet>
+            <FieldLegend variant="label">Plot hours in</FieldLegend>
+            <SegmentedTabs<TimeBasis>
+              value={settings.timeBasis}
+              onChange={settings.setTimeBasis}
+              options={TIME_BASES}
+              aria-label="Time basis"
             />
-          </div>
-        </FieldSet>
-
-        <FieldSeparator />
-
-        <Field orientation="horizontal">
-          <FieldLabel>Plot hours in</FieldLabel>
-          <SegmentedTabs<TimeBasis>
-            value={settings.timeBasis}
-            onChange={settings.setTimeBasis}
-            options={TIME_BASES}
-            aria-label="Time basis"
-            className="w-32 shrink-0"
-          />
-        </Field>
+          </FieldSet>
+        </div>
 
         <FieldSeparator />
 

@@ -30,7 +30,12 @@ import { useTheme } from "@/providers/ThemeProvider";
 import { useCellSeries } from "@/hooks/useCellSeries";
 import { useGeolocation } from "@/hooks/useGeolocation";
 import { useMapSettings } from "@/hooks/useMapSettings";
-import { MapToolbar, type ToolbarPanel } from "@/components/layout/MapToolbar";
+import { subscribeGuideRequests } from "@/lib/tour";
+import {
+  MapActions,
+  MapToolbar,
+  type ToolbarPanel,
+} from "@/components/layout/MapToolbar";
 import { MapControls } from "@/components/map/MapControls";
 import { MapSearch } from "@/components/map/MapSearch";
 import { MapTour } from "@/components/map/MapTour";
@@ -69,6 +74,7 @@ export function ReliefMap() {
   const [viewState, setViewState] = useState<MapViewState>(DEFAULT_MAP_VIEW);
   const [mapSize, setMapSize] = useState({ width: 0, height: 0 });
   const [openPanel, setOpenPanel] = useState<ToolbarPanel | null>(null);
+  useEffect(() => subscribeGuideRequests(() => setOpenPanel(null)), []);
   const [tourExpandsPanel, setTourExpandsPanel] = useState(false);
   const [tourCoversBottom, setTourCoversBottom] = useState(false);
   const [tourOpensDetails, setTourOpensDetails] = useState(false);
@@ -302,6 +308,10 @@ export function ReliefMap() {
               </AlertAction>
             </Alert>
           ) : null}
+        </div>
+
+        <div className="pointer-events-auto ml-auto">
+          <MapActions />
         </div>
       </div>
 
