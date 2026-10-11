@@ -22,6 +22,7 @@ import {
 } from "@/components/ui/combobox";
 import { InputGroupAddon } from "@/components/ui/input-group";
 import { Kbd } from "@/components/ui/kbd";
+import { collapseSheets } from "@/components/panels/FloatingPanel";
 
 type Status = "idle" | "loading" | "done" | "error";
 
@@ -138,7 +139,7 @@ export function MapSearch({ onSelect }: MapSearchProps) {
       isItemEqualToValue={(a, b) => a.id === b.id}
       autoHighlight
     >
-      <div ref={anchor}>
+      <div ref={anchor} onFocusCapture={collapseSheets}>
         <ComboboxInput
           ref={inputRef}
           placeholder="Search address or coordinates"
@@ -159,7 +160,10 @@ export function MapSearch({ onSelect }: MapSearchProps) {
           )}
         </ComboboxInput>
       </div>
-      <ComboboxContent anchor={anchor} className="rounded-xl max-md:rounded-3xl">
+      <ComboboxContent
+        anchor={anchor}
+        className="rounded-xl max-md:rounded-3xl"
+      >
         <ComboboxEmpty>
           {status === "loading"
             ? "Searching…"
