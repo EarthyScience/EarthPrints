@@ -5,8 +5,8 @@ import type { MapViewMode } from "@/types/map";
 import { SegmentedTabs } from "@/components/ui/segmented-tabs";
 
 const VIEW_MODES = [
-  { value: "sphere", label: "Sphere", icon: Globe },
   { value: "2d", label: "Plan", icon: Map },
+  { value: "sphere", label: "Sphere", icon: Globe },
 ] as const;
 
 type ViewModeTabsProps = {

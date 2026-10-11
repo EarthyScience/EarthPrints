@@ -39,63 +39,55 @@ function GitHubMark({ className }: { className?: string }) {
   );
 }
 
-function CanvasActions({ floating }: { floating: boolean }) {
+const actionClass =
+  "max-md:size-12 max-md:rounded-full max-md:border-border max-md:bg-background max-md:shadow-lg dark:max-md:border-input";
+
+export function MapActions({ onBeforeGuide }: { onBeforeGuide: () => void }) {
   const { isLight, toggleTheme } = useTheme();
   const ThemeIcon = isLight ? Moon : Sun;
-  const button = floating
-    ? ({
-        variant: "outline",
-        size: "icon-lg",
-        className:
-          "size-12 rounded-full bg-background shadow-lg dark:bg-background [&_svg]:size-5",
-      } as const)
-    : ({ variant: "ghost", size: "icon" } as const);
 
   return (
-    <>
-      <Button
-        {...button}
-        aria-label={isLight ? "Switch to dark mode" : "Switch to light mode"}
-        onClick={toggleTheme}
-      >
-        <ThemeIcon />
-      </Button>
-      <Button {...button} aria-label="Start the guide" onClick={requestGuide}>
-        <Compass />
-      </Button>
-      <Button
-        {...button}
-        aria-label="Source on GitHub"
-        nativeButton={false}
-        render={<a href={REPO_URL} target="_blank" rel="noreferrer noopener" />}
-      >
-        <GitHubMark className={floating ? "size-4.5!" : "size-3.5"} />
-      </Button>
-    </>
-  );
-}
-
-/** One card on desktop; separate floating buttons under the search on phones. */
-export function MapActions() {
-  return (
-    <>
-      <Card
-        role="group"
-        aria-label="Display and links"
-        className="[--card-spacing:--spacing(1)] max-md:hidden"
-      >
-        <CardContent className="flex gap-1">
-          <CanvasActions floating={false} />
-        </CardContent>
-      </Card>
-      <div
-        role="group"
-        aria-label="Display and links"
-        className="flex flex-col gap-2 md:hidden"
-      >
-        <CanvasActions floating />
-      </div>
-    </>
+    <Card
+      role="group"
+      aria-label="Display and links"
+      className="[--card-spacing:--spacing(1)] max-md:contents"
+    >
+      <CardContent className="flex gap-1 max-md:flex-col max-md:gap-2">
+        <Button
+          variant="ghost"
+          size="icon"
+          aria-label={isLight ? "Switch to dark mode" : "Switch to light mode"}
+          onClick={toggleTheme}
+          className={actionClass}
+        >
+          <ThemeIcon className="size-4 max-md:size-5" />
+        </Button>
+        <Button
+          variant="ghost"
+          size="icon"
+          aria-label="Start the guide"
+          onClick={() => {
+            onBeforeGuide();
+            requestGuide();
+          }}
+          className={actionClass}
+        >
+          <Compass className="size-4 max-md:size-5" />
+        </Button>
+        <Button
+          variant="ghost"
+          size="icon"
+          aria-label="Source on GitHub"
+          nativeButton={false}
+          render={
+            <a href={REPO_URL} target="_blank" rel="noreferrer noopener" />
+          }
+          className={actionClass}
+        >
+          <GitHubMark className="size-3.5 max-md:size-4.5" />
+        </Button>
+      </CardContent>
+    </Card>
   );
 }
 
@@ -145,9 +137,9 @@ export function MapToolbar({
         aria-label="Map tools"
         className={`[--card-spacing:--spacing(1)] ${openPanel || hideOnMobile ? "max-md:hidden" : ""} max-md:fixed max-md:inset-x-3 max-md:bottom-[max(--spacing(3),env(safe-area-inset-bottom))] max-md:rounded-full max-md:shadow-lg`}
       >
-        <CardContent className="flex items-center gap-1">
+        <CardContent>
           <ToggleGroup
-            className="max-md:flex-1"
+            className="max-md:w-full"
             value={openPanel ? [openPanel] : []}
             onValueChange={(value) =>
               onOpenPanelChange((value[0] as ToolbarPanel | undefined) ?? null)

@@ -30,7 +30,6 @@ import { useTheme } from "@/providers/ThemeProvider";
 import { useCellSeries } from "@/hooks/useCellSeries";
 import { useGeolocation } from "@/hooks/useGeolocation";
 import { useMapSettings } from "@/hooks/useMapSettings";
-import { subscribeGuideRequests } from "@/lib/tour";
 import {
   MapActions,
   MapToolbar,
@@ -74,7 +73,6 @@ export function ReliefMap() {
   const [viewState, setViewState] = useState<MapViewState>(DEFAULT_MAP_VIEW);
   const [mapSize, setMapSize] = useState({ width: 0, height: 0 });
   const [openPanel, setOpenPanel] = useState<ToolbarPanel | null>(null);
-  useEffect(() => subscribeGuideRequests(() => setOpenPanel(null)), []);
   const [tourExpandsPanel, setTourExpandsPanel] = useState(false);
   const [tourCoversBottom, setTourCoversBottom] = useState(false);
   const [tourOpensDetails, setTourOpensDetails] = useState(false);
@@ -311,7 +309,7 @@ export function ReliefMap() {
         </div>
 
         <div className="pointer-events-auto ml-auto">
-          <MapActions />
+          <MapActions onBeforeGuide={() => setOpenPanel(null)} />
         </div>
       </div>
 
