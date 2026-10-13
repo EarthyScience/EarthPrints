@@ -94,6 +94,7 @@ export function MapActions({ onBeforeGuide }: { onBeforeGuide: () => void }) {
 type MapToolbarProps = {
   openPanel: ToolbarPanel | null;
   onOpenPanelChange: (panel: ToolbarPanel | null) => void;
+  hideChart?: boolean;
   hideOnMobile?: boolean;
 };
 
@@ -122,8 +123,13 @@ export function SiteMark() {
 export function MapToolbar({
   openPanel,
   onOpenPanelChange,
+  hideChart = false,
   hideOnMobile = false,
 }: MapToolbarProps) {
+  const panels = hideChart
+    ? PANELS.filter(({ value }) => value !== "chart")
+    : PANELS;
+
   return (
     <div className="flex items-start gap-2">
       <Card className="[--card-spacing:--spacing(1)] max-md:hidden">
@@ -145,7 +151,7 @@ export function MapToolbar({
               onOpenPanelChange((value[0] as ToolbarPanel | undefined) ?? null)
             }
           >
-            {PANELS.map(({ value, label, Icon }) => (
+            {panels.map(({ value, label, Icon }) => (
               <ToggleGroupItem
                 key={value}
                 value={value}

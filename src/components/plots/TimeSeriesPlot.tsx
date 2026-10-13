@@ -18,7 +18,11 @@ import { dailyMeanSeries, type DailyMeanPoint } from "@/lib/zarr/series";
 import {
   anchorBesidePanel,
   MapSideTooltip,
+  PinnedTooltip,
+  pinPosition,
+  togglePin,
   useDesktop,
+  type PinPosition,
   type TooltipAnchor,
   type TooltipPoint,
 } from "@/components/plots/MapSideTooltip";
@@ -33,7 +37,9 @@ const CHART_CONFIG = {
   value: { label: "Daily mean", color: "var(--brand)" },
 } satisfies ChartConfig;
 
-type Readout = TooltipAnchor & { index: number };
+type Readout = TooltipAnchor & PinPosition & { index: number };
+
+const sameDay = (a: Readout, b: Readout) => a.index === b.index;
 
 function dayPoint(point: DailyMeanPoint | undefined): TooltipPoint | undefined {
   if (!point) return undefined;
@@ -47,6 +53,7 @@ type TimeSeriesPlotProps = {
   hoursPerDay?: number;
   height?: number;
   width?: number;
+  pinLimit?: number;
   ref?: Ref<HTMLDivElement>;
 };
 
@@ -56,6 +63,7 @@ export function TimeSeriesPlot({
   hoursPerDay = 24,
   height = TIME_SERIES_PLOT_HEIGHT,
   width,
+  pinLimit = 1,
   ref,
 }: TimeSeriesPlotProps) {
   const data = useMemo(
@@ -66,27 +74,37 @@ export function TimeSeriesPlot({
   const desktop = useDesktop();
   const wrapperRef = useRef<HTMLDivElement>(null);
   const [hover, setHover] = useState<Readout | null>(null);
-  const [pinned, setPinned] = useState<Readout | null>(null);
+  const [pins, setPins] = useState<Readout[]>([]);
   const [pinnedData, setPinnedData] = useState(data);
   if (pinnedData !== data) {
     setPinnedData(data);
-    setPinned(null);
+    setPins([]);
   }
 
   if (data.length === 0) return null;
 
-  const readoutAt = (index: unknown, clientY: number): Readout | null => {
-    const anchor = anchorBesidePanel(wrapperRef.current, clientY);
+  const readoutAt = (
+    index: unknown,
+    clientX: number,
+    clientY: number,
+  ): Readout | null => {
+    const wrapper = wrapperRef.current;
+    const anchor = anchorBesidePanel(wrapper, clientX, clientY);
     const at = Number(index);
-    if (index == null || !Number.isInteger(at) || !anchor) return null;
-    return { ...anchor, index: at };
+    if (index == null || !Number.isInteger(at) || !anchor || !wrapper) {
+      return null;
+    }
+    return { ...anchor, ...pinPosition(wrapper, clientX, clientY), index: at };
   };
 
+  const separate = pinLimit > 1;
+  const pinned = separate ? null : (pins[0] ?? null);
+  const lastPin = pins.at(-1);
   const shown = pinned ?? hover;
   const shownPoint = shown ? dayPoint(data[shown.index]) : undefined;
 
   return (
-    <div ref={wrapperRef} className="grid gap-2">
+    <div ref={wrapperRef} className="relative grid gap-2">
       <ChartContainer
         ref={ref}
         config={CHART_CONFIG}
@@ -98,12 +116,16 @@ export function TimeSeriesPlot({
           data={data}
           margin={TIME_SERIES_CHART_MARGIN}
           onMouseMove={(state, event) =>
-            setHover(readoutAt(state.activeIndex, event.clientY))
+            setHover(readoutAt(state.activeIndex, event.clientX, event.clientY))
           }
           onMouseLeave={() => setHover(null)}
           // Recharts reports no active index on click, so pin the hovered day.
           onClick={() => {
-            if (desktop && hover) setPinned(hover);
+            if (desktop && hover) {
+              setPins((current) =>
+                togglePin(current, hover, pinLimit, sameDay),
+              );
+            }
           }}
         >
           <CartesianGrid vertical={false} />
@@ -126,13 +148,16 @@ export function TimeSeriesPlot({
             width={48}
             tickFormatter={formatSeriesValue}
           />
-          {desktop && pinned ? (
-            <ReferenceLine
-              x={data[pinned.index]?.day}
-              stroke="var(--muted-foreground)"
-              strokeDasharray="3 3"
-            />
-          ) : null}
+          {desktop
+            ? pins.map((pin) => (
+                <ReferenceLine
+                  key={pin.index}
+                  x={data[pin.index]?.day}
+                  stroke="var(--muted-foreground)"
+                  strokeDasharray="3 3"
+                />
+              ))
+            : null}
           <ChartTooltip
             content={
               desktop ? (
@@ -159,7 +184,43 @@ export function TimeSeriesPlot({
           />
         </LineChart>
       </ChartContainer>
-      {desktop && shown && shownPoint ? (
+      {desktop && separate
+        ? pins.map((pin) => {
+            const point = dayPoint(data[pin.index]);
+            if (!point) return null;
+            return (
+              <PinnedTooltip
+                key={pin.index}
+                point={point}
+                previous={dayPoint(data[pin.index - 1])}
+                position={pin}
+                units={units}
+                onClose={() =>
+                  setPins((current) =>
+                    current.filter((other) => !sameDay(other, pin)),
+                  )
+                }
+              />
+            );
+          })
+        : null}
+      {desktop &&
+      separate &&
+      hover &&
+      shownPoint &&
+      !pins.some((pin) => sameDay(pin, hover)) ? (
+        <MapSideTooltip
+          point={shownPoint}
+          previous={
+            lastPin
+              ? dayPoint(data[lastPin.index])
+              : dayPoint(data[hover.index - 1])
+          }
+          anchor={hover}
+          units={units}
+        />
+      ) : null}
+      {desktop && !separate && shown && shownPoint ? (
         <MapSideTooltip
           point={shownPoint}
           previous={dayPoint(data[shown.index - 1])}
@@ -170,7 +231,7 @@ export function TimeSeriesPlot({
           }
           anchor={shown}
           units={units}
-          onClose={pinned ? () => setPinned(null) : undefined}
+          onClose={pinned ? () => setPins([]) : undefined}
         />
       ) : null}
       <p className="text-muted-foreground">

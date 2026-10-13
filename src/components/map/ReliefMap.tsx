@@ -7,7 +7,7 @@ import Map, {
   type ViewStateChangeEvent,
 } from "react-map-gl/maplibre";
 import type { Map as MapLibreMap, MapLibreEvent } from "maplibre-gl";
-import { X } from "lucide-react";
+import { Maximize2, X } from "lucide-react";
 import "maplibre-gl/dist/maplibre-gl.css";
 import "@/lib/map/initMaplibre";
 import { geoPointToZarrGrid } from "@/lib/map/geogrid";
@@ -35,6 +35,8 @@ import {
   MapToolbar,
   type ToolbarPanel,
 } from "@/components/layout/MapToolbar";
+import { DataView } from "@/components/data/DataView";
+import type { MainView } from "@/components/data/MainViewSwitch";
 import { MapControls } from "@/components/map/MapControls";
 import { MapSearch } from "@/components/map/MapSearch";
 import { MapTour } from "@/components/map/MapTour";
@@ -53,6 +55,8 @@ const DRAG_PAN = {
   easing: (t: number) => 1 - (1 - t) ** 3,
 };
 
+const MINIMAP_ZOOM = 2;
+
 function readViewState(map: MapRef): MapViewState {
   const center = map.getCenter();
   return {
@@ -69,10 +73,12 @@ export function ReliefMap() {
   const mapRef = useRef<MapRef>(null);
   const detachWheelZoomRef = useRef<(() => void) | null>(null);
   const didAutoLocateRef = useRef(false);
+  const viewBeforeDataRef = useRef<MapViewState | null>(null);
   const [viewMode, setViewMode] = useState<MapViewMode>("sphere");
   const [viewState, setViewState] = useState<MapViewState>(DEFAULT_MAP_VIEW);
   const [mapSize, setMapSize] = useState({ width: 0, height: 0 });
   const [openPanel, setOpenPanel] = useState<ToolbarPanel | null>(null);
+  const [mainView, setMainView] = useState<MainView>("map");
   const [tourExpandsPanel, setTourExpandsPanel] = useState(false);
   const [tourCoversBottom, setTourCoversBottom] = useState(false);
   const [tourOpensDetails, setTourOpensDetails] = useState(false);
@@ -84,6 +90,7 @@ export function ReliefMap() {
   const settings = useMapSettings();
   const geolocation = useGeolocation();
   const isSphere = viewMode === "sphere";
+  const showsData = mainView === "data";
 
   const applyTouchRotation = useCallback(
     (map: MapLibreMap) => {
@@ -140,10 +147,10 @@ export function ReliefMap() {
   const pick = useCallback(
     (lon: number, lat: number, options?: { fly?: boolean }) => {
       const selection = series.select(lon, lat);
-      setOpenPanel("chart");
+      if (!showsData) setOpenPanel("chart");
       if (options?.fly ?? settings.autoZoom) flyToCell(selection.grid);
     },
-    [flyToCell, series, settings.autoZoom],
+    [flyToCell, series, settings.autoZoom, showsData],
   );
 
   // Refs, because the permission dialog can take seconds and the map moves.
@@ -195,6 +202,37 @@ export function ReliefMap() {
     });
   }, []);
 
+  const handleMainViewChange = useCallback(
+    (view: MainView) => {
+      setMainView(view);
+      const map = mapRef.current;
+      if (view === "map") {
+        const saved = viewBeforeDataRef.current;
+        viewBeforeDataRef.current = null;
+        if (map && saved) {
+          map.jumpTo({
+            center: [saved.longitude, saved.latitude],
+            zoom: saved.zoom,
+            bearing: saved.bearing ?? 0,
+            pitch: saved.pitch ?? 0,
+          });
+        }
+        return;
+      }
+      if (openPanel === "chart") setOpenPanel(null);
+      if (!map) return;
+      viewBeforeDataRef.current = readViewState(map);
+      const cell = series.selection?.grid;
+      map.jumpTo({
+        center: cell ? [cell.lon, cell.lat] : map.getCenter(),
+        zoom: Math.min(map.getZoom(), MINIMAP_ZOOM),
+        bearing: 0,
+        pitch: 0,
+      });
+    },
+    [openPanel, series.selection],
+  );
+
   const handleMove = useCallback((event: ViewStateChangeEvent) => {
     setViewState(event.viewState);
   }, []);
@@ -208,7 +246,14 @@ export function ReliefMap() {
 
   return (
     <div className="editor-shell relative h-dvh w-full overflow-hidden bg-background">
-      <div data-tour="map" className="absolute inset-0 bg-map-space">
+      <div
+        data-tour="map"
+        className={
+          showsData
+            ? "absolute right-4 bottom-6 z-30 size-48 overflow-hidden rounded-xl border bg-map-space shadow-lg animate-in fade-in-0 zoom-in-95 duration-150 motion-reduce:animate-none max-md:right-3 max-md:bottom-[calc(max(--spacing(3),env(safe-area-inset-bottom))+--spacing(16))] max-md:size-28"
+            : "absolute inset-0 bg-map-space"
+        }
+      >
         <Map
           ref={mapRef}
           mapStyle={buildReliefStyle(theme)}
@@ -254,23 +299,45 @@ export function ReliefMap() {
           data-tour="map-foot"
           className="pointer-events-none absolute inset-x-0 bottom-[calc(max(--spacing(4),env(safe-area-inset-bottom))+--spacing(2))] h-px"
         />
+        {showsData ? (
+          <button
+            type="button"
+            aria-label="Show the full map"
+            onClick={() => handleMainViewChange("map")}
+            className="group absolute inset-0 grid cursor-pointer place-items-end p-2 outline-none focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:ring-inset"
+          >
+            <span className="grid size-7 place-items-center rounded-md border bg-background/90 text-foreground shadow-sm transition-colors group-hover:bg-background">
+              <Maximize2 className="size-3.5" />
+            </span>
+          </button>
+        ) : null}
       </div>
+
+      {showsData ? (
+        <DataView
+          series={series}
+          timeBasis={settings.timeBasis}
+          onMainViewChange={handleMainViewChange}
+        />
+      ) : null}
 
       <div className="pointer-events-none absolute inset-x-3 top-3 z-30 flex max-md:z-40 flex-wrap items-start gap-2">
         <div className="pointer-events-auto relative">
           <MapToolbar
             openPanel={openPanel}
             onOpenPanelChange={setOpenPanel}
+            hideChart={showsData}
             hideOnMobile={tourCoversBottom}
           />
           <div className="absolute left-0 top-full mt-2 max-md:fixed max-md:inset-x-0 max-md:top-auto max-md:bottom-0 max-md:z-10 max-md:mt-0">
-            {openPanel === "chart" ? (
+            {openPanel === "chart" && !showsData ? (
               <CellPanel
                 series={series}
                 timeBasis={settings.timeBasis}
                 onClose={() => setOpenPanel(null)}
                 expand={tourExpandsPanel}
                 openDetails={tourOpensDetails}
+                onShowData={() => handleMainViewChange("data")}
               />
             ) : null}
             {openPanel === "settings" ? (
@@ -309,12 +376,17 @@ export function ReliefMap() {
         </div>
 
         <div className="pointer-events-auto ml-auto">
-          <MapActions onBeforeGuide={() => setOpenPanel(null)} />
+          <MapActions
+            onBeforeGuide={() => {
+              setOpenPanel(null);
+              setMainView("map");
+            }}
+          />
         </div>
       </div>
 
       <div
-        className={`absolute bottom-6 right-4 z-30 ${tourCoversBottom ? "max-md:hidden" : ""} max-md:right-3 max-md:bottom-[calc(max(--spacing(3),env(safe-area-inset-bottom))+--spacing(16))]`}
+        className={`absolute bottom-6 right-4 z-30 ${showsData ? "hidden" : ""} ${tourCoversBottom ? "max-md:hidden" : ""} max-md:right-3 max-md:bottom-[calc(max(--spacing(3),env(safe-area-inset-bottom))+--spacing(16))]`}
       >
         <MapControls
           onZoomIn={() => mapRef.current?.zoomIn()}
