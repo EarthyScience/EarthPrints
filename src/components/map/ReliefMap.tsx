@@ -30,7 +30,11 @@ import { useTheme } from "@/providers/ThemeProvider";
 import { useCellSeries } from "@/hooks/useCellSeries";
 import { useGeolocation } from "@/hooks/useGeolocation";
 import { useMapSettings } from "@/hooks/useMapSettings";
-import { MapToolbar, type ToolbarPanel } from "@/components/layout/MapToolbar";
+import {
+  MapActions,
+  MapToolbar,
+  type ToolbarPanel,
+} from "@/components/layout/MapToolbar";
 import { MapControls } from "@/components/map/MapControls";
 import { MapSearch } from "@/components/map/MapSearch";
 import { MapTour } from "@/components/map/MapTour";
@@ -302,6 +306,10 @@ export function ReliefMap() {
               </AlertAction>
             </Alert>
           ) : null}
+        </div>
+
+        <div className="pointer-events-auto ml-auto">
+          <MapActions onBeforeGuide={() => setOpenPanel(null)} />
         </div>
       </div>
 
