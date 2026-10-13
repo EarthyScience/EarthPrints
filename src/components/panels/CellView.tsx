@@ -10,6 +10,8 @@ import type { CellSeries, SeriesProgress } from "@/hooks/useCellSeries";
 import type { PlotView, SeriesDisplay } from "@/hooks/useSeriesDisplay";
 import { TimeSeriesPlot } from "@/components/plots/TimeSeriesPlot";
 import { FingerprintPlot } from "@/components/plots/FingerprintPlot";
+import { useDesktop } from "@/components/plots/MapSideTooltip";
+import { MainViewSwitch } from "@/components/data/MainViewSwitch";
 import { YearPicker } from "@/components/panels/YearPicker";
 import { ColormapSelect } from "@/components/panels/ColormapSelect";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -27,13 +29,16 @@ type CellViewProps = {
   series: CellSeries;
   display: SeriesDisplay;
   openDetails?: boolean;
+  onShowData: () => void;
 };
 
 export function CellView({
   series,
   display,
   openDetails = false,
+  onShowData,
 }: CellViewProps) {
+  const desktop = useDesktop();
   const { selection, patchWindow } = series;
   const [detailsOpen, setDetailsOpen] = useState(openDetails);
   const [prevOpenDetails, setPrevOpenDetails] = useState(openDetails);
@@ -43,24 +48,36 @@ export function CellView({
   }
   if (!selection) return null;
 
-  const disabled = display.isEmptyCell;
-
   return (
     <div className="grid gap-4">
       <Collapsible.Root
-        open={detailsOpen}
+        open={desktop || detailsOpen}
         onOpenChange={setDetailsOpen}
         className="grid"
       >
-        <div data-tour="record" className="grid gap-1">
-          <CardTitle>
-            {formatLongitude(selection.grid.lon)},{" "}
-            {formatLatitude(selection.grid.lat)}
-          </CardTitle>
-          <Collapsible.Trigger className="group flex w-fit items-center gap-1 rounded-sm text-sm text-muted-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/50">
-            Details · Years {formatSelectedYearsLabel(series.selectedYears)}
-            <ChevronDown className="size-4 transition-transform group-data-panel-open:rotate-180" />
-          </Collapsible.Trigger>
+        <div data-tour="record" className="flex items-start gap-3">
+          <div className="grid flex-1 gap-1">
+            <CardTitle>
+              {formatLongitude(selection.grid.lon)},{" "}
+              {formatLatitude(selection.grid.lat)}
+            </CardTitle>
+            {desktop ? (
+              <span className="text-sm text-muted-foreground">
+                Years {formatSelectedYearsLabel(series.selectedYears)}
+              </span>
+            ) : (
+              <Collapsible.Trigger className="group flex w-fit items-center gap-1 rounded-sm text-sm text-muted-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/50">
+                Details · Years {formatSelectedYearsLabel(series.selectedYears)}
+                <ChevronDown className="size-4 transition-transform group-data-panel-open:rotate-180" />
+              </Collapsible.Trigger>
+            )}
+          </div>
+          <MainViewSwitch
+            value="map"
+            onChange={(view) => {
+              if (view === "data") onShowData();
+            }}
+          />
         </div>
         <Collapsible.Panel className="h-(--collapsible-panel-height) overflow-hidden transition-[height] duration-150 ease-out data-ending-style:h-0 data-starting-style:h-0 motion-reduce:transition-none">
           <div className="grid gap-4 pt-3">
@@ -80,47 +97,7 @@ export function CellView({
       </Collapsible.Root>
 
       <section aria-live="polite" data-tour="plot" className="grid gap-3">
-        <Tabs
-          value={display.plotView}
-          onValueChange={(value) => display.setPlotView(value as PlotView)}
-        >
-          <TabsList>
-            <TabsTrigger
-              value="line"
-              disabled={disabled}
-              className="data-active:bg-brand/15 data-active:text-brand dark:data-active:bg-brand/15 dark:data-active:text-brand"
-            >
-              Line
-            </TabsTrigger>
-            <TabsTrigger
-              value="fingerprint"
-              disabled={disabled}
-              className="data-active:bg-brand/15 data-active:text-brand dark:data-active:bg-brand/15 dark:data-active:text-brand"
-            >
-              Fingerprint
-            </TabsTrigger>
-          </TabsList>
-        </Tabs>
-
-        {display.plotView === "fingerprint" ? (
-          <div className="flex flex-wrap items-center gap-2">
-            <Toggle
-              pressed={display.transposed}
-              onPressedChange={display.setTransposed}
-              disabled={disabled}
-              title="Swap the hour and day axes"
-              variant="outline"
-              className="dark:bg-input/30 dark:hover:bg-input/50 aria-pressed:bg-brand/15 aria-pressed:text-brand dark:aria-pressed:bg-brand/15"
-            >
-              <ArrowLeftRight />
-              Flip axes
-            </Toggle>
-            <ColormapSelect
-              value={display.palette}
-              onChange={display.setPalette}
-            />
-          </div>
-        ) : null}
+        <PlotControls display={display} />
 
         <PlotArea series={series} display={display} />
       </section>
@@ -128,12 +105,69 @@ export function CellView({
   );
 }
 
-function PlotArea({ series, display }: CellViewProps) {
+export function PlotControls({ display }: { display: SeriesDisplay }) {
+  const disabled = display.isEmptyCell;
+
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      <Tabs
+        value={display.plotView}
+        onValueChange={(value) => display.setPlotView(value as PlotView)}
+      >
+        <TabsList>
+          <TabsTrigger
+            value="line"
+            disabled={disabled}
+            className="data-active:bg-brand/15 data-active:text-brand dark:data-active:bg-brand/15 dark:data-active:text-brand"
+          >
+            Line
+          </TabsTrigger>
+          <TabsTrigger
+            value="fingerprint"
+            disabled={disabled}
+            className="data-active:bg-brand/15 data-active:text-brand dark:data-active:bg-brand/15 dark:data-active:text-brand"
+          >
+            Fingerprint
+          </TabsTrigger>
+        </TabsList>
+      </Tabs>
+
+      {display.plotView === "fingerprint" ? (
+        <div className="flex flex-wrap items-center gap-2">
+          <Toggle
+            pressed={display.transposed}
+            onPressedChange={display.setTransposed}
+            disabled={disabled}
+            title="Swap the hour and day axes"
+            variant="outline"
+            className="dark:bg-input/30 dark:hover:bg-input/50 aria-pressed:bg-brand/15 aria-pressed:text-brand dark:aria-pressed:bg-brand/15"
+          >
+            <ArrowLeftRight />
+            Flip axes
+          </Toggle>
+          <ColormapSelect
+            value={display.palette}
+            onChange={display.setPalette}
+          />
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+type PlotAreaProps = {
+  series: CellSeries;
+  display: SeriesDisplay;
+  height?: number;
+  pinLimit?: number;
+};
+
+export function PlotArea({ series, display, height, pinLimit }: PlotAreaProps) {
   if (series.loading) {
     return (
       <div className="grid gap-3">
         <SeriesProgress progress={series.progress} />
-        <Skeleton style={{ height: TIME_SERIES_PLOT_HEIGHT }} />
+        <Skeleton style={{ height: height ?? TIME_SERIES_PLOT_HEIGHT }} />
       </div>
     );
   }
@@ -164,6 +198,8 @@ function PlotArea({ series, display }: CellViewProps) {
       values={display.displayValues}
       units={series.units}
       hoursPerDay={ZARR_TIME.hoursPerDay}
+      height={height}
+      pinLimit={pinLimit}
     />
   ) : (
     <FingerprintPlot
@@ -174,6 +210,8 @@ function PlotArea({ series, display }: CellViewProps) {
       timeBasisLabel={display.timeBasisLabel}
       transposed={display.transposed}
       colormapId={display.colormapId}
+      height={height}
+      pinLimit={pinLimit}
     />
   );
 }
