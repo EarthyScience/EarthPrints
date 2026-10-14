@@ -1,6 +1,6 @@
 "use client";
 
-import { Maximize2, MousePointerClick } from "lucide-react";
+import { MousePointerClick } from "lucide-react";
 import { cn } from "cn";
 import type { CellSeries } from "@/hooks/useCellSeries";
 import { useSeriesDisplay } from "@/hooks/useSeriesDisplay";
@@ -8,7 +8,6 @@ import type { TimeBasis } from "@/lib/zarr/localTime";
 import { CellView } from "@/components/panels/CellView";
 import { CellExport } from "@/components/panels/CellExport";
 import { FloatingPanel } from "@/components/panels/FloatingPanel";
-import { Button } from "@/components/ui/button";
 import {
   Empty,
   EmptyDescription,
@@ -28,7 +27,7 @@ type CellPanelProps = {
   onClose: () => void;
   expand?: boolean;
   openDetails?: boolean;
-  onOpenExtended: () => void;
+  onTimeBasisChange: (basis: TimeBasis) => void;
 };
 
 export function CellPanel({
@@ -37,7 +36,7 @@ export function CellPanel({
   onClose,
   expand,
   openDetails,
-  onOpenExtended,
+  onTimeBasisChange,
 }: CellPanelProps) {
   const display = useSeriesDisplay(series, timeBasis);
 
@@ -58,38 +57,29 @@ export function CellPanel({
   }
 
   return (
-    <div className="relative">
-      <Button
-        variant="outline"
-        size="lg"
-        onClick={onOpenExtended}
-        className="absolute right-3 bottom-full mb-3 rounded-full bg-background shadow-lg md:hidden dark:bg-background"
-      >
-        <Maximize2 />
-        Extended view
-      </Button>
-      <FloatingPanel label="Chart" onClose={onClose} expand={expand}>
-        <Tabs defaultValue="view">
-          <TabsList className={cn("w-full max-md:mb-3", segmentedListClass)}>
-            <TabsTrigger value="view" className={segmentedTriggerClass}>
-              View
-            </TabsTrigger>
-            <TabsTrigger value="export" className={segmentedTriggerClass}>
-              Export
-            </TabsTrigger>
-          </TabsList>
-          <TabsContent value="view">
-            <CellView
-              series={series}
-              display={display}
-              openDetails={openDetails}
-            />
-          </TabsContent>
-          <TabsContent value="export">
-            <CellExport series={series} display={display} />
-          </TabsContent>
-        </Tabs>
-      </FloatingPanel>
-    </div>
+    <FloatingPanel label="Chart" onClose={onClose} expand={expand}>
+      <Tabs defaultValue="view">
+        <TabsList className={cn("w-full max-md:mb-3", segmentedListClass)}>
+          <TabsTrigger value="view" className={segmentedTriggerClass}>
+            View
+          </TabsTrigger>
+          <TabsTrigger value="export" className={segmentedTriggerClass}>
+            Export
+          </TabsTrigger>
+        </TabsList>
+        <TabsContent value="view">
+          <CellView
+            series={series}
+            display={display}
+            timeBasis={timeBasis}
+            onTimeBasisChange={onTimeBasisChange}
+            openDetails={openDetails}
+          />
+        </TabsContent>
+        <TabsContent value="export">
+          <CellExport series={series} display={display} />
+        </TabsContent>
+      </Tabs>
+    </FloatingPanel>
   );
 }

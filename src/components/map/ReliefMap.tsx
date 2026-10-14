@@ -368,7 +368,7 @@ export function ReliefMap() {
                 ? { label: "Map", Icon: ArrowLeft, onClick: closeExtended }
                 : openPanel === "chart" && series.selection
                   ? {
-                      label: "Extended view",
+                      label: "Data",
                       Icon: Maximize2,
                       onClick: openExtended,
                     }
@@ -383,7 +383,7 @@ export function ReliefMap() {
                 onClose={() => setOpenPanel(null)}
                 expand={tourExpandsPanel}
                 openDetails={tourOpensDetails}
-                onOpenExtended={openExtended}
+                onTimeBasisChange={settings.setTimeBasis}
               />
             ) : null}
             {openPanel === "settings" ? (
