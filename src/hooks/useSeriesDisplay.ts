@@ -9,7 +9,11 @@ import {
   type TimeBasis,
 } from "@/lib/zarr/localTime";
 import { hasFiniteValues } from "@/lib/zarr/series";
-import { colormapFor, type Palette } from "@/lib/map/fingerprintScale";
+import {
+  colormapFor,
+  DEFAULT_PALETTE,
+  type Palette,
+} from "@/lib/map/fingerprintScale";
 import { loadPalette, savePalette } from "@/lib/settings/colormap";
 import { useTheme } from "@/providers/ThemeProvider";
 import type { CellSeries } from "@/hooks/useCellSeries";
@@ -29,7 +33,7 @@ export function useSeriesDisplay(
   const [plotView, setPlotView] = useState<PlotView>("line");
   const [transposed, setTransposed] = useState(false);
   const [palette, setPaletteState] = useState<Palette>(
-    () => loadPalette() ?? "science",
+    () => loadPalette() ?? DEFAULT_PALETTE,
   );
   const colormapId = colormapFor(palette, isLight);
 

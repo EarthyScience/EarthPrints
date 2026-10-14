@@ -14,9 +14,10 @@
  * intense, which is why every colorbar labels both real extremes and marks zero.
  *
  * Palettes:
- *   - vik, berlin, broc, cork, roma, vanimo: Crameri's perceptually uniform
+ *   - vik, broc, cork, bam, roma and their dark-centred counterparts berlin,
+ *     lisbon, tofino, vanimo, managua: Crameri's perceptually uniform
  *     scientific colour maps, as real lookup tables (see `colormapTables.ts`).
- *     vik and berlin are the defaults for light and dark surfaces.
+ *     The picker offers each pair as one palette that follows the theme.
  *   - rdbu: ColorBrewer RdBu, a familiar non-uniform reference point.
  *   - flux: Crameri/Kovesi CET pair, negative half = linear_kbc_5_95_c73
  *     (dark-blue -> cyan), positive half = Reverse(linear_kryw_5_100_c67)
@@ -66,6 +67,22 @@ export const COLORMAPS: Record<
     label: "vanimo",
     description: "Crameri vanimo: pink to black to green, for dark surfaces",
   },
+  lisbon: {
+    label: "lisbon",
+    description: "Crameri lisbon: blue to black to olive, for dark surfaces",
+  },
+  tofino: {
+    label: "tofino",
+    description: "Crameri tofino: blue to black to green, for dark surfaces",
+  },
+  bam: {
+    label: "bam",
+    description: "Crameri bam: purple to white to green",
+  },
+  managua: {
+    label: "managua",
+    description: "Crameri managua: orange to black to blue, for dark surfaces",
+  },
   rdbu: {
     label: "RdBu",
     description:
@@ -83,11 +100,44 @@ export function defaultColormapId(isLight: boolean): ColormapId {
   return isLight ? "vik" : "berlin";
 }
 
-/** What the user picks; Science resolves to the theme's default table. */
-export type Palette = "science" | "flux";
+/**
+ * What the user picks. Each palette names its light-surface table and resolves
+ * to a dark-centred counterpart on dark surfaces, where one exists.
+ */
+export const PALETTE_COLORMAPS = {
+  vik: { light: "vik", dark: "berlin" },
+  broc: { light: "broc", dark: "lisbon" },
+  cork: { light: "cork", dark: "tofino" },
+  bam: { light: "bam", dark: "vanimo" },
+  roma: { light: "roma", dark: "managua" },
+  rdbu: { light: "rdbu", dark: "rdbu" },
+  flux: { light: "flux", dark: "flux" },
+} as const satisfies Record<string, { light: ColormapId; dark: ColormapId }>;
+
+export type Palette = keyof typeof PALETTE_COLORMAPS;
+
+export const PALETTES = Object.keys(PALETTE_COLORMAPS) as Palette[];
+
+export const DEFAULT_PALETTE: Palette = "vik";
 
 export function colormapFor(palette: Palette, isLight: boolean): ColormapId {
-  return palette === "flux" ? "flux" : defaultColormapId(isLight);
+  const pair = PALETTE_COLORMAPS[palette];
+  return isLight ? pair.light : pair.dark;
+}
+
+/**
+ * The palette a stored preference stands for. Older builds stored "science"
+ * (or "science-light" / "science-dark") for the vik/berlin pair, and a dark
+ * table id maps back to the palette that contains it.
+ */
+export function paletteFromStored(stored: string): Palette {
+  for (const palette of PALETTES) {
+    const { light, dark } = PALETTE_COLORMAPS[palette];
+    if (stored === palette || stored === light || stored === dark) {
+      return palette;
+    }
+  }
+  return DEFAULT_PALETTE;
 }
 
 export type Rgb = readonly [number, number, number];

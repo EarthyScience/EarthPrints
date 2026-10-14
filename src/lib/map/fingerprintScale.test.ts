@@ -1,14 +1,22 @@
 import { describe, expect, it } from "vitest";
-import { DIVERGING_TABLES, sampleTable } from "@/lib/map/colormapTables";
+import {
+  DARK_PANEL,
+  DIVERGING_TABLES,
+  sampleTable,
+} from "@/lib/map/colormapTables";
 import {
   asymmetricExtents,
   COLORMAPS,
+  colormapFor,
   type ColormapId,
   dayIndexTicks,
   defaultColormapId,
   fingerprintColorScale,
   fingerprintRampSamples,
   formatIsoDate,
+  PALETTE_COLORMAPS,
+  PALETTES,
+  paletteFromStored,
   symmetricAbsMax,
   yearRangesInWindow,
   zeroFrac,
@@ -134,6 +142,68 @@ describe("fingerprintColorScale — table palettes", () => {
     const dark = fingerprintColorScale(defaultColormapId(false))(0, 5, 5);
     expect(luma(light)).toBeGreaterThan(180);
     expect(luma(dark)).toBeLessThan(60);
+  });
+});
+
+describe("palettes", () => {
+  const luma = (css: string) => {
+    const [r, g, b] = css.match(/\d+/g)!.map(Number);
+    return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+  };
+
+  it("pairs each Crameri light-centred map with a dark-centred one", () => {
+    for (const palette of PALETTES) {
+      const { light, dark } = PALETTE_COLORMAPS[palette];
+      if (light === dark) continue;
+      expect(luma(fingerprintColorScale(light)(0, 5, 5))).toBeGreaterThan(180);
+      expect(luma(fingerprintColorScale(dark)(0, 5, 5))).toBeLessThan(60);
+    }
+  });
+
+  it("draws zero on dark maps in the dark panel colour", () => {
+    const panel = `rgb(${DARK_PANEL.join(", ")})`;
+    for (const palette of PALETTES) {
+      const { light, dark } = PALETTE_COLORMAPS[palette];
+      if (light === dark) continue;
+      expect(fingerprintColorScale(dark)(0, 5, 5)).toBe(panel);
+    }
+  });
+
+  it("keeps dark maps brightening away from zero", () => {
+    // The published dark maps already dip a few units just off centre.
+    const dip = 1;
+    for (const palette of PALETTES) {
+      const { light, dark } = PALETTE_COLORMAPS[palette];
+      if (light === dark) continue;
+      const scale = fingerprintColorScale(dark);
+      for (let v = 0; v < 5; v += 0.05) {
+        expect(luma(scale(v + 0.05, 5, 5)) + dip).toBeGreaterThanOrEqual(
+          luma(scale(v, 5, 5)),
+        );
+        expect(luma(scale(-v - 0.05, 5, 5)) + dip).toBeGreaterThanOrEqual(
+          luma(scale(-v, 5, 5)),
+        );
+      }
+    }
+  });
+
+  it("offers every colormap in some palette", () => {
+    const offered = new Set(
+      PALETTES.flatMap((palette) => [
+        colormapFor(palette, true),
+        colormapFor(palette, false),
+      ]),
+    );
+    expect([...offered].sort()).toEqual(Object.keys(COLORMAPS).sort());
+  });
+
+  it("reads stored preferences from older builds", () => {
+    expect(paletteFromStored("science")).toBe("vik");
+    expect(paletteFromStored("science-dark")).toBe("vik");
+    expect(paletteFromStored("berlin")).toBe("vik");
+    expect(paletteFromStored("tofino")).toBe("cork");
+    expect(paletteFromStored("flux")).toBe("flux");
+    expect(paletteFromStored("broc")).toBe("broc");
   });
 });
 

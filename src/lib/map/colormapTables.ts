@@ -2,16 +2,17 @@
  * Lookup tables for the diverging colour maps offered by the fingerprint plot.
  *
  * These are Fabio Crameri's perceptually uniform, colourblind-safe scientific
- * colour maps, downsampled from the official 256-entry tables to 33 stops
- * (indistinguishable once interpolated, small enough to read in a diff). Cite
- * as: Crameri, F. (2023), Scientific colour maps, Zenodo,
- * doi:10.5281/zenodo.1243862 (MIT). RdBu is the familiar ColorBrewer ramp, kept
- * as a non-uniform reference point.
+ * colour maps, downsampled from the official 256-entry tables (version 8.0.0)
+ * to 33 stops by taking entry round(i * 255 / 32) (indistinguishable once
+ * interpolated, small enough to read in a diff). RdBu is the familiar
+ * ColorBrewer ramp, kept as a non-uniform reference point. Sources and licences
+ * are in THIRD_PARTY_NOTICES.md.
  *
  * Every table here is diverging with a neutral centre, so stop 16 of 33 is the
- * zero colour. `vik`, `broc`, `cork` and `roma` are light-centred; `berlin` and
- * `vanimo` are dark-centred, so a near-zero cell recedes into a dark panel
- * instead of glowing. The Flux palette is not here: it is two sequential CET
+ * zero colour. `vik`, `broc`, `cork`, `bam` and `roma` are light-centred; `berlin`,
+ * `lisbon`, `tofino`, `vanimo` and `managua` are their dark-centred
+ * counterparts, so a near-zero cell recedes into a dark panel instead of
+ * glowing (see `onDarkPanel`). The Flux palette is not here: it is two sequential CET
  * ramps glued at zero rather than a single diverging table, and lives in
  * `fingerprintScale.ts` with the rest of the CET data.
  */
@@ -234,6 +235,150 @@ const VANIMO: readonly Rgb[] = [
   [190, 253, 165],
 ];
 
+const LISBON: readonly Rgb[] = [
+  [230, 229, 255],
+  [208, 214, 242],
+  [187, 198, 229],
+  [165, 183, 217],
+  [144, 167, 204],
+  [124, 152, 192],
+  [104, 137, 179],
+  [84, 121, 166],
+  [65, 106, 151],
+  [48, 90, 134],
+  [36, 76, 116],
+  [27, 63, 97],
+  [22, 51, 79],
+  [18, 40, 62],
+  [17, 31, 46],
+  [18, 25, 33],
+  [23, 25, 25],
+  [30, 29, 23],
+  [40, 38, 26],
+  [53, 50, 32],
+  [67, 63, 40],
+  [81, 76, 49],
+  [96, 90, 57],
+  [111, 105, 67],
+  [127, 120, 76],
+  [143, 135, 88],
+  [160, 152, 101],
+  [177, 169, 117],
+  [193, 186, 135],
+  [209, 203, 154],
+  [224, 220, 175],
+  [240, 238, 195],
+  [255, 255, 217],
+];
+
+const TOFINO: readonly Rgb[] = [
+  [222, 217, 255],
+  [200, 202, 246],
+  [179, 187, 236],
+  [158, 172, 227],
+  [136, 157, 217],
+  [115, 141, 206],
+  [95, 125, 193],
+  [76, 109, 175],
+  [62, 94, 154],
+  [52, 80, 134],
+  [44, 68, 113],
+  [36, 56, 93],
+  [29, 45, 74],
+  [23, 35, 56],
+  [18, 26, 40],
+  [15, 21, 27],
+  [13, 22, 19],
+  [15, 27, 18],
+  [18, 35, 20],
+  [22, 47, 25],
+  [28, 59, 31],
+  [34, 72, 37],
+  [40, 86, 44],
+  [47, 100, 52],
+  [55, 115, 60],
+  [65, 131, 69],
+  [80, 147, 80],
+  [100, 164, 92],
+  [124, 179, 105],
+  [148, 192, 118],
+  [172, 205, 131],
+  [195, 217, 143],
+  [219, 230, 155],
+];
+
+const BAM: readonly Rgb[] = [
+  [101, 2, 75],
+  [119, 23, 93],
+  [136, 39, 110],
+  [151, 53, 126],
+  [165, 67, 140],
+  [178, 80, 153],
+  [189, 94, 165],
+  [200, 110, 176],
+  [209, 127, 188],
+  [217, 145, 198],
+  [224, 163, 208],
+  [231, 181, 218],
+  [236, 198, 226],
+  [241, 213, 233],
+  [245, 226, 239],
+  [246, 235, 241],
+  [246, 241, 240],
+  [243, 243, 237],
+  [238, 242, 228],
+  [229, 239, 213],
+  [216, 232, 194],
+  [200, 222, 171],
+  [181, 210, 146],
+  [161, 196, 122],
+  [141, 181, 101],
+  [122, 167, 84],
+  [105, 153, 70],
+  [90, 141, 58],
+  [76, 129, 47],
+  [62, 117, 37],
+  [48, 104, 25],
+  [32, 90, 13],
+  [13, 76, 0],
+];
+
+const MANAGUA: readonly Rgb[] = [
+  [255, 207, 103],
+  [245, 191, 98],
+  [235, 176, 93],
+  [225, 161, 88],
+  [216, 147, 83],
+  [206, 134, 79],
+  [197, 121, 74],
+  [187, 109, 70],
+  [177, 98, 67],
+  [166, 87, 63],
+  [154, 76, 61],
+  [142, 66, 58],
+  [129, 57, 57],
+  [116, 49, 57],
+  [105, 43, 60],
+  [95, 41, 65],
+  [87, 41, 73],
+  [82, 44, 83],
+  [78, 50, 96],
+  [76, 59, 111],
+  [76, 69, 127],
+  [77, 81, 142],
+  [80, 93, 156],
+  [83, 105, 168],
+  [87, 117, 179],
+  [92, 129, 189],
+  [96, 142, 199],
+  [102, 156, 208],
+  [107, 170, 218],
+  [112, 184, 227],
+  [118, 199, 236],
+  [123, 215, 245],
+  [129, 231, 255],
+];
+
 /** ColorBrewer RdBu, reversed so blue is negative and red positive like the rest. */
 const RDBU: readonly Rgb[] = [
   [5, 48, 97],
@@ -249,14 +394,41 @@ const RDBU: readonly Rgb[] = [
   [103, 0, 31],
 ];
 
+/** The dark theme's panel colour, `--editor-bg-primary` in `globals.css`. */
+export const DARK_PANEL: Rgb = [33, 33, 32];
+
+/**
+ * The dark-centred maps bottom out darker than the dark panel, so near-zero
+ * cells read as a black band instead of receding. Shift the centre stop onto
+ * the panel colour and fade the shift linearly to nothing at both ends; the
+ * shift changes more slowly than the maps brighten, so lightness still rises
+ * steadily away from zero.
+ */
+function onDarkPanel(lut: readonly Rgb[]): readonly Rgb[] {
+  const mid = (lut.length - 1) / 2;
+  const centre = lut[mid];
+  return lut.map(([r, g, b], i) => {
+    const w = 1 - Math.abs(i - mid) / mid;
+    return [
+      Math.round(r + (DARK_PANEL[0] - centre[0]) * w),
+      Math.round(g + (DARK_PANEL[1] - centre[1]) * w),
+      Math.round(b + (DARK_PANEL[2] - centre[2]) * w),
+    ];
+  });
+}
+
 /** Every table that `fingerprintColorScale` can sample, keyed by colormap id. */
 export const DIVERGING_TABLES = {
   vik: VIK,
-  berlin: BERLIN,
+  berlin: onDarkPanel(BERLIN),
   broc: BROC,
   cork: CORK,
   roma: ROMA,
-  vanimo: VANIMO,
+  vanimo: onDarkPanel(VANIMO),
+  lisbon: onDarkPanel(LISBON),
+  tofino: onDarkPanel(TOFINO),
+  bam: BAM,
+  managua: onDarkPanel(MANAGUA),
   rdbu: RDBU,
 } as const;
 
