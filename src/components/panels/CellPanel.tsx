@@ -63,7 +63,7 @@ export function CellPanel({
         variant="outline"
         size="lg"
         onClick={onOpenExtended}
-        className="absolute top-0 left-full ml-2 bg-background shadow-sm dark:bg-background max-md:top-auto max-md:right-3 max-md:bottom-full max-md:left-auto max-md:ml-0 max-md:mb-3 max-md:rounded-full max-md:shadow-lg"
+        className="absolute right-3 bottom-full mb-3 rounded-full bg-background shadow-lg md:hidden dark:bg-background"
       >
         <Maximize2 />
         Extended view

@@ -96,13 +96,7 @@ export function CellView({
   );
 }
 
-export function PlotControls({
-  display,
-  children,
-}: {
-  display: SeriesDisplay;
-  children?: React.ReactNode;
-}) {
+export function PlotControls({ display }: { display: SeriesDisplay }) {
   const disabled = display.isEmptyCell;
 
   return (
@@ -148,7 +142,6 @@ export function PlotControls({
           />
         </div>
       ) : null}
-      {children}
     </div>
   );
 }

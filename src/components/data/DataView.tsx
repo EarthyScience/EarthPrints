@@ -24,6 +24,7 @@ import {
   CardDescription,
   CardTitle,
 } from "@/components/ui/card";
+import { FieldLegend, FieldSet } from "@/components/ui/field";
 import { SegmentedTabs } from "@/components/ui/segmented-tabs";
 
 const FADE_DISTANCE = 48;
@@ -186,6 +187,19 @@ export function DataView({
               </Card>
               <Card>
                 <CardContent>
+                  <FieldSet>
+                    <FieldLegend variant="label">Plot hours in</FieldLegend>
+                    <SegmentedTabs<TimeBasis>
+                      value={timeBasis}
+                      onChange={onTimeBasisChange}
+                      options={TIME_BASES}
+                      aria-label="Plot hours in"
+                    />
+                  </FieldSet>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardContent>
                   <CellExport series={series} display={display} />
                 </CardContent>
               </Card>
@@ -193,7 +207,7 @@ export function DataView({
             <div className="grid min-w-0 gap-6">
               <Card>
                 <CardContent className="grid gap-6">
-                  <header className="grid grid-cols-[1fr_auto] items-start gap-4 max-md:grid-cols-1 max-md:pr-10">
+                  <header className="grid items-start gap-4 max-md:pr-10">
                     <div className="grid gap-1">
                       <CardTitle>
                         {formatLongitude(selection.grid.lon)},{" "}
@@ -212,22 +226,14 @@ export function DataView({
                     <Button
                       variant="outline"
                       onClick={onClose}
-                      className="max-md:order-first max-md:justify-self-start"
+                      className="order-first justify-self-start md:hidden"
                     >
                       <ArrowLeft />
                       Map
                     </Button>
                   </header>
                   <section aria-live="polite" className="grid gap-3">
-                    <PlotControls display={display}>
-                      <SegmentedTabs<TimeBasis>
-                        value={timeBasis}
-                        onChange={onTimeBasisChange}
-                        options={TIME_BASES}
-                        aria-label="Plot hours in"
-                        className="ml-auto"
-                      />
-                    </PlotControls>
+                    <PlotControls display={display} />
                     <PlotArea
                       series={series}
                       display={display}

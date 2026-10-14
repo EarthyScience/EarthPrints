@@ -7,7 +7,7 @@ import Map, {
   type ViewStateChangeEvent,
 } from "react-map-gl/maplibre";
 import type { Map as MapLibreMap, MapLibreEvent } from "maplibre-gl";
-import { Maximize2, X } from "lucide-react";
+import { ArrowLeft, Maximize2, X } from "lucide-react";
 import "maplibre-gl/dist/maplibre-gl.css";
 import "@/lib/map/initMaplibre";
 import { geoPointToZarrGrid } from "@/lib/map/geogrid";
@@ -363,6 +363,17 @@ export function ReliefMap() {
             onOpenPanelChange={setOpenPanel}
             hideChart={showsData}
             hideOnMobile={tourCoversBottom}
+            viewAction={
+              showsData
+                ? { label: "Map", Icon: ArrowLeft, onClick: closeExtended }
+                : openPanel === "chart" && series.selection
+                  ? {
+                      label: "Extended view",
+                      Icon: Maximize2,
+                      onClick: openExtended,
+                    }
+                  : undefined
+            }
           />
           <div className="absolute left-0 top-full mt-2 max-md:fixed max-md:inset-x-0 max-md:top-auto max-md:bottom-0 max-md:z-10 max-md:mt-0">
             {openPanel === "chart" && !showsData ? (
