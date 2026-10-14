@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useRef, useSyncExternalStore } from "react";
-import { Globe } from "lucide-react";
+import { ArrowLeft } from "lucide-react";
 import { formatLatitude, formatLongitude } from "@/lib/map/geogrid";
 import { formatIsoDate } from "@/lib/map/fingerprintScale";
 import { formatSeriesValue } from "@/lib/plots/chartTheme";
@@ -17,10 +17,6 @@ import { useSeriesDisplay } from "@/hooks/useSeriesDisplay";
 import { CellExport } from "@/components/panels/CellExport";
 import { PlotArea, PlotControls } from "@/components/panels/CellView";
 import { YearPicker } from "@/components/panels/YearPicker";
-import {
-  MainViewSwitch,
-  type MainView,
-} from "@/components/data/MainViewSwitch";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -28,16 +24,14 @@ import {
   CardDescription,
   CardTitle,
 } from "@/components/ui/card";
-import {
-  Empty,
-  EmptyContent,
-  EmptyDescription,
-  EmptyHeader,
-  EmptyMedia,
-  EmptyTitle,
-} from "@/components/ui/empty";
+import { SegmentedTabs } from "@/components/ui/segmented-tabs";
 
 const FADE_DISTANCE = 48;
+
+const TIME_BASES = [
+  { value: "local", label: "Local" },
+  { value: "utc", label: "UTC" },
+] as const;
 
 function subscribeResize(onChange: () => void) {
   window.addEventListener("resize", onChange);
@@ -138,13 +132,15 @@ function StatCard({
 type DataViewProps = {
   series: CellSeries;
   timeBasis: TimeBasis;
-  onMainViewChange: (view: MainView) => void;
+  onTimeBasisChange: (basis: TimeBasis) => void;
+  onClose: () => void;
 };
 
 export function DataView({
   series,
   timeBasis,
-  onMainViewChange,
+  onTimeBasisChange,
+  onClose,
 }: DataViewProps) {
   const display = useSeriesDisplay(series, timeBasis);
   const fadeRef = useRef<HTMLDivElement>(null);
@@ -175,24 +171,7 @@ export function DataView({
         className="pointer-events-none fixed inset-x-0 top-0 z-10 h-25 bg-linear-to-b from-editor-bg-depth from-55% to-transparent opacity-0 max-md:hidden"
       />
       <div className="mx-auto grid max-w-7xl gap-6 px-3 pt-28 pb-40 md:px-6 md:pt-20 md:pb-60">
-        {!selection ? (
-          <Empty className="min-h-[60dvh]">
-            <EmptyHeader>
-              <EmptyMedia variant="icon">
-                <Globe />
-              </EmptyMedia>
-              <EmptyTitle>No point picked yet</EmptyTitle>
-              <EmptyDescription>
-                Pick a point on the map or search for a place to see its record
-              </EmptyDescription>
-            </EmptyHeader>
-            <EmptyContent>
-              <Button variant="outline" onClick={() => onMainViewChange("map")}>
-                Open the map
-              </Button>
-            </EmptyContent>
-          </Empty>
-        ) : (
+        {selection ? (
           <div className="grid items-start gap-6 lg:grid-cols-[340px_minmax(0,1fr)]">
             <aside className="grid content-start gap-3 max-lg:order-last">
               <Card>
@@ -214,7 +193,7 @@ export function DataView({
             <div className="grid min-w-0 gap-6">
               <Card>
                 <CardContent className="grid gap-6">
-                  <header className="grid gap-4 grid-cols-[1fr_auto] items-start">
+                  <header className="grid grid-cols-[1fr_auto] items-start gap-4 max-md:grid-cols-1 max-md:pr-10">
                     <div className="grid gap-1">
                       <CardTitle>
                         {formatLongitude(selection.grid.lon)},{" "}
@@ -227,14 +206,28 @@ export function DataView({
                         <Chip>
                           Years {formatSelectedYearsLabel(selectedYears)}
                         </Chip>
-                        <Chip>{display.timeBasisLabel}</Chip>
                         {units ? <Chip>{units}</Chip> : null}
                       </div>
                     </div>
-                    <MainViewSwitch value="data" onChange={onMainViewChange} />
+                    <Button
+                      variant="outline"
+                      onClick={onClose}
+                      className="max-md:order-first max-md:justify-self-start"
+                    >
+                      <ArrowLeft />
+                      Map
+                    </Button>
                   </header>
                   <section aria-live="polite" className="grid gap-3">
-                    <PlotControls display={display} />
+                    <PlotControls display={display}>
+                      <SegmentedTabs<TimeBasis>
+                        value={timeBasis}
+                        onChange={onTimeBasisChange}
+                        options={TIME_BASES}
+                        aria-label="Plot hours in"
+                        className="ml-auto"
+                      />
+                    </PlotControls>
                     <PlotArea
                       series={series}
                       display={display}
@@ -277,7 +270,7 @@ export function DataView({
               ) : null}
             </div>
           </div>
-        )}
+        ) : null}
       </div>
     </div>
   );

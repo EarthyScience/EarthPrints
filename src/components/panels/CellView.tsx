@@ -11,7 +11,6 @@ import type { PlotView, SeriesDisplay } from "@/hooks/useSeriesDisplay";
 import { TimeSeriesPlot } from "@/components/plots/TimeSeriesPlot";
 import { FingerprintPlot } from "@/components/plots/FingerprintPlot";
 import { useDesktop } from "@/components/plots/MapSideTooltip";
-import { MainViewSwitch } from "@/components/data/MainViewSwitch";
 import { YearPicker } from "@/components/panels/YearPicker";
 import { ColormapSelect } from "@/components/panels/ColormapSelect";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -29,14 +28,12 @@ type CellViewProps = {
   series: CellSeries;
   display: SeriesDisplay;
   openDetails?: boolean;
-  onShowData: () => void;
 };
 
 export function CellView({
   series,
   display,
   openDetails = false,
-  onShowData,
 }: CellViewProps) {
   const desktop = useDesktop();
   const { selection, patchWindow } = series;
@@ -72,12 +69,6 @@ export function CellView({
               </Collapsible.Trigger>
             )}
           </div>
-          <MainViewSwitch
-            value="map"
-            onChange={(view) => {
-              if (view === "data") onShowData();
-            }}
-          />
         </div>
         <Collapsible.Panel className="h-(--collapsible-panel-height) overflow-hidden transition-[height] duration-150 ease-out data-ending-style:h-0 data-starting-style:h-0 motion-reduce:transition-none">
           <div className="grid gap-4 pt-3">
@@ -105,7 +96,13 @@ export function CellView({
   );
 }
 
-export function PlotControls({ display }: { display: SeriesDisplay }) {
+export function PlotControls({
+  display,
+  children,
+}: {
+  display: SeriesDisplay;
+  children?: React.ReactNode;
+}) {
   const disabled = display.isEmptyCell;
 
   return (
@@ -151,6 +148,7 @@ export function PlotControls({ display }: { display: SeriesDisplay }) {
           />
         </div>
       ) : null}
+      {children}
     </div>
   );
 }
