@@ -9,6 +9,7 @@ import type { CellSeries } from "@/hooks/useCellSeries";
 import { useSeriesDisplay } from "@/hooks/useSeriesDisplay";
 import { CellExport } from "@/components/panels/CellExport";
 import { PlotArea, PlotControls } from "@/components/panels/CellView";
+import { ScaleField } from "@/components/panels/ScaleField";
 import { TimeBasisField } from "@/components/panels/TimeBasisField";
 import { YearPicker } from "@/components/panels/YearPicker";
 import { SeriesSummary } from "@/components/data/SeriesSummary";
@@ -82,17 +83,14 @@ export function DataView({
           <div className="grid items-start gap-6 lg:grid-cols-[340px_minmax(0,1fr)]">
             <aside className="grid content-start gap-3 max-lg:order-last">
               <Card>
-                <CardContent>
+                <CardContent className="grid gap-6">
                   <YearPicker
                     selectedYears={selectedYears}
                     cachedYears={series.cachedYears}
                     loading={series.loading}
                     onSelectYears={series.selectYears}
                   />
-                </CardContent>
-              </Card>
-              <Card>
-                <CardContent>
+                  <ScaleField display={display} />
                   <TimeBasisField
                     value={timeBasis}
                     onChange={onTimeBasisChange}

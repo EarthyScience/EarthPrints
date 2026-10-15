@@ -1,15 +1,19 @@
 import {
   type ColormapId,
-  dayIndexTicks,
   FINGERPRINT_HOUR_TICKS,
   fingerprintColorScale,
   formatDayTick,
 } from "@/lib/map/fingerprintScale";
-import {
-  getSelectedYearsDayMapping,
-  type YearDayMapping,
-} from "@/lib/zarr/timeRange";
+import { getSelectedYearsDayMapping } from "@/lib/zarr/timeRange";
 import { chartTickColor } from "@/lib/plots/chartTheme";
+import {
+  binHourGrid,
+  type BinStats,
+  monthStartTicks,
+  type BinUnit,
+  type TimeBin,
+  timeBins,
+} from "@/lib/plots/timeBins";
 
 const AXIS_LEFT_DEFAULT = 34;
 const AXIS_LEFT_TRANSPOSED = 54;
@@ -22,34 +26,35 @@ const LABEL_FONT =
 
 export type FingerprintExtents = { negMax: number; posMax: number };
 
-export type FingerprintLayout = {
-  values: Float32Array;
+/** Hourly values grouped into columns of days, weeks, months or years. */
+export type FingerprintGrid = BinStats & {
+  unit: BinUnit;
+  bins: TimeBin[];
   hoursPerDay: number;
-  nDays: number;
-  mapping: YearDayMapping;
+};
+
+export function fingerprintGrid(
+  values: Float32Array,
+  hoursPerDay: number,
+  selectedYears: number[] | null,
+  unit: BinUnit = "day",
+): FingerprintGrid {
+  const nDays = Math.floor(values.length / hoursPerDay);
+  const { absoluteDays } = getSelectedYearsDayMapping(
+    selectedYears,
+    undefined,
+    nDays,
+  );
+  const bins = timeBins(absoluteDays.slice(0, nDays), unit);
+  return { ...binHourGrid(values, hoursPerDay, bins), unit, bins, hoursPerDay };
+}
+
+export type FingerprintLayout = {
+  grid: FingerprintGrid;
   width: number;
   height: number;
   transposed: boolean;
 };
-
-export function fingerprintLayout(
-  values: Float32Array,
-  hoursPerDay: number,
-  selectedYears: number[] | null,
-  size: { width: number; height: number },
-  transposed: boolean,
-): FingerprintLayout {
-  const nDays = Math.floor(values.length / hoursPerDay);
-  return {
-    values,
-    hoursPerDay,
-    nDays,
-    mapping: getSelectedYearsDayMapping(selectedYears, undefined, nDays),
-    width: size.width,
-    height: size.height,
-    transposed,
-  };
-}
 
 function plotBox({ width, height, transposed }: FingerprintLayout) {
   const axisLeft = transposed ? AXIS_LEFT_TRANSPOSED : AXIS_LEFT_DEFAULT;
@@ -60,17 +65,56 @@ function plotBox({ width, height, transposed }: FingerprintLayout) {
   };
 }
 
-function dayAxisTicks({ mapping, nDays }: FingerprintLayout) {
-  if (mapping.yearIntervals.length > 1) {
-    return mapping.yearIntervals.map((interval) => ({
-      dayLocal: Math.round((interval.startDayLocal + interval.endDayLocal) / 2),
-      label: `${interval.year}`,
+/** Column index where each year starts, after the first. */
+function yearBreaks(bins: readonly TimeBin[]): number[] {
+  const breaks: number[] = [];
+  for (let col = 1; col < bins.length; col++) {
+    if (bins[col]!.year !== bins[col - 1]!.year) breaks.push(col);
+  }
+  return breaks;
+}
+
+/** Tick positions in columns, measured from the plot's leading edge. */
+function columnAxisTicks({ grid }: FingerprintLayout) {
+  const { bins } = grid;
+  const breaks = yearBreaks(bins);
+  if (breaks.length > 0 || grid.unit === "year") {
+    const starts = [0, ...breaks];
+    return starts.map((start, i) => ({
+      at: (start + (starts[i + 1] ?? bins.length)) / 2,
+      label: `${bins[start]!.year}`,
     }));
   }
-  return dayIndexTicks(Math.max(1, nDays)).map((offset) => ({
-    dayLocal: offset,
-    label: formatDayTick(mapping.absoluteDays[offset] ?? offset),
-  }));
+  const days = bins.flatMap((bin) =>
+    Array.from(
+      { length: bin.lastDay - bin.firstDay + 1 },
+      (_, i) => bin.firstDay + i,
+    ),
+  );
+  return monthStartTicks(days).map((local) => {
+    const col = bins.findIndex((bin) => bin.endLocal >= local);
+    const bin = bins[col]!;
+    const span = bin.endLocal - bin.startLocal + 1;
+    return {
+      at: col + (local - bin.startLocal) / span,
+      label: formatDayTick(days[local] ?? 0),
+    };
+  });
+}
+
+/**
+ * Pixel strips along the time axis, one per column, so a wide column is one
+ * rectangle; strips of 1px leave seams at fractional pixel ratios.
+ */
+function pixelRuns(length: number, nSel: number, colHi: number) {
+  const runs: { col: number; start: number; size: number }[] = [];
+  for (let px = 0; px < length; px++) {
+    const col = Math.min(colHi, Math.floor((px / length) * nSel));
+    const last = runs.at(-1);
+    if (last && last.col === col) last.size++;
+    else runs.push({ col, start: px, size: 1 });
+  }
+  return runs;
 }
 
 function clampLabelX(x: number, plotW: number, axisLeft: number): number {
@@ -92,9 +136,10 @@ export function drawFingerprint(
     pixelRatio: number;
   },
 ): void {
-  const { values, hoursPerDay, nDays, mapping, width, height, transposed } =
-    layout;
-  if (width === 0 || nDays === 0) return;
+  const { grid, width, height, transposed } = layout;
+  const { hoursPerDay } = grid;
+  const nCols = grid.bins.length;
+  if (width === 0 || nCols === 0) return;
 
   canvas.width = Math.round(width * pixelRatio);
   canvas.height = Math.round(height * pixelRatio);
@@ -105,15 +150,23 @@ export function drawFingerprint(
   ctx.clearRect(0, 0, width, height);
 
   const { axisLeft, plotW, plotH } = plotBox(layout);
-  const nSel = Math.max(1, nDays);
-  const dayHi = Math.max(0, nDays - 1);
+  const nSel = Math.max(1, nCols);
+  const colHi = Math.max(0, nCols - 1);
+  const breaks = yearBreaks(grid.bins);
   const scale = fingerprintColorScale(colormapId);
-  const cellColor = (dayLocal: number, hour: number) =>
+  const cellColor = (col: number, hour: number) =>
     scale(
-      values[dayLocal * hoursPerDay + hour] as number,
+      grid.mean[col * hoursPerDay + hour] as number,
       extents.negMax,
       extents.posMax,
     );
+  // Edges on whole device pixels, or neighbouring cells leave a faint seam.
+  const snap = (v: number) => Math.round(v * pixelRatio) / pixelRatio;
+  const fillCell = (x0: number, y0: number, x1: number, y1: number) => {
+    const left = snap(x0);
+    const top = snap(y0);
+    ctx.fillRect(left, top, snap(x1) - left, snap(y1) - top);
+  };
   const dividerColor = isLight
     ? "rgba(0, 0, 0, 0.25)"
     : "rgba(255, 255, 255, 0.25)";
@@ -121,63 +174,65 @@ export function drawFingerprint(
   if (!transposed) {
     const rowY = (fromTop: number) =>
       AXIS_TOP + Math.floor((fromTop * plotH) / hoursPerDay);
-    for (let px = 0; px < plotW; px++) {
-      const dayLocal = Math.min(dayHi, Math.floor((px / plotW) * nSel));
+    for (const { col, start, size } of pixelRuns(plotW, nSel, colHi)) {
       for (let hour = 0; hour < hoursPerDay; hour++) {
-        const color = cellColor(dayLocal, hour);
+        const color = cellColor(col, hour);
         if (color === "transparent") continue;
         const fromTop = hoursPerDay - 1 - hour;
         const yTop = rowY(fromTop);
         const yBot = rowY(fromTop + 1);
         ctx.fillStyle = color;
-        ctx.fillRect(axisLeft + px, yTop, 1, Math.max(1, yBot - yTop));
+        fillCell(
+          axisLeft + start,
+          yTop,
+          axisLeft + start + size,
+          Math.max(yTop + 1, yBot),
+        );
       }
     }
 
-    if (mapping.yearIntervals.length > 1) {
+    if (breaks.length > 0) {
       ctx.save();
       ctx.strokeStyle = dividerColor;
       ctx.lineWidth = 1;
-      for (const interval of mapping.yearIntervals) {
-        if (interval.startDayLocal > 0) {
-          const bx =
-            axisLeft + Math.floor((interval.startDayLocal / nSel) * plotW);
-          ctx.beginPath();
-          ctx.moveTo(bx, AXIS_TOP);
-          ctx.lineTo(bx, AXIS_TOP + plotH);
-          ctx.stroke();
-        }
+      for (const start of breaks) {
+        const bx = axisLeft + Math.floor((start / nSel) * plotW);
+        ctx.beginPath();
+        ctx.moveTo(bx, AXIS_TOP);
+        ctx.lineTo(bx, AXIS_TOP + plotH);
+        ctx.stroke();
       }
       ctx.restore();
     }
   } else {
     const colX = (hour: number) =>
       axisLeft + Math.floor((hour * plotW) / hoursPerDay);
-    for (let py = 0; py < plotH; py++) {
-      const dayLocal = Math.min(dayHi, Math.floor((py / plotH) * nSel));
+    for (const { col, start, size } of pixelRuns(plotH, nSel, colHi)) {
       for (let hour = 0; hour < hoursPerDay; hour++) {
-        const color = cellColor(dayLocal, hour);
+        const color = cellColor(col, hour);
         if (color === "transparent") continue;
         const xLeft = colX(hour);
         const xRight = colX(hour + 1);
         ctx.fillStyle = color;
-        ctx.fillRect(xLeft, AXIS_TOP + py, Math.max(1, xRight - xLeft), 1);
+        fillCell(
+          xLeft,
+          AXIS_TOP + start,
+          Math.max(xLeft + 1, xRight),
+          AXIS_TOP + start + size,
+        );
       }
     }
 
-    if (mapping.yearIntervals.length > 1) {
+    if (breaks.length > 0) {
       ctx.save();
       ctx.strokeStyle = dividerColor;
       ctx.lineWidth = 1;
-      for (const interval of mapping.yearIntervals) {
-        if (interval.startDayLocal > 0) {
-          const by =
-            AXIS_TOP + Math.floor((interval.startDayLocal / nSel) * plotH);
-          ctx.beginPath();
-          ctx.moveTo(axisLeft, by);
-          ctx.lineTo(axisLeft + plotW, by);
-          ctx.stroke();
-        }
+      for (const start of breaks) {
+        const by = AXIS_TOP + Math.floor((start / nSel) * plotH);
+        ctx.beginPath();
+        ctx.moveTo(axisLeft, by);
+        ctx.lineTo(axisLeft + plotW, by);
+        ctx.stroke();
       }
       ctx.restore();
     }
@@ -186,8 +241,8 @@ export function drawFingerprint(
   ctx.fillStyle = chartTickColor(isLight);
   ctx.font = LABEL_FONT;
 
-  const ticks = dayAxisTicks(layout);
-  const dayFrac = (dayLocal: number) => (nSel <= 1 ? 0 : dayLocal / (nSel - 1));
+  const ticks = columnAxisTicks(layout);
+  const colFrac = (at: number) => at / nSel;
 
   if (!transposed) {
     const rowY = (fromTop: number) =>
@@ -204,9 +259,9 @@ export function drawFingerprint(
     }
     ctx.textAlign = "center";
     ctx.textBaseline = "top";
-    for (const { dayLocal, label } of ticks) {
+    for (const { at, label } of ticks) {
       const x = clampLabelX(
-        axisLeft + dayFrac(dayLocal) * plotW,
+        axisLeft + colFrac(at) * plotW,
         plotW,
         axisLeft,
       );
@@ -215,8 +270,8 @@ export function drawFingerprint(
   } else {
     ctx.textAlign = "right";
     ctx.textBaseline = "middle";
-    for (const { dayLocal, label } of ticks) {
-      const y = AXIS_TOP + dayFrac(dayLocal) * plotH;
+    for (const { at, label } of ticks) {
+      const y = AXIS_TOP + colFrac(at) * plotH;
       ctx.fillText(
         label,
         axisLeft - 6,
@@ -233,10 +288,8 @@ export function drawFingerprint(
 }
 
 export type FingerprintCell = {
-  dayLocal: number;
+  col: number;
   hour: number;
-  absoluteDay: number;
-  value: number;
 };
 
 export function fingerprintCellAt(
@@ -244,31 +297,27 @@ export function fingerprintCellAt(
   x: number,
   y: number,
 ): FingerprintCell | null {
-  const { values, hoursPerDay, nDays, mapping, transposed } = layout;
+  const { grid, transposed } = layout;
+  const { hoursPerDay } = grid;
   const { axisLeft, plotW, plotH } = plotBox(layout);
   const inX = x - axisLeft;
   const inY = y - AXIS_TOP;
   if (inX < 0 || inX >= plotW || inY < 0 || inY >= plotH) return null;
 
-  const nSel = Math.max(1, nDays);
-  const dayHi = Math.max(0, nDays - 1);
-  let dayLocal: number;
-  let hour: number;
+  const nCols = grid.bins.length;
+  const nSel = Math.max(1, nCols);
+  const colHi = Math.max(0, nCols - 1);
   if (!transposed) {
-    dayLocal = Math.min(dayHi, Math.floor((inX / plotW) * nSel));
-    hour =
-      hoursPerDay -
-      1 -
-      Math.min(hoursPerDay - 1, Math.floor((inY / plotH) * hoursPerDay));
-  } else {
-    hour = Math.min(hoursPerDay - 1, Math.floor((inX / plotW) * hoursPerDay));
-    dayLocal = Math.min(dayHi, Math.floor((inY / plotH) * nSel));
+    return {
+      col: Math.min(colHi, Math.floor((inX / plotW) * nSel)),
+      hour:
+        hoursPerDay -
+        1 -
+        Math.min(hoursPerDay - 1, Math.floor((inY / plotH) * hoursPerDay)),
+    };
   }
-
   return {
-    dayLocal,
-    hour,
-    absoluteDay: mapping.absoluteDays[dayLocal] ?? dayLocal,
-    value: values[dayLocal * hoursPerDay + hour] as number,
+    col: Math.min(colHi, Math.floor((inY / plotH) * nSel)),
+    hour: Math.min(hoursPerDay - 1, Math.floor((inX / plotW) * hoursPerDay)),
   };
 }

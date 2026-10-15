@@ -4,7 +4,7 @@ export const TIME_SERIES_CHART_MARGIN = {
   top: 12,
   right: 8,
   left: 0,
-  bottom: 20,
+  bottom: 0,
 } as const;
 
 export function formatSeriesValue(value: number): string {

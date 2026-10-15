@@ -20,10 +20,12 @@ export async function captureTimeSeries({
   values,
   units,
   hoursPerDay,
+  selectedYears,
 }: {
   values: Float32Array;
   units: string | null;
   hoursPerDay: number;
+  selectedYears: number[];
 }): Promise<CapturedImage> {
   await whenVisible();
 
@@ -41,6 +43,7 @@ export async function captureTimeSeries({
         values={values}
         units={units}
         hoursPerDay={hoursPerDay}
+        selectedYears={selectedYears}
         width={EXPORT_PLOT_WIDTH}
         height={EXPORT_PLOT_HEIGHT}
       />,

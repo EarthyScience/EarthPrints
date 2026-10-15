@@ -13,6 +13,8 @@ type SegmentedOption<T extends string> = {
   value: T;
   label: string;
   icon?: LucideIcon;
+  disabled?: boolean;
+  title?: string;
 };
 
 type SegmentedTabsProps<T extends string> = {
@@ -21,6 +23,7 @@ type SegmentedTabsProps<T extends string> = {
   options: readonly SegmentedOption<T>[];
   "aria-label": string;
   className?: string;
+  disabled?: boolean;
 };
 
 export function SegmentedTabs<T extends string>({
@@ -29,6 +32,7 @@ export function SegmentedTabs<T extends string>({
   options,
   "aria-label": ariaLabel,
   className,
+  disabled = false,
 }: SegmentedTabsProps<T>) {
   return (
     <Tabs
@@ -38,14 +42,16 @@ export function SegmentedTabs<T extends string>({
       className={className}
     >
       <TabsList className={cn("w-full", segmentedListClass)}>
-        {options.map(({ value: option, label, icon: Icon }) => (
+        {options.map((option) => (
           <TabsTrigger
-            key={option}
-            value={option}
+            key={option.value}
+            value={option.value}
+            disabled={disabled || option.disabled}
+            title={option.title}
             className={segmentedTriggerClass}
           >
-            {Icon ? <Icon /> : null}
-            {label}
+            {option.icon ? <option.icon /> : null}
+            {option.label}
           </TabsTrigger>
         ))}
       </TabsList>
