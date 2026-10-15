@@ -66,7 +66,12 @@ export function useCellExport({
       });
       const [mapCapture, timeSeries] = await Promise.all([
         captureMap({ cell: selection.grid, gridSpec }),
-        captureTimeSeries({ values: plotValues, units, hoursPerDay }),
+        captureTimeSeries({
+          values: plotValues,
+          units,
+          hoursPerDay,
+          selectedYears,
+        }),
       ]);
       const assets: ReportAssets = {
         map: mapCapture.image,

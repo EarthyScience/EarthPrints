@@ -2,7 +2,7 @@ import {
   asymmetricExtents,
   defaultColormapId,
 } from "@/lib/map/fingerprintScale";
-import { drawFingerprint, fingerprintLayout } from "@/lib/plots/fingerprint";
+import { drawFingerprint, fingerprintGrid } from "@/lib/plots/fingerprint";
 import { canvasToPng, type CapturedImage } from "@/lib/export/capture";
 import { fingerprintPngWithLegend } from "@/lib/export/fingerprintImage";
 import {
@@ -33,13 +33,12 @@ export function captureFingerprint({
   const canvas = document.createElement("canvas");
   drawFingerprint(
     canvas,
-    fingerprintLayout(
-      values,
-      hoursPerDay,
-      selectedYears,
-      { width: EXPORT_PLOT_WIDTH, height: EXPORT_PLOT_HEIGHT },
-      false,
-    ),
+    {
+      grid: fingerprintGrid(values, hoursPerDay, selectedYears),
+      width: EXPORT_PLOT_WIDTH,
+      height: EXPORT_PLOT_HEIGHT,
+      transposed: false,
+    },
     {
       colormapId,
       extents,

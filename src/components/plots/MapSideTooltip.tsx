@@ -73,7 +73,12 @@ export function togglePin<T>(
 const tooltipBoxClass =
   "z-40 grid min-w-40 -translate-y-4 gap-1.5 rounded-lg border border-border/50 bg-background px-2.5 py-1.5 text-xs whitespace-nowrap shadow-xl";
 
-export type TooltipPoint = { label: string; shortLabel: string; value: number };
+export type TooltipPoint = {
+  label: string;
+  shortLabel: string;
+  value: number;
+  spread?: string;
+};
 
 function formatChange(point: TooltipPoint, base?: TooltipPoint) {
   if (!base || base.value === 0 || !Number.isFinite(base.value)) return null;
@@ -99,6 +104,11 @@ function PointRows({
           ? `${formatSeriesValue(point.value)}${units ? ` ${units}` : ""}`
           : "no data"}
       </span>
+      {point.spread ? (
+        <span className="text-muted-foreground tabular-nums">
+          {point.spread}
+        </span>
+      ) : null}
       {change ? <span className="text-muted-foreground">{change}</span> : null}
     </>
   );
