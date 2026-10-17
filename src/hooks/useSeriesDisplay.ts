@@ -12,6 +12,8 @@ import { hasFiniteValues } from "@/lib/zarr/series";
 import { colormapFor, type Palette } from "@/lib/map/fingerprintScale";
 import { loadPalette, savePalette } from "@/lib/settings/colormap";
 import { useTheme } from "@/providers/ThemeProvider";
+import type { BinUnit } from "@/lib/plots/timeBins";
+import type { LineResolution } from "@/lib/plots/lineSeries";
 import type { CellSeries } from "@/hooks/useCellSeries";
 
 export type PlotView = "line" | "fingerprint";
@@ -28,6 +30,11 @@ export function useSeriesDisplay(
   const { isLight } = useTheme();
   const [plotView, setPlotView] = useState<PlotView>("line");
   const [transposed, setTransposed] = useState(false);
+  const [lineResolution, setLineResolution] = useState<LineResolution>("day");
+  const [scaleChoice, setFingerprintScale] = useState<BinUnit>("day");
+  const canShowYearly = selectedYears.length > 1;
+  const fingerprintScale =
+    scaleChoice === "year" && !canShowYearly ? "day" : scaleChoice;
   const [palette, setPaletteState] = useState<Palette>(
     () => loadPalette() ?? "science",
   );
@@ -67,6 +74,11 @@ export function useSeriesDisplay(
     setPlotView,
     transposed,
     setTransposed,
+    lineResolution,
+    setLineResolution,
+    fingerprintScale,
+    setFingerprintScale,
+    canShowYearly,
     timeBasis,
     utcOffsetHours,
     timeBasisLabel,

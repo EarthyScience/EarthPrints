@@ -57,6 +57,11 @@ export function formatTimeBasis(basis: TimeBasis, offsetHours: number): string {
   return `local solar time (${formatUtcOffset(offsetHours)})`;
 }
 
+/** The time basis as a short suffix for an hour readout: "local" or "UTC". */
+export function shortTimeBasis(timeBasisLabel: string): string {
+  return timeBasisLabel.startsWith("local") ? "local" : timeBasisLabel;
+}
+
 /**
  * Split the window into runs of consecutive days. `dayCount` covers the buffer
  * even when the mapping is short, so the tail still rolls with the run it

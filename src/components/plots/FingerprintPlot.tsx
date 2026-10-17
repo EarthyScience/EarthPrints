@@ -6,7 +6,6 @@ import {
   COLORMAPS,
   type ColormapId,
   fingerprintColorScale,
-  formatIsoDate,
 } from "@/lib/map/fingerprintScale";
 import {
   formatSeriesValue,
@@ -16,8 +15,16 @@ import {
   drawFingerprint,
   type FingerprintCell,
   fingerprintCellAt,
-  fingerprintLayout,
+  fingerprintGrid,
+  type FingerprintLayout,
 } from "@/lib/plots/fingerprint";
+import {
+  binCountLabel,
+  type BinUnit,
+  formatBinLabel,
+  formatBinShortLabel,
+} from "@/lib/plots/timeBins";
+import { shortTimeBasis } from "@/lib/zarr/localTime";
 import { useTheme } from "@/providers/ThemeProvider";
 import {
   anchorBesidePanel,
@@ -41,6 +48,7 @@ type FingerprintPlotProps = {
   timeBasisLabel?: string;
   transposed: boolean;
   colormapId: ColormapId;
+  scale?: BinUnit;
   height?: number;
   pinLimit?: number;
 };
@@ -52,8 +60,7 @@ type Hover = FingerprintCell & {
   anchor: TooltipAnchor | null;
 };
 
-const sameCell = (a: Hover, b: Hover) =>
-  a.dayLocal === b.dayLocal && a.hour === b.hour;
+const sameCell = (a: Hover, b: Hover) => a.col === b.col && a.hour === b.hour;
 
 export function FingerprintPlot({
   values,
@@ -63,6 +70,7 @@ export function FingerprintPlot({
   timeBasisLabel,
   transposed,
   colormapId,
+  scale = "day",
   height: heightOverride,
   pinLimit = 1,
 }: FingerprintPlotProps) {
@@ -72,9 +80,13 @@ export function FingerprintPlot({
   const [width, setWidth] = useState(0);
   const [hover, setHover] = useState<Hover | null>(null);
   const [pins, setPins] = useState<Hover[]>([]);
-  const [pinnedValues, setPinnedValues] = useState(values);
-  if (pinnedValues !== values) {
-    setPinnedValues(values);
+  const grid = useMemo(
+    () => fingerprintGrid(values, hoursPerDay, selectedYears, scale),
+    [values, hoursPerDay, selectedYears, scale],
+  );
+  const [pinnedGrid, setPinnedGrid] = useState(grid);
+  if (pinnedGrid !== grid) {
+    setPinnedGrid(grid);
     setPins([]);
   }
   const desktop = useDesktop();
@@ -92,18 +104,12 @@ export function FingerprintPlot({
   const height =
     heightOverride ??
     (transposed ? TRANSPOSED_MIN_HEIGHT : TIME_SERIES_PLOT_HEIGHT);
-  const layout = useMemo(
-    () =>
-      fingerprintLayout(
-        values,
-        hoursPerDay,
-        selectedYears,
-        { width, height },
-        transposed,
-      ),
-    [values, hoursPerDay, selectedYears, width, height, transposed],
+  const layout: FingerprintLayout = useMemo(
+    () => ({ grid, width, height, transposed }),
+    [grid, width, height, transposed],
   );
-  const extents = useMemo(() => asymmetricExtents(values), [values]);
+  const extents = useMemo(() => asymmetricExtents(grid.mean), [grid]);
+  const nCols = grid.bins.length;
 
   useEffect(() => {
     if (!canvasRef.current) return;
@@ -137,7 +143,7 @@ export function FingerprintPlot({
     };
   }, [colormapId, extents]);
 
-  if (layout.nDays === 0) return null;
+  if (nCols === 0) return null;
 
   const handleMove = (event: React.MouseEvent<HTMLCanvasElement>) => {
     const rect = event.currentTarget.getBoundingClientRect();
@@ -158,33 +164,48 @@ export function FingerprintPlot({
   };
 
   const pointAt = (
-    dayLocal: number,
+    col: number,
     hour: number,
     short: "time" | "full",
   ): TooltipPoint | undefined => {
-    if (dayLocal < 0 || hour < 0) return undefined;
-    const day = layout.mapping.absoluteDays[dayLocal] ?? dayLocal;
+    const bin = grid.bins[col];
+    if (!bin || hour < 0) return undefined;
+    const at = col * hoursPerDay + hour;
+    const count = grid.count[at] ?? 0;
     const time = `${String(hour).padStart(2, "0")}:00`;
-    const suffix = timeBasisLabel ? ` ${hoverBasisSuffix(timeBasisLabel)}` : "";
+    const suffix = timeBasisLabel ? ` ${shortTimeBasis(timeBasisLabel)}` : "";
     return {
-      label: `${formatIsoDate(day)} · ${time}${suffix}`,
-      shortLabel: short === "time" ? time : `${formatIsoDate(day)} ${time}`,
-      value: layout.values[dayLocal * hoursPerDay + hour] as number,
+      label: `${formatBinLabel(bin, scale)} · ${time}${suffix}`,
+      shortLabel:
+        short === "time" ? time : `${formatBinShortLabel(bin, scale)} ${time}`,
+      value: grid.mean[at] as number,
+      spread:
+        scale !== "day" && count > 0
+          ? `Std ${formatSeriesValue(grid.std[at] as number)} across ${binCountLabel(count, "day")}`
+          : undefined,
     };
   };
   const previousOf = (cell: FingerprintCell) =>
     cell.hour > 0
-      ? pointAt(cell.dayLocal, cell.hour - 1, "time")
-      : pointAt(cell.dayLocal - 1, hoursPerDay - 1, "full");
+      ? pointAt(cell.col, cell.hour - 1, "time")
+      : pointAt(cell.col - 1, hoursPerDay - 1, "full");
 
   const separate = pinLimit > 1;
   const pinned = separate ? null : (pins[0] ?? null);
   const lastPin = pins.at(-1);
   const shown = pinned ?? hover;
+  const hoverPoint =
+    hover && !desktop
+      ? {
+          ...pointAt(hover.col, hover.hour, "full")!,
+          left: hover.left,
+          top: hover.top,
+        }
+      : null;
   const comparing =
     pinned &&
     hover &&
-    (hover.dayLocal !== pinned.dayLocal || hover.hour !== pinned.hour);
+    (hover.col !== pinned.col || hover.hour !== pinned.hour);
 
   return (
     <div className="grid gap-2">
@@ -207,8 +228,8 @@ export function FingerprintPlot({
         {desktop && separate
           ? pins.map((pin) => (
               <PinnedTooltip
-                key={`${pin.dayLocal}-${pin.hour}`}
-                point={pointAt(pin.dayLocal, pin.hour, "full")!}
+                key={`${pin.col}-${pin.hour}`}
+                point={pointAt(pin.col, pin.hour, "full")!}
                 previous={previousOf(pin)}
                 position={{ x: pin.left, y: pin.top, flip: pin.flip }}
                 units={units}
@@ -223,31 +244,30 @@ export function FingerprintPlot({
         {desktop && separate
           ? pins.map((pin) => (
               <span
-                key={`${pin.dayLocal}-${pin.hour}`}
+                key={`${pin.col}-${pin.hour}`}
                 aria-hidden="true"
                 className="pointer-events-none absolute size-2 -translate-1/2 rounded-full bg-foreground ring-2 ring-background"
                 style={{ left: pin.left, top: pin.top }}
               />
             ))
           : null}
-        {!desktop && hover ? (
+        {!desktop && hoverPoint ? (
           <div
-            className="pointer-events-none absolute grid -translate-x-1/2 gap-0.5 rounded-lg border bg-background px-2.5 py-1.5 text-xs whitespace-nowrap shadow-xl"
+            className="pointer-events-none absolute grid -translate-x-1/2 -translate-y-full gap-0.5 rounded-lg border bg-background px-2.5 py-1.5 text-xs whitespace-nowrap shadow-xl"
             style={{
-              left: Math.max(48, Math.min(width - 48, hover.left)),
-              top: Math.max(0, hover.top - 52),
+              left: Math.max(48, Math.min(width - 48, hoverPoint.left)),
+              top: Math.max(0, hoverPoint.top - 8),
             }}
           >
-            <span className="font-medium">
-              {formatIsoDate(hover.absoluteDay)} ·{" "}
-              {String(hover.hour).padStart(2, "0")}:00
-              {timeBasisLabel ? ` ${hoverBasisSuffix(timeBasisLabel)}` : ""}
-            </span>
+            <span className="font-medium">{hoverPoint.label}</span>
             <span className="text-muted-foreground">
-              {Number.isFinite(hover.value)
-                ? `${formatSeriesValue(hover.value)}${units ? ` ${units}` : ""}`
+              {Number.isFinite(hoverPoint.value)
+                ? `${formatSeriesValue(hoverPoint.value)}${units ? ` ${units}` : ""}`
                 : "no data"}
             </span>
+            {hoverPoint.spread ? (
+              <span className="text-muted-foreground">{hoverPoint.spread}</span>
+            ) : null}
           </div>
         ) : null}
       </div>
@@ -256,10 +276,10 @@ export function FingerprintPlot({
       hover?.anchor &&
       !pins.some((pin) => sameCell(pin, hover)) ? (
         <MapSideTooltip
-          point={pointAt(hover.dayLocal, hover.hour, "full")!}
+          point={pointAt(hover.col, hover.hour, "full")!}
           previous={
             lastPin
-              ? pointAt(lastPin.dayLocal, lastPin.hour, "full")
+              ? pointAt(lastPin.col, lastPin.hour, "full")
               : previousOf(hover)
           }
           anchor={hover.anchor}
@@ -268,10 +288,10 @@ export function FingerprintPlot({
       ) : null}
       {desktop && !separate && shown?.anchor ? (
         <MapSideTooltip
-          point={pointAt(shown.dayLocal, shown.hour, "full")!}
+          point={pointAt(shown.col, shown.hour, "full")!}
           previous={previousOf(shown)}
           compared={
-            comparing ? pointAt(hover.dayLocal, hover.hour, "full") : undefined
+            comparing ? pointAt(hover.col, hover.hour, "full") : undefined
           }
           anchor={shown.anchor}
           units={units}
@@ -302,14 +322,10 @@ export function FingerprintPlot({
         </div>
       </div>
       <p className="text-muted-foreground">
-        {Math.max(1, layout.nDays).toLocaleString()} days × {hoursPerDay} hours
+        {binCountLabel(nCols, scale)} × {hoursPerDay} hours
         {timeBasisLabel ? ` · ${timeBasisLabel}` : ""}
         {units ? ` · ${units}` : ""}
       </p>
     </div>
   );
-}
-
-function hoverBasisSuffix(timeBasisLabel: string): string {
-  return timeBasisLabel.startsWith("local") ? "local" : timeBasisLabel;
 }

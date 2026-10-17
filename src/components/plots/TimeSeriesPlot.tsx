@@ -2,9 +2,10 @@
 
 import { useMemo, useRef, useState, type Ref } from "react";
 import {
+  Area,
   CartesianGrid,
+  ComposedChart,
   Line,
-  LineChart,
   ReferenceLine,
   XAxis,
   YAxis,
@@ -14,7 +15,11 @@ import {
   TIME_SERIES_CHART_MARGIN,
   TIME_SERIES_PLOT_HEIGHT,
 } from "@/lib/plots/chartTheme";
-import { dailyMeanSeries, type DailyMeanPoint } from "@/lib/zarr/series";
+import {
+  lineSeries,
+  type LinePoint,
+  type LineResolution,
+} from "@/lib/plots/lineSeries";
 import {
   anchorBesidePanel,
   MapSideTooltip,
@@ -34,23 +39,32 @@ import {
 } from "@/components/ui/chart";
 
 const CHART_CONFIG = {
-  value: { label: "Daily mean", color: "var(--brand)" },
+  value: { label: "Mean", color: "var(--brand)" },
 } satisfies ChartConfig;
+
+const MEANS_LABEL: Record<Exclude<LineResolution, "hour">, string> = {
+  day: "daily",
+  week: "weekly",
+  month: "monthly",
+};
 
 type Readout = TooltipAnchor & PinPosition & { index: number };
 
 const sameDay = (a: Readout, b: Readout) => a.index === b.index;
 
-function dayPoint(point: DailyMeanPoint | undefined): TooltipPoint | undefined {
+function tooltipPoint(point: LinePoint | undefined): TooltipPoint | undefined {
   if (!point) return undefined;
-  const label = `Day ${point.day}`;
-  return { label, shortLabel: label.toLowerCase(), value: point.value };
+  const { label, shortLabel, value, spread } = point;
+  return { label, shortLabel, value, spread };
 }
 
 type TimeSeriesPlotProps = {
   values: Float32Array;
   units?: string | null;
   hoursPerDay?: number;
+  selectedYears: number[];
+  resolution?: LineResolution;
+  timeBasisSuffix?: string;
   height?: number;
   width?: number;
   pinLimit?: number;
@@ -61,15 +75,26 @@ export function TimeSeriesPlot({
   values,
   units,
   hoursPerDay = 24,
+  selectedYears,
+  resolution = "day",
+  timeBasisSuffix,
   height = TIME_SERIES_PLOT_HEIGHT,
   width,
   pinLimit = 1,
   ref,
 }: TimeSeriesPlotProps) {
-  const data = useMemo(
-    () => dailyMeanSeries(values, hoursPerDay),
-    [values, hoursPerDay],
+  const series = useMemo(
+    () =>
+      lineSeries(
+        values,
+        hoursPerDay,
+        selectedYears,
+        resolution,
+        timeBasisSuffix,
+      ),
+    [values, hoursPerDay, selectedYears, resolution, timeBasisSuffix],
   );
+  const data = series.points;
 
   const desktop = useDesktop();
   const wrapperRef = useRef<HTMLDivElement>(null);
@@ -101,7 +126,7 @@ export function TimeSeriesPlot({
   const pinned = separate ? null : (pins[0] ?? null);
   const lastPin = pins.at(-1);
   const shown = pinned ?? hover;
-  const shownPoint = shown ? dayPoint(data[shown.index]) : undefined;
+  const shownPoint = shown ? tooltipPoint(data[shown.index]) : undefined;
 
   return (
     <div ref={wrapperRef} className="relative grid gap-2">
@@ -112,7 +137,7 @@ export function TimeSeriesPlot({
         className="aspect-auto w-full"
         style={{ height, width }}
       >
-        <LineChart
+        <ComposedChart
           data={data}
           margin={TIME_SERIES_CHART_MARGIN}
           onMouseMove={(state, event) =>
@@ -131,16 +156,15 @@ export function TimeSeriesPlot({
           <CartesianGrid vertical={false} />
           <XAxis
             type="number"
-            dataKey="day"
-            domain={[1, data.length]}
+            dataKey="x"
+            domain={[0, Math.max(1, series.nDays)]}
+            ticks={series.ticks.map((tick) => tick.x)}
+            tickFormatter={(x: number) =>
+              series.ticks.find((tick) => tick.x === x)?.label ?? ""
+            }
+            interval="preserveStartEnd"
             tickLine={false}
             axisLine={false}
-            tickCount={6}
-            label={{
-              value: "Day in window",
-              position: "insideBottom",
-              offset: -12,
-            }}
           />
           <YAxis
             tickLine={false}
@@ -148,11 +172,18 @@ export function TimeSeriesPlot({
             width={48}
             tickFormatter={formatSeriesValue}
           />
+          {series.yearBreaks.map((x) => (
+            <ReferenceLine
+              key={`year-${x}`}
+              x={x}
+              stroke="var(--border)"
+            />
+          ))}
           {desktop
             ? pins.map((pin) => (
                 <ReferenceLine
                   key={pin.index}
-                  x={data[pin.index]?.day}
+                  x={data[pin.index]?.x}
                   stroke="var(--muted-foreground)"
                   strokeDasharray="3 3"
                 />
@@ -165,7 +196,7 @@ export function TimeSeriesPlot({
               ) : (
                 <ChartTooltipContent
                   labelFormatter={(_, payload) =>
-                    `Day ${payload[0]?.payload.day ?? ""}`
+                    payload[0]?.payload.label ?? ""
                   }
                   formatter={(value) =>
                     `${formatSeriesValue(Number(value))}${units ? ` ${units}` : ""}`
@@ -174,25 +205,38 @@ export function TimeSeriesPlot({
               )
             }
           />
+          {resolution === "hour" ? null : (
+            <Area
+              type="linear"
+              dataKey="band"
+              stroke="none"
+              fill="var(--color-value)"
+              fillOpacity={0.18}
+              tooltipType="none"
+              activeDot={false}
+              isAnimationActive={false}
+            />
+          )}
           <Line
             type="linear"
             dataKey="value"
             stroke="var(--color-value)"
-            strokeWidth={1.5}
+            strokeWidth={resolution === "hour" ? 0.5 : 1.5}
+            strokeOpacity={resolution === "hour" ? 0.7 : 1}
             dot={false}
             isAnimationActive={false}
           />
-        </LineChart>
+        </ComposedChart>
       </ChartContainer>
       {desktop && separate
         ? pins.map((pin) => {
-            const point = dayPoint(data[pin.index]);
+            const point = tooltipPoint(data[pin.index]);
             if (!point) return null;
             return (
               <PinnedTooltip
                 key={pin.index}
                 point={point}
-                previous={dayPoint(data[pin.index - 1])}
+                previous={tooltipPoint(data[pin.index - 1])}
                 position={pin}
                 units={units}
                 onClose={() =>
@@ -213,8 +257,8 @@ export function TimeSeriesPlot({
           point={shownPoint}
           previous={
             lastPin
-              ? dayPoint(data[lastPin.index])
-              : dayPoint(data[hover.index - 1])
+              ? tooltipPoint(data[lastPin.index])
+              : tooltipPoint(data[hover.index - 1])
           }
           anchor={hover}
           units={units}
@@ -223,10 +267,10 @@ export function TimeSeriesPlot({
       {desktop && !separate && shown && shownPoint ? (
         <MapSideTooltip
           point={shownPoint}
-          previous={dayPoint(data[shown.index - 1])}
+          previous={tooltipPoint(data[shown.index - 1])}
           compared={
             pinned && hover && hover.index !== pinned.index
-              ? dayPoint(data[hover.index])
+              ? tooltipPoint(data[hover.index])
               : undefined
           }
           anchor={shown}
@@ -235,8 +279,10 @@ export function TimeSeriesPlot({
         />
       ) : null}
       <p className="text-muted-foreground">
-        {values.length.toLocaleString()} hourly steps · {data.length} daily
-        means
+        {values.length.toLocaleString()} hourly steps
+        {resolution === "hour"
+          ? ""
+          : ` · ${series.binCount.toLocaleString()} ${MEANS_LABEL[resolution]} means, band ±1 std`}
         {units ? ` · ${units}` : ""}
       </p>
     </div>
