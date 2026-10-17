@@ -49,6 +49,26 @@ function summarize(
   };
 }
 
+/** One summary per selected year, read from that year's slice of the series. */
+function summarizeByYear(
+  values: Float32Array,
+  selectedYears: number[],
+): { year: number; summary: Summary }[] {
+  const hoursPerDay = ZARR_TIME.hoursPerDay;
+  const { yearIntervals } = getSelectedYearsDayMapping(
+    selectedYears,
+    undefined,
+    Math.floor(values.length / hoursPerDay),
+  );
+  return yearIntervals.flatMap(({ year, startDayLocal, endDayLocal }) => {
+    const summary = summarize(
+      values.subarray(startDayLocal * hoursPerDay, (endDayLocal + 1) * hoursPerDay),
+      [year],
+    );
+    return summary ? [{ year, summary }] : [];
+  });
+}
+
 function StatCard({
   label,
   value,
@@ -104,6 +124,14 @@ export function SeriesSummary({
     [values, display.isEmptyCell, selectedYears],
   );
 
+  const byYear = useMemo(
+    () =>
+      values && !display.isEmptyCell && selectedYears.length > 1
+        ? summarizeByYear(values, selectedYears)
+        : [],
+    [values, display.isEmptyCell, selectedYears],
+  );
+
   if (!summary) return null;
 
   return (
@@ -134,6 +162,82 @@ export function SeriesSummary({
           value={summary.days.toLocaleString()}
         />
       </div>
+      {byYear.length > 0 ? (
+        <YearTable rows={byYear} total={summary} units={units} />
+      ) : null}
     </section>
+  );
+}
+
+function DayCell({ stat }: { stat: DayStat }) {
+  return (
+    <td className="px-3 py-2 text-right whitespace-nowrap tabular-nums">
+      {formatSeriesValue(stat.value)}
+      <span className="ml-1.5 text-xs text-muted-foreground">{stat.date}</span>
+    </td>
+  );
+}
+
+function YearTable({
+  rows,
+  total,
+  units,
+}: {
+  rows: { year: number; summary: Summary }[];
+  total: Summary;
+  units?: string | null;
+}) {
+  const row = (label: string, summary: Summary, isTotal = false) => (
+    <tr
+      key={label}
+      className={isTotal ? "border-t font-medium" : "border-t border-border/50"}
+    >
+      <th scope="row" className="px-3 py-2 text-left font-medium">
+        {label}
+      </th>
+      <td className="px-3 py-2 text-right tabular-nums">
+        {formatSeriesValue(summary.mean)}
+      </td>
+      <DayCell stat={summary.lowest} />
+      <DayCell stat={summary.highest} />
+      <td className="px-3 py-2 text-right tabular-nums">
+        {summary.days.toLocaleString()}
+      </td>
+    </tr>
+  );
+
+  return (
+    <Card className="gap-0 py-0">
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <caption className="px-3 pt-3 text-left text-xs text-muted-foreground">
+            Per year{units ? `, ${units}` : ""}
+          </caption>
+          <thead className="text-xs text-muted-foreground">
+            <tr>
+              <th scope="col" className="px-3 py-2 text-left font-normal">
+                Year
+              </th>
+              <th scope="col" className="px-3 py-2 text-right font-normal">
+                Mean
+              </th>
+              <th scope="col" className="px-3 py-2 text-right font-normal">
+                Lowest day
+              </th>
+              <th scope="col" className="px-3 py-2 text-right font-normal">
+                Highest day
+              </th>
+              <th scope="col" className="px-3 py-2 text-right font-normal">
+                Days with data
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map(({ year, summary }) => row(String(year), summary))}
+            {row("All years", total, true)}
+          </tbody>
+        </table>
+      </div>
+    </Card>
   );
 }
