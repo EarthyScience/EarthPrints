@@ -6,7 +6,6 @@ import {
   PATCH_WINDOW_SIZES,
   type PatchWindowSize,
 } from "@/lib/settings/patchWindow";
-import type { TimeBasis } from "@/lib/zarr/localTime";
 import type { MapViewMode } from "@/types/map";
 import type { MapSettings } from "@/hooks/useMapSettings";
 import { FloatingPanel } from "@/components/panels/FloatingPanel";
@@ -22,13 +21,7 @@ import {
   FieldSet,
 } from "@/components/ui/field";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
-import { SegmentedTabs } from "@/components/ui/segmented-tabs";
 import { Switch } from "@/components/ui/switch";
-
-const TIME_BASES = [
-  { value: "local", label: "Local" },
-  { value: "utc", label: "UTC" },
-] as const;
 
 type SettingsPanelProps = {
   settings: MapSettings;
@@ -50,21 +43,10 @@ export function SettingsPanel({
   return (
     <FloatingPanel label="Settings" onClose={onClose}>
       <FieldGroup>
-        <div className="grid grid-cols-2 gap-4">
-          <FieldSet>
-            <FieldLegend variant="label">Projection</FieldLegend>
-            <ViewModeTabs value={viewMode} onChange={onViewModeChange} />
-          </FieldSet>
-          <FieldSet>
-            <FieldLegend variant="label">Plot hours in</FieldLegend>
-            <SegmentedTabs<TimeBasis>
-              value={settings.timeBasis}
-              onChange={settings.setTimeBasis}
-              options={TIME_BASES}
-              aria-label="Time basis"
-            />
-          </FieldSet>
-        </div>
+        <FieldSet>
+          <FieldLegend variant="label">Projection</FieldLegend>
+          <ViewModeTabs value={viewMode} onChange={onViewModeChange} />
+        </FieldSet>
 
         <FieldSeparator />
 

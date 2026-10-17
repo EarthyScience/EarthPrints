@@ -6,13 +6,15 @@ import { ArrowLeftRight, ChevronDown } from "lucide-react";
 import { formatLatitude, formatLongitude } from "@/lib/map/geogrid";
 import { formatSelectedYearsLabel, ZARR_TIME } from "@/lib/zarr/timeRange";
 import { TIME_SERIES_PLOT_HEIGHT } from "@/lib/plots/chartTheme";
+import type { TimeBasis } from "@/lib/zarr/localTime";
 import type { CellSeries, SeriesProgress } from "@/hooks/useCellSeries";
 import type { PlotView, SeriesDisplay } from "@/hooks/useSeriesDisplay";
 import { TimeSeriesPlot } from "@/components/plots/TimeSeriesPlot";
 import { FingerprintPlot } from "@/components/plots/FingerprintPlot";
 import { useDesktop } from "@/components/plots/MapSideTooltip";
-import { MainViewSwitch } from "@/components/data/MainViewSwitch";
+import { TimeBasisField } from "@/components/panels/TimeBasisField";
 import { YearPicker } from "@/components/panels/YearPicker";
+import { SeriesSummary } from "@/components/data/SeriesSummary";
 import { ColormapSelect } from "@/components/panels/ColormapSelect";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { CardDescription, CardTitle } from "@/components/ui/card";
@@ -28,15 +30,17 @@ import { Toggle } from "@/components/ui/toggle";
 type CellViewProps = {
   series: CellSeries;
   display: SeriesDisplay;
+  timeBasis: TimeBasis;
+  onTimeBasisChange: (basis: TimeBasis) => void;
   openDetails?: boolean;
-  onShowData: () => void;
 };
 
 export function CellView({
   series,
   display,
+  timeBasis,
+  onTimeBasisChange,
   openDetails = false,
-  onShowData,
 }: CellViewProps) {
   const desktop = useDesktop();
   const { selection, patchWindow } = series;
@@ -72,12 +76,6 @@ export function CellView({
               </Collapsible.Trigger>
             )}
           </div>
-          <MainViewSwitch
-            value="map"
-            onChange={(view) => {
-              if (view === "data") onShowData();
-            }}
-          />
         </div>
         <Collapsible.Panel className="h-(--collapsible-panel-height) overflow-hidden transition-[height] duration-150 ease-out data-ending-style:h-0 data-starting-style:h-0 motion-reduce:transition-none">
           <div className="grid gap-4 pt-3">
@@ -92,6 +90,9 @@ export function CellView({
               loading={series.loading}
               onSelectYears={series.selectYears}
             />
+            {desktop ? null : (
+              <TimeBasisField value={timeBasis} onChange={onTimeBasisChange} />
+            )}
           </div>
         </Collapsible.Panel>
       </Collapsible.Root>
@@ -101,6 +102,8 @@ export function CellView({
 
         <PlotArea series={series} display={display} />
       </section>
+
+      {desktop ? null : <SeriesSummary series={series} display={display} />}
     </div>
   );
 }

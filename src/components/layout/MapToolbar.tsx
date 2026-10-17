@@ -5,6 +5,7 @@ import {
   ChartLine,
   CircleQuestionMark,
   Compass,
+  type LucideIcon,
   Moon,
   Settings,
   Sun,
@@ -96,6 +97,7 @@ type MapToolbarProps = {
   onOpenPanelChange: (panel: ToolbarPanel | null) => void;
   hideChart?: boolean;
   hideOnMobile?: boolean;
+  viewAction?: { label: string; Icon: LucideIcon; onClick: () => void };
 };
 
 export function SiteMark() {
@@ -125,6 +127,7 @@ export function MapToolbar({
   onOpenPanelChange,
   hideChart = false,
   hideOnMobile = false,
+  viewAction,
 }: MapToolbarProps) {
   const panels = hideChart
     ? PANELS.filter(({ value }) => value !== "chart")
@@ -164,6 +167,17 @@ export function MapToolbar({
           </ToggleGroup>
         </CardContent>
       </Card>
+
+      {viewAction ? (
+        <Card className="[--card-spacing:--spacing(1)] max-md:hidden">
+          <CardContent>
+            <Button variant="ghost" onClick={viewAction.onClick}>
+              <viewAction.Icon />
+              {viewAction.label}
+            </Button>
+          </CardContent>
+        </Card>
+      ) : null}
     </div>
   );
 }

@@ -7,7 +7,7 @@ import Map, {
   type ViewStateChangeEvent,
 } from "react-map-gl/maplibre";
 import type { Map as MapLibreMap, MapLibreEvent } from "maplibre-gl";
-import { Maximize2, X } from "lucide-react";
+import { ArrowLeft, Maximize2, X } from "lucide-react";
 import "maplibre-gl/dist/maplibre-gl.css";
 import "@/lib/map/initMaplibre";
 import { geoPointToZarrGrid } from "@/lib/map/geogrid";
@@ -36,7 +36,6 @@ import {
   type ToolbarPanel,
 } from "@/components/layout/MapToolbar";
 import { DataView } from "@/components/data/DataView";
-import type { MainView } from "@/components/data/MainViewSwitch";
 import { MapControls } from "@/components/map/MapControls";
 import { MapSearch } from "@/components/map/MapSearch";
 import { MapTour } from "@/components/map/MapTour";
@@ -74,11 +73,12 @@ export function ReliefMap() {
   const detachWheelZoomRef = useRef<(() => void) | null>(null);
   const didAutoLocateRef = useRef(false);
   const viewBeforeDataRef = useRef<MapViewState | null>(null);
+  const reopenChartRef = useRef(false);
   const [viewMode, setViewMode] = useState<MapViewMode>("sphere");
   const [viewState, setViewState] = useState<MapViewState>(DEFAULT_MAP_VIEW);
   const [mapSize, setMapSize] = useState({ width: 0, height: 0 });
   const [openPanel, setOpenPanel] = useState<ToolbarPanel | null>(null);
-  const [mainView, setMainView] = useState<MainView>("map");
+  const [extended, setExtended] = useState(false);
   const [tourExpandsPanel, setTourExpandsPanel] = useState(false);
   const [tourCoversBottom, setTourCoversBottom] = useState(false);
   const [tourOpensDetails, setTourOpensDetails] = useState(false);
@@ -90,7 +90,7 @@ export function ReliefMap() {
   const settings = useMapSettings();
   const geolocation = useGeolocation();
   const isSphere = viewMode === "sphere";
-  const showsData = mainView === "data";
+  const showsData = extended && series.selection !== null;
 
   const applyTouchRotation = useCallback(
     (map: MapLibreMap) => {
@@ -202,11 +202,14 @@ export function ReliefMap() {
     });
   }, []);
 
-  const handleMainViewChange = useCallback(
-    (view: MainView) => {
-      setMainView(view);
+  const showExtended = useCallback(
+    (open: boolean) => {
+      if (open && !series.selection) return;
+      setExtended(open);
       const map = mapRef.current;
-      if (view === "map") {
+      if (!open) {
+        if (reopenChartRef.current) setOpenPanel("chart");
+        reopenChartRef.current = false;
         const saved = viewBeforeDataRef.current;
         viewBeforeDataRef.current = null;
         if (map && saved) {
@@ -219,7 +222,10 @@ export function ReliefMap() {
         }
         return;
       }
-      if (openPanel === "chart") setOpenPanel(null);
+      if (openPanel === "chart") {
+        reopenChartRef.current = true;
+        setOpenPanel(null);
+      }
       if (!map) return;
       viewBeforeDataRef.current = readViewState(map);
       const cell = series.selection?.grid;
@@ -232,6 +238,34 @@ export function ReliefMap() {
     },
     [openPanel, series.selection],
   );
+
+  // A history entry, so the back button or gesture closes the view rather
+  // than leaving the site.
+  const openExtended = useCallback(() => {
+    window.history.pushState({ extendedView: true }, "");
+    showExtended(true);
+  }, [showExtended]);
+
+  const closeExtended = useCallback(() => {
+    if (window.history.state?.extendedView) window.history.back();
+    else showExtended(false);
+  }, [showExtended]);
+
+  useEffect(() => {
+    const onPopState = () =>
+      showExtended(Boolean(window.history.state?.extendedView));
+    window.addEventListener("popstate", onPopState);
+    return () => window.removeEventListener("popstate", onPopState);
+  }, [showExtended]);
+
+  useEffect(() => {
+    if (!showsData) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape" && !event.defaultPrevented) closeExtended();
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [showsData, closeExtended]);
 
   const handleMove = useCallback((event: ViewStateChangeEvent) => {
     setViewState(event.viewState);
@@ -303,7 +337,7 @@ export function ReliefMap() {
           <button
             type="button"
             aria-label="Show the full map"
-            onClick={() => handleMainViewChange("map")}
+            onClick={closeExtended}
             className="group absolute inset-0 grid cursor-pointer place-items-end p-2 outline-none focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:ring-inset"
           >
             <span className="grid size-7 place-items-center rounded-md border bg-background/90 text-foreground shadow-sm transition-colors group-hover:bg-background">
@@ -317,7 +351,8 @@ export function ReliefMap() {
         <DataView
           series={series}
           timeBasis={settings.timeBasis}
-          onMainViewChange={handleMainViewChange}
+          onTimeBasisChange={settings.setTimeBasis}
+          onClose={closeExtended}
         />
       ) : null}
 
@@ -328,6 +363,17 @@ export function ReliefMap() {
             onOpenPanelChange={setOpenPanel}
             hideChart={showsData}
             hideOnMobile={tourCoversBottom}
+            viewAction={
+              showsData
+                ? { label: "Map", Icon: ArrowLeft, onClick: closeExtended }
+                : openPanel === "chart" && series.selection
+                  ? {
+                      label: "Data",
+                      Icon: Maximize2,
+                      onClick: openExtended,
+                    }
+                  : undefined
+            }
           />
           <div className="absolute left-0 top-full mt-2 max-md:fixed max-md:inset-x-0 max-md:top-auto max-md:bottom-0 max-md:z-10 max-md:mt-0">
             {openPanel === "chart" && !showsData ? (
@@ -337,7 +383,7 @@ export function ReliefMap() {
                 onClose={() => setOpenPanel(null)}
                 expand={tourExpandsPanel}
                 openDetails={tourOpensDetails}
-                onShowData={() => handleMainViewChange("data")}
+                onTimeBasisChange={settings.setTimeBasis}
               />
             ) : null}
             {openPanel === "settings" ? (
@@ -379,7 +425,8 @@ export function ReliefMap() {
           <MapActions
             onBeforeGuide={() => {
               setOpenPanel(null);
-              setMainView("map");
+              reopenChartRef.current = false;
+              if (showsData) closeExtended();
             }}
           />
         </div>

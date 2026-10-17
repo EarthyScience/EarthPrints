@@ -27,7 +27,7 @@ type CellPanelProps = {
   onClose: () => void;
   expand?: boolean;
   openDetails?: boolean;
-  onShowData: () => void;
+  onTimeBasisChange: (basis: TimeBasis) => void;
 };
 
 export function CellPanel({
@@ -36,7 +36,7 @@ export function CellPanel({
   onClose,
   expand,
   openDetails,
-  onShowData,
+  onTimeBasisChange,
 }: CellPanelProps) {
   const display = useSeriesDisplay(series, timeBasis);
 
@@ -71,8 +71,9 @@ export function CellPanel({
           <CellView
             series={series}
             display={display}
+            timeBasis={timeBasis}
+            onTimeBasisChange={onTimeBasisChange}
             openDetails={openDetails}
-            onShowData={onShowData}
           />
         </TabsContent>
         <TabsContent value="export">

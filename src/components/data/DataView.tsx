@@ -1,26 +1,17 @@
 "use client";
 
-import { useMemo, useRef, useSyncExternalStore } from "react";
-import { Globe } from "lucide-react";
+import { useRef, useSyncExternalStore } from "react";
+import { ArrowLeft } from "lucide-react";
 import { formatLatitude, formatLongitude } from "@/lib/map/geogrid";
-import { formatIsoDate } from "@/lib/map/fingerprintScale";
-import { formatSeriesValue } from "@/lib/plots/chartTheme";
-import { dailyMeanSeries } from "@/lib/zarr/series";
-import {
-  formatSelectedYearsLabel,
-  getSelectedYearsDayMapping,
-  ZARR_TIME,
-} from "@/lib/zarr/timeRange";
+import { formatSelectedYearsLabel } from "@/lib/zarr/timeRange";
 import type { TimeBasis } from "@/lib/zarr/localTime";
 import type { CellSeries } from "@/hooks/useCellSeries";
 import { useSeriesDisplay } from "@/hooks/useSeriesDisplay";
 import { CellExport } from "@/components/panels/CellExport";
 import { PlotArea, PlotControls } from "@/components/panels/CellView";
+import { TimeBasisField } from "@/components/panels/TimeBasisField";
 import { YearPicker } from "@/components/panels/YearPicker";
-import {
-  MainViewSwitch,
-  type MainView,
-} from "@/components/data/MainViewSwitch";
+import { SeriesSummary } from "@/components/data/SeriesSummary";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -28,14 +19,6 @@ import {
   CardDescription,
   CardTitle,
 } from "@/components/ui/card";
-import {
-  Empty,
-  EmptyContent,
-  EmptyDescription,
-  EmptyHeader,
-  EmptyMedia,
-  EmptyTitle,
-} from "@/components/ui/empty";
 
 const FADE_DISTANCE = 48;
 
@@ -52,46 +35,6 @@ function usePlotHeight() {
   );
 }
 
-type DayStat = { value: number; date: string };
-
-type Summary = {
-  mean: number;
-  lowest: DayStat;
-  highest: DayStat;
-  days: number;
-};
-
-function summarize(
-  values: Float32Array,
-  selectedYears: number[],
-): Summary | null {
-  const hoursPerDay = ZARR_TIME.hoursPerDay;
-  const daily = dailyMeanSeries(values, hoursPerDay);
-  if (daily.length === 0) return null;
-  const { absoluteDays } = getSelectedYearsDayMapping(
-    selectedYears,
-    undefined,
-    Math.floor(values.length / hoursPerDay),
-  );
-  const dateOf = (day: number) =>
-    formatIsoDate(absoluteDays[day - 1] ?? day - 1);
-
-  let sum = 0;
-  let lowest = daily[0];
-  let highest = daily[0];
-  for (const point of daily) {
-    sum += point.value;
-    if (point.value < lowest.value) lowest = point;
-    if (point.value > highest.value) highest = point;
-  }
-  return {
-    mean: sum / daily.length,
-    lowest: { value: lowest.value, date: dateOf(lowest.day) },
-    highest: { value: highest.value, date: dateOf(highest.day) },
-    days: daily.length,
-  };
-}
-
 function Chip({ children }: { children: React.ReactNode }) {
   return (
     <span className="inline-flex h-6 items-center rounded-md border bg-editor-bg-depth px-2 text-xs text-muted-foreground tabular-nums">
@@ -100,63 +43,23 @@ function Chip({ children }: { children: React.ReactNode }) {
   );
 }
 
-function StatCard({
-  label,
-  value,
-  units,
-  note,
-}: {
-  label: string;
-  value: string;
-  units?: string | null;
-  note?: string;
-}) {
-  return (
-    <Card className="gap-0">
-      <CardContent className="grid min-h-28 content-between gap-6">
-        <span className="text-xs text-muted-foreground">{label}</span>
-        <div className="grid gap-0.5">
-          <span className="text-2xl font-medium tabular-nums">
-            {value}
-            {units ? (
-              <span className="ml-1 text-xs font-normal text-muted-foreground">
-                {units}
-              </span>
-            ) : null}
-          </span>
-          {note ? (
-            <span className="text-xs text-muted-foreground tabular-nums">
-              {note}
-            </span>
-          ) : null}
-        </div>
-      </CardContent>
-    </Card>
-  );
-}
-
 type DataViewProps = {
   series: CellSeries;
   timeBasis: TimeBasis;
-  onMainViewChange: (view: MainView) => void;
+  onTimeBasisChange: (basis: TimeBasis) => void;
+  onClose: () => void;
 };
 
 export function DataView({
   series,
   timeBasis,
-  onMainViewChange,
+  onTimeBasisChange,
+  onClose,
 }: DataViewProps) {
   const display = useSeriesDisplay(series, timeBasis);
   const fadeRef = useRef<HTMLDivElement>(null);
   const plotHeight = usePlotHeight();
   const { selection, selectedYears, units } = series;
-  const values = display.displayValues;
-
-  const summary = useMemo(
-    () =>
-      values && !display.isEmptyCell ? summarize(values, selectedYears) : null,
-    [values, display.isEmptyCell, selectedYears],
-  );
 
   return (
     <div
@@ -175,24 +78,7 @@ export function DataView({
         className="pointer-events-none fixed inset-x-0 top-0 z-10 h-25 bg-linear-to-b from-editor-bg-depth from-55% to-transparent opacity-0 max-md:hidden"
       />
       <div className="mx-auto grid max-w-7xl gap-6 px-3 pt-28 pb-40 md:px-6 md:pt-20 md:pb-60">
-        {!selection ? (
-          <Empty className="min-h-[60dvh]">
-            <EmptyHeader>
-              <EmptyMedia variant="icon">
-                <Globe />
-              </EmptyMedia>
-              <EmptyTitle>No point picked yet</EmptyTitle>
-              <EmptyDescription>
-                Pick a point on the map or search for a place to see its record
-              </EmptyDescription>
-            </EmptyHeader>
-            <EmptyContent>
-              <Button variant="outline" onClick={() => onMainViewChange("map")}>
-                Open the map
-              </Button>
-            </EmptyContent>
-          </Empty>
-        ) : (
+        {selection ? (
           <div className="grid items-start gap-6 lg:grid-cols-[340px_minmax(0,1fr)]">
             <aside className="grid content-start gap-3 max-lg:order-last">
               <Card>
@@ -207,6 +93,14 @@ export function DataView({
               </Card>
               <Card>
                 <CardContent>
+                  <TimeBasisField
+                    value={timeBasis}
+                    onChange={onTimeBasisChange}
+                  />
+                </CardContent>
+              </Card>
+              <Card>
+                <CardContent>
                   <CellExport series={series} display={display} />
                 </CardContent>
               </Card>
@@ -214,7 +108,7 @@ export function DataView({
             <div className="grid min-w-0 gap-6">
               <Card>
                 <CardContent className="grid gap-6">
-                  <header className="grid gap-4 grid-cols-[1fr_auto] items-start">
+                  <header className="grid items-start gap-4 max-md:pr-10">
                     <div className="grid gap-1">
                       <CardTitle>
                         {formatLongitude(selection.grid.lon)},{" "}
@@ -227,11 +121,17 @@ export function DataView({
                         <Chip>
                           Years {formatSelectedYearsLabel(selectedYears)}
                         </Chip>
-                        <Chip>{display.timeBasisLabel}</Chip>
                         {units ? <Chip>{units}</Chip> : null}
                       </div>
                     </div>
-                    <MainViewSwitch value="data" onChange={onMainViewChange} />
+                    <Button
+                      variant="outline"
+                      onClick={onClose}
+                      className="order-first justify-self-start md:hidden"
+                    >
+                      <ArrowLeft />
+                      Map
+                    </Button>
                   </header>
                   <section aria-live="polite" className="grid gap-3">
                     <PlotControls display={display} />
@@ -245,39 +145,14 @@ export function DataView({
                 </CardContent>
               </Card>
 
-              {summary ? (
-                <section aria-label="Summary" className="grid gap-3">
-                  <h2 className="text-xs text-muted-foreground">
-                    Daily means over the selected years
-                  </h2>
-                  <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
-                    <StatCard
-                      label="Mean"
-                      value={formatSeriesValue(summary.mean)}
-                      units={units}
-                    />
-                    <StatCard
-                      label="Lowest day"
-                      value={formatSeriesValue(summary.lowest.value)}
-                      units={units}
-                      note={summary.lowest.date}
-                    />
-                    <StatCard
-                      label="Highest day"
-                      value={formatSeriesValue(summary.highest.value)}
-                      units={units}
-                      note={summary.highest.date}
-                    />
-                    <StatCard
-                      label="Days with data"
-                      value={summary.days.toLocaleString()}
-                    />
-                  </div>
-                </section>
-              ) : null}
+              <SeriesSummary
+                series={series}
+                display={display}
+                className="grid grid-cols-2 gap-3 xl:grid-cols-4"
+              />
             </div>
           </div>
-        )}
+        ) : null}
       </div>
     </div>
   );
