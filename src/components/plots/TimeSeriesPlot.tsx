@@ -221,7 +221,8 @@ export function TimeSeriesPlot({
             type="linear"
             dataKey="value"
             stroke="var(--color-value)"
-            strokeWidth={1.5}
+            strokeWidth={resolution === "hour" ? 0.5 : 1.5}
+            strokeOpacity={resolution === "hour" ? 0.7 : 1}
             dot={false}
             isAnimationActive={false}
           />
