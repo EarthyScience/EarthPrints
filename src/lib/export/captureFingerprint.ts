@@ -38,6 +38,7 @@ export function captureFingerprint({
       width: EXPORT_PLOT_WIDTH,
       height: EXPORT_PLOT_HEIGHT,
       transposed: false,
+      margins: true,
     },
     {
       colormapId,
