@@ -336,7 +336,7 @@ export async function buildReportPdf({
     `${prov.dayCount.toLocaleString()} days x ${prov.hoursPerDay} hours - ${formatTimeBasis(
       prov.timeBasis,
       prov.utcOffsetHours,
-    )}${prov.units ? ` - ${prov.units}` : ""}`,
+    )}${prov.units ? ` - ${prov.units}` : ""} - strips: mean +/-1 std per row and column`,
     cursor,
   );
 

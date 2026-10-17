@@ -7,6 +7,12 @@ import {
 import { getSelectedYearsDayMapping } from "@/lib/zarr/timeRange";
 import { chartTickColor } from "@/lib/plots/chartTheme";
 import {
+  bandRange,
+  type FingerprintMargins,
+  fingerprintMargins,
+  niceTicks,
+} from "@/lib/plots/fingerprintMargins";
+import {
   binHourGrid,
   type BinStats,
   monthStartTicks,
@@ -20,6 +26,9 @@ const AXIS_LEFT_TRANSPOSED = 54;
 const AXIS_BOTTOM = 18;
 const AXIS_TOP = 4;
 const AXIS_RIGHT = 6;
+const STRIP = 56;
+const STRIP_GAP = 10;
+const STRIP_LABELS = 44;
 
 const LABEL_FONT =
   "11px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
@@ -31,6 +40,7 @@ export type FingerprintGrid = BinStats & {
   unit: BinUnit;
   bins: TimeBin[];
   hoursPerDay: number;
+  margins: FingerprintMargins;
 };
 
 export function fingerprintGrid(
@@ -46,7 +56,14 @@ export function fingerprintGrid(
     nDays,
   );
   const bins = timeBins(absoluteDays.slice(0, nDays), unit);
-  return { ...binHourGrid(values, hoursPerDay, bins), unit, bins, hoursPerDay };
+  const stats = binHourGrid(values, hoursPerDay, bins);
+  return {
+    ...stats,
+    unit,
+    bins,
+    hoursPerDay,
+    margins: fingerprintMargins(stats.mean, bins.length, hoursPerDay),
+  };
 }
 
 export type FingerprintLayout = {
@@ -54,14 +71,24 @@ export type FingerprintLayout = {
   width: number;
   height: number;
   transposed: boolean;
+  /** Draw mean ± std strips along both axes. */
+  margins?: boolean;
 };
 
-function plotBox({ width, height, transposed }: FingerprintLayout) {
-  const axisLeft = transposed ? AXIS_LEFT_TRANSPOSED : AXIS_LEFT_DEFAULT;
+/** Extra height the strips need, so the cells keep their size. */
+export const FINGERPRINT_STRIP_HEIGHT = STRIP + STRIP_GAP;
+
+function plotBox({ width, height, transposed, margins }: FingerprintLayout) {
+  const labels = transposed ? AXIS_LEFT_TRANSPOSED : AXIS_LEFT_DEFAULT;
+  const axisLeft = margins
+    ? STRIP + STRIP_GAP + Math.max(labels, STRIP_LABELS)
+    : labels;
+  const top = margins ? AXIS_TOP + STRIP + STRIP_GAP : AXIS_TOP;
   return {
     axisLeft,
+    top,
     plotW: Math.max(1, width - axisLeft - AXIS_RIGHT),
-    plotH: Math.max(1, height - AXIS_TOP - AXIS_BOTTOM),
+    plotH: Math.max(1, height - top - AXIS_BOTTOM),
   };
 }
 
@@ -117,6 +144,99 @@ function pixelRuns(length: number, nSel: number, colHi: number) {
   return runs;
 }
 
+type StripBox = { x: number; y: number; w: number; h: number };
+
+function formatTick(value: number): string {
+  return String(Number(value.toFixed(2)));
+}
+
+/**
+ * One mean line with a ±std band. `alongX` strips run with the columns and
+ * grow upwards; the others run with the rows and grow to the right.
+ */
+function drawStrip(
+  ctx: CanvasRenderingContext2D,
+  stats: BinStats,
+  centre: (i: number) => number,
+  box: StripBox,
+  alongX: boolean,
+  colors: { accent: string; grid: string },
+) {
+  const [lo, hi] = bandRange(stats);
+  const valuePos = (value: number) =>
+    alongX
+      ? box.y + box.h - ((value - lo) / (hi - lo)) * box.h
+      : box.x + ((value - lo) / (hi - lo)) * box.w;
+  const point = (i: number, value: number): [number, number] =>
+    alongX ? [centre(i), valuePos(value)] : [valuePos(value), centre(i)];
+  const ticks = niceTicks(lo, hi);
+
+  ctx.save();
+  ctx.strokeStyle = colors.grid;
+  ctx.lineWidth = 1;
+  for (const tick of ticks) {
+    const at = Math.round(valuePos(tick)) + 0.5;
+    ctx.beginPath();
+    if (alongX) {
+      ctx.moveTo(box.x, at);
+      ctx.lineTo(box.x + box.w, at);
+    } else {
+      ctx.moveTo(at, box.y);
+      ctx.lineTo(at, box.y + box.h);
+    }
+    ctx.stroke();
+  }
+
+  const runs: number[][] = [];
+  let run: number[] = [];
+  for (let i = 0; i < stats.mean.length; i++) {
+    if (Number.isFinite(stats.mean[i])) {
+      run.push(i);
+    } else if (run.length > 0) {
+      runs.push(run);
+      run = [];
+    }
+  }
+  if (run.length > 0) runs.push(run);
+
+  ctx.fillStyle = colors.accent;
+  ctx.globalAlpha = 0.2;
+  for (const indices of runs) {
+    ctx.beginPath();
+    indices.forEach((i, k) => {
+      const [x, y] = point(i, stats.mean[i]! + stats.std[i]!);
+      if (k === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    });
+    for (const i of [...indices].reverse()) {
+      ctx.lineTo(...point(i, stats.mean[i]! - stats.std[i]!));
+    }
+    ctx.closePath();
+    ctx.fill();
+  }
+
+  ctx.globalAlpha = 1;
+  ctx.strokeStyle = colors.accent;
+  ctx.lineWidth = 1.5;
+  ctx.lineJoin = "round";
+  for (const indices of runs) {
+    ctx.beginPath();
+    indices.forEach((i, k) => {
+      const [x, y] = point(i, stats.mean[i]!);
+      if (k === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    });
+    if (indices.length === 1) {
+      const [x, y] = point(indices[0]!, stats.mean[indices[0]!]!);
+      ctx.lineTo(alongX ? x + 1 : x, alongX ? y : y + 1);
+    }
+    ctx.stroke();
+  }
+  ctx.restore();
+
+  return ticks.map((tick) => ({ label: formatTick(tick), at: valuePos(tick) }));
+}
+
 function clampLabelX(x: number, plotW: number, axisLeft: number): number {
   return Math.max(axisLeft + 12, Math.min(axisLeft + plotW - 12, x));
 }
@@ -129,11 +249,14 @@ export function drawFingerprint(
     extents,
     isLight,
     pixelRatio,
+    accent = isLight ? "#006c66" : "#52d4c8",
   }: {
     colormapId: ColormapId;
     extents: FingerprintExtents;
     isLight: boolean;
     pixelRatio: number;
+    /** Colour of the strips' mean line and band. */
+    accent?: string;
   },
 ): void {
   const { grid, width, height, transposed } = layout;
@@ -149,7 +272,7 @@ export function drawFingerprint(
   ctx.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
   ctx.clearRect(0, 0, width, height);
 
-  const { axisLeft, plotW, plotH } = plotBox(layout);
+  const { axisLeft, top, plotW, plotH } = plotBox(layout);
   const nSel = Math.max(1, nCols);
   const colHi = Math.max(0, nCols - 1);
   const breaks = yearBreaks(grid.bins);
@@ -164,8 +287,8 @@ export function drawFingerprint(
   const snap = (v: number) => Math.round(v * pixelRatio) / pixelRatio;
   const fillCell = (x0: number, y0: number, x1: number, y1: number) => {
     const left = snap(x0);
-    const top = snap(y0);
-    ctx.fillRect(left, top, snap(x1) - left, snap(y1) - top);
+    const upper = snap(y0);
+    ctx.fillRect(left, upper, snap(x1) - left, snap(y1) - upper);
   };
   const dividerColor = isLight
     ? "rgba(0, 0, 0, 0.25)"
@@ -173,7 +296,7 @@ export function drawFingerprint(
 
   if (!transposed) {
     const rowY = (fromTop: number) =>
-      AXIS_TOP + Math.floor((fromTop * plotH) / hoursPerDay);
+      top + Math.floor((fromTop * plotH) / hoursPerDay);
     for (const { col, start, size } of pixelRuns(plotW, nSel, colHi)) {
       for (let hour = 0; hour < hoursPerDay; hour++) {
         const color = cellColor(col, hour);
@@ -198,8 +321,8 @@ export function drawFingerprint(
       for (const start of breaks) {
         const bx = axisLeft + Math.floor((start / nSel) * plotW);
         ctx.beginPath();
-        ctx.moveTo(bx, AXIS_TOP);
-        ctx.lineTo(bx, AXIS_TOP + plotH);
+        ctx.moveTo(bx, top);
+        ctx.lineTo(bx, top + plotH);
         ctx.stroke();
       }
       ctx.restore();
@@ -216,9 +339,9 @@ export function drawFingerprint(
         ctx.fillStyle = color;
         fillCell(
           xLeft,
-          AXIS_TOP + start,
+          top + start,
           Math.max(xLeft + 1, xRight),
-          AXIS_TOP + start + size,
+          top + start + size,
         );
       }
     }
@@ -228,7 +351,7 @@ export function drawFingerprint(
       ctx.strokeStyle = dividerColor;
       ctx.lineWidth = 1;
       for (const start of breaks) {
-        const by = AXIS_TOP + Math.floor((start / nSel) * plotH);
+        const by = top + Math.floor((start / nSel) * plotH);
         ctx.beginPath();
         ctx.moveTo(axisLeft, by);
         ctx.lineTo(axisLeft + plotW, by);
@@ -241,12 +364,56 @@ export function drawFingerprint(
   ctx.fillStyle = chartTickColor(isLight);
   ctx.font = LABEL_FONT;
 
+  if (layout.margins) {
+    const colors = {
+      accent,
+      grid: isLight ? "rgba(0, 0, 0, 0.08)" : "rgba(255, 255, 255, 0.08)",
+    };
+    const topBox = { x: axisLeft, y: AXIS_TOP, w: plotW, h: STRIP };
+    const leftBox = { x: 0, y: top, w: STRIP, h: plotH };
+    const colCentre = (along: number, length: number) => (col: number) =>
+      along + ((col + 0.5) / nSel) * length;
+    const hourCentre = (hour: number) =>
+      transposed
+        ? axisLeft + ((hour + 0.5) * plotW) / hoursPerDay
+        : top + ((hoursPerDay - 0.5 - hour) * plotH) / hoursPerDay;
+
+    const topTicks = drawStrip(
+      ctx,
+      transposed ? grid.margins.byHour : grid.margins.byColumn,
+      transposed ? hourCentre : colCentre(axisLeft, plotW),
+      topBox,
+      true,
+      colors,
+    );
+    const leftTicks = drawStrip(
+      ctx,
+      transposed ? grid.margins.byColumn : grid.margins.byHour,
+      transposed ? colCentre(top, plotH) : hourCentre,
+      leftBox,
+      false,
+      colors,
+    );
+
+    ctx.textAlign = "right";
+    ctx.textBaseline = "middle";
+    for (const { label, at } of topTicks) {
+      ctx.fillText(label, axisLeft - 6, at);
+    }
+    ctx.textAlign = "center";
+    ctx.textBaseline = "top";
+    for (const { label, at } of leftTicks) {
+      const x = Math.max(leftBox.x + 10, Math.min(leftBox.x + leftBox.w - 10, at));
+      ctx.fillText(label, x, top + plotH + 4);
+    }
+  }
+
   const ticks = columnAxisTicks(layout);
   const colFrac = (at: number) => at / nSel;
 
   if (!transposed) {
     const rowY = (fromTop: number) =>
-      AXIS_TOP + (fromTop * plotH) / hoursPerDay;
+      top + (fromTop * plotH) / hoursPerDay;
     ctx.textAlign = "right";
     ctx.textBaseline = "middle";
     for (const hour of FINGERPRINT_HOUR_TICKS) {
@@ -265,59 +432,75 @@ export function drawFingerprint(
         plotW,
         axisLeft,
       );
-      ctx.fillText(label, x, AXIS_TOP + plotH + 4);
+      ctx.fillText(label, x, top + plotH + 4);
     }
   } else {
     ctx.textAlign = "right";
     ctx.textBaseline = "middle";
     for (const { at, label } of ticks) {
-      const y = AXIS_TOP + colFrac(at) * plotH;
+      const y = top + colFrac(at) * plotH;
       ctx.fillText(
         label,
         axisLeft - 6,
-        Math.max(AXIS_TOP + 6, Math.min(AXIS_TOP + plotH - 6, y)),
+        Math.max(top + 6, Math.min(top + plotH - 6, y)),
       );
     }
     ctx.textAlign = "center";
     ctx.textBaseline = "top";
     for (const hour of FINGERPRINT_HOUR_TICKS) {
       const x = axisLeft + ((hour + 0.5) * plotW) / hoursPerDay;
-      ctx.fillText(String(hour), x, AXIS_TOP + plotH + 4);
+      ctx.fillText(String(hour), x, top + plotH + 4);
     }
   }
 }
 
-export type FingerprintCell = {
-  col: number;
-  hour: number;
-};
+/** What sits under the pointer: a cell, or a point on one of the strips. */
+export type FingerprintTarget =
+  | { kind: "cell"; col: number; hour: number }
+  | { kind: "column"; col: number }
+  | { kind: "hour"; hour: number };
 
-export function fingerprintCellAt(
+export function fingerprintTargetAt(
   layout: FingerprintLayout,
   x: number,
   y: number,
-): FingerprintCell | null {
-  const { grid, transposed } = layout;
+): FingerprintTarget | null {
+  const { grid, transposed, margins } = layout;
   const { hoursPerDay } = grid;
-  const { axisLeft, plotW, plotH } = plotBox(layout);
+  const { axisLeft, top, plotW, plotH } = plotBox(layout);
   const inX = x - axisLeft;
-  const inY = y - AXIS_TOP;
-  if (inX < 0 || inX >= plotW || inY < 0 || inY >= plotH) return null;
+  const inY = y - top;
+  const nSel = Math.max(1, grid.bins.length);
+  const colHi = Math.max(0, grid.bins.length - 1);
+  const colAt = (along: number, length: number) =>
+    Math.min(colHi, Math.floor((along / length) * nSel));
+  const hourAt = (along: number, length: number) =>
+    Math.min(hoursPerDay - 1, Math.floor((along / length) * hoursPerDay));
+  const inCellsX = inX >= 0 && inX < plotW;
+  const inCellsY = inY >= 0 && inY < plotH;
 
-  const nCols = grid.bins.length;
-  const nSel = Math.max(1, nCols);
-  const colHi = Math.max(0, nCols - 1);
-  if (!transposed) {
-    return {
-      col: Math.min(colHi, Math.floor((inX / plotW) * nSel)),
-      hour:
-        hoursPerDay -
-        1 -
-        Math.min(hoursPerDay - 1, Math.floor((inY / plotH) * hoursPerDay)),
-    };
+  if (inCellsX && inCellsY) {
+    return transposed
+      ? { kind: "cell", col: colAt(inY, plotH), hour: hourAt(inX, plotW) }
+      : {
+          kind: "cell",
+          col: colAt(inX, plotW),
+          hour: hoursPerDay - 1 - hourAt(inY, plotH),
+        };
   }
-  return {
-    col: Math.min(colHi, Math.floor((inY / plotH) * nSel)),
-    hour: Math.min(hoursPerDay - 1, Math.floor((inX / plotW) * hoursPerDay)),
-  };
+  if (!margins) return null;
+
+  const inTopStrip = inCellsX && y >= AXIS_TOP && y < AXIS_TOP + STRIP;
+  const inLeftStrip = inCellsY && x >= 0 && x < STRIP;
+  if (inTopStrip) {
+    return transposed
+      ? { kind: "hour", hour: hourAt(inX, plotW) }
+      : { kind: "column", col: colAt(inX, plotW) };
+  }
+  if (inLeftStrip) {
+    return transposed
+      ? { kind: "column", col: colAt(inY, plotH) }
+      : { kind: "hour", hour: hoursPerDay - 1 - hourAt(inY, plotH) };
+  }
+  return null;
 }

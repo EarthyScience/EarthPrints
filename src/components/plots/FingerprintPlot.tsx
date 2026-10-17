@@ -13,10 +13,10 @@ import {
 } from "@/lib/plots/chartTheme";
 import {
   drawFingerprint,
-  type FingerprintCell,
-  fingerprintCellAt,
   fingerprintGrid,
   type FingerprintLayout,
+  FINGERPRINT_STRIP_HEIGHT,
+  fingerprintTargetAt,
 } from "@/lib/plots/fingerprint";
 import {
   binCountLabel,
@@ -49,8 +49,17 @@ type FingerprintPlotProps = {
   transposed: boolean;
   colormapId: ColormapId;
   scale?: BinUnit;
+  margins?: boolean;
   height?: number;
   pinLimit?: number;
+};
+
+type FingerprintCell = { col: number; hour: number };
+
+type StripHover = {
+  kind: "column" | "hour";
+  index: number;
+  anchor: TooltipAnchor;
 };
 
 type Hover = FingerprintCell & {
@@ -71,6 +80,7 @@ export function FingerprintPlot({
   transposed,
   colormapId,
   scale = "day",
+  margins = false,
   height: heightOverride,
   pinLimit = 1,
 }: FingerprintPlotProps) {
@@ -79,6 +89,7 @@ export function FingerprintPlot({
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [width, setWidth] = useState(0);
   const [hover, setHover] = useState<Hover | null>(null);
+  const [stripHover, setStripHover] = useState<StripHover | null>(null);
   const [pins, setPins] = useState<Hover[]>([]);
   const grid = useMemo(
     () => fingerprintGrid(values, hoursPerDay, selectedYears, scale),
@@ -102,11 +113,12 @@ export function FingerprintPlot({
   }, []);
 
   const height =
-    heightOverride ??
-    (transposed ? TRANSPOSED_MIN_HEIGHT : TIME_SERIES_PLOT_HEIGHT);
+    (heightOverride ??
+      (transposed ? TRANSPOSED_MIN_HEIGHT : TIME_SERIES_PLOT_HEIGHT)) +
+    (margins ? FINGERPRINT_STRIP_HEIGHT : 0);
   const layout: FingerprintLayout = useMemo(
-    () => ({ grid, width, height, transposed }),
-    [grid, width, height, transposed],
+    () => ({ grid, width, height, transposed, margins }),
+    [grid, width, height, transposed, margins],
   );
   const extents = useMemo(() => asymmetricExtents(grid.mean), [grid]);
   const nCols = grid.bins.length;
@@ -149,7 +161,7 @@ export function FingerprintPlot({
     const rect = event.currentTarget.getBoundingClientRect();
     const left = event.clientX - rect.left;
     const top = event.clientY - rect.top;
-    const cell = fingerprintCellAt(layout, left, top);
+    const target = fingerprintTargetAt(layout, left, top);
     const anchor = anchorBesidePanel(
       wrapperRef.current,
       event.clientX,
@@ -160,7 +172,52 @@ export function FingerprintPlot({
       event.clientX,
       event.clientY,
     );
-    setHover(cell ? { ...cell, left, top, flip, anchor } : null);
+    setHover(
+      target?.kind === "cell"
+        ? { col: target.col, hour: target.hour, left, top, flip, anchor }
+        : null,
+    );
+    setStripHover(
+      anchor && target && target.kind !== "cell"
+        ? {
+            kind: target.kind,
+            index: target.kind === "column" ? target.col : target.hour,
+            anchor,
+          }
+        : null,
+    );
+  };
+
+  const stripPointAt = (
+    kind: StripHover["kind"],
+    index: number,
+  ): TooltipPoint | undefined => {
+    const stats =
+      kind === "column" ? grid.margins.byColumn : grid.margins.byHour;
+    if (index < 0 || index >= stats.mean.length) return undefined;
+    const count = stats.count[index] ?? 0;
+    const std = formatSeriesValue(stats.std[index] as number);
+    if (kind === "column") {
+      const bin = grid.bins[index]!;
+      return {
+        label: formatBinLabel(bin, scale),
+        shortLabel: formatBinShortLabel(bin, scale),
+        value: stats.mean[index] as number,
+        spread:
+          count > 0
+            ? `Std ${std} across ${count} hour${count === 1 ? "" : "s"}`
+            : undefined,
+      };
+    }
+    const time = `${String(index).padStart(2, "0")}:00`;
+    const suffix = timeBasisLabel ? ` ${shortTimeBasis(timeBasisLabel)}` : "";
+    return {
+      label: `${time}${suffix}`,
+      shortLabel: time,
+      value: stats.mean[index] as number,
+      spread:
+        count > 0 ? `Std ${std} across ${binCountLabel(count, scale)}` : undefined,
+    };
   };
 
   const pointAt = (
@@ -216,7 +273,10 @@ export function FingerprintPlot({
           role="img"
           aria-label="Diurnal fingerprint heatmap"
           onMouseMove={handleMove}
-          onMouseLeave={() => setHover(null)}
+          onMouseLeave={() => {
+            setHover(null);
+            setStripHover(null);
+          }}
           onClick={() => {
             if (desktop && hover?.anchor) {
               setPins((current) =>
@@ -286,6 +346,14 @@ export function FingerprintPlot({
           units={units}
         />
       ) : null}
+      {desktop && stripHover ? (
+        <MapSideTooltip
+          point={stripPointAt(stripHover.kind, stripHover.index)!}
+          previous={stripPointAt(stripHover.kind, stripHover.index - 1)}
+          anchor={stripHover.anchor}
+          units={units}
+        />
+      ) : null}
       {desktop && !separate && shown?.anchor ? (
         <MapSideTooltip
           point={pointAt(shown.col, shown.hour, "full")!}
@@ -325,6 +393,7 @@ export function FingerprintPlot({
         {binCountLabel(nCols, scale)} × {hoursPerDay} hours
         {timeBasisLabel ? ` · ${timeBasisLabel}` : ""}
         {units ? ` · ${units}` : ""}
+        {margins ? " · strips show the mean ±1 std of each row and column" : ""}
       </p>
     </div>
   );

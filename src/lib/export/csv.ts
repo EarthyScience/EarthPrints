@@ -1,5 +1,6 @@
 import { formatUtcOffset } from "@/lib/zarr/localTime";
 import { isoDate, type ExportProvenance } from "./provenance";
+import type { MarginRow } from "./margins";
 import type { SeriesRow } from "./rows";
 
 export const CSV_COLUMNS =
@@ -72,5 +73,20 @@ export function buildSeriesCsv(
     );
   }
 
+  return `${lines.join("\n")}\n`;
+}
+
+/** One of the fingerprint's strips: mean, std and count along one axis. */
+export function buildMarginCsv(
+  rows: MarginRow[],
+  columns: string[],
+  description: string,
+  prov: ExportProvenance,
+): string {
+  const lines = buildHeader(rows.length, prov);
+  lines.push(`# table: ${description}`, columns.join(","));
+  for (const row of rows) {
+    lines.push([row.key, row.mean ?? "", row.std ?? "", row.count].join(","));
+  }
   return `${lines.join("\n")}\n`;
 }

@@ -1,10 +1,13 @@
 import type { SheetData } from "write-excel-file/browser";
 import { formatUtcOffset } from "@/lib/zarr/localTime";
 import { isoDate, type ExportProvenance } from "./provenance";
+import { marginColumns, type MarginTables } from "./margins";
 import type { SeriesRow } from "./rows";
 
 export const XLSX_DATA_SHEET = "data";
 export const XLSX_METADATA_SHEET = "metadata";
+export const XLSX_DAILY_CYCLE_SHEET = "daily_cycle";
+export const XLSX_SEASONAL_COURSE_SHEET = "seasonal_course";
 
 const BOLD = { fontWeight: "bold" } as const;
 
@@ -83,13 +86,32 @@ export function buildWorkbookSheets(
   return { data, metadata };
 }
 
+/** The fingerprint's strips, one sheet per axis. */
+export function buildMarginSheets(
+  margins: MarginTables,
+  prov: ExportProvenance,
+): { dailyCycle: SheetData; seasonalCourse: SheetData } {
+  const columns = marginColumns(prov);
+  const sheet = (header: string[], rows: MarginTables["dailyCycle"]) => [
+    header.map((value) => ({ value, ...BOLD })),
+    ...rows.map((row) => [row.key, row.mean, row.std, row.count]),
+  ];
+  return {
+    dailyCycle: sheet(columns.dailyCycle, margins.dailyCycle),
+    seasonalCourse: sheet(columns.seasonalCourse, margins.seasonalCourse),
+  };
+}
+
 /** Build the workbook. Imports the xlsx writer lazily, so it stays off the map route's first load. */
 export async function buildSeriesWorkbook(
   rows: SeriesRow[],
   prov: ExportProvenance,
+  margins?: MarginTables,
 ): Promise<Blob> {
   const { default: writeXlsxFile } = await import("write-excel-file/browser");
   const { data, metadata } = buildWorkbookSheets(rows, prov);
+  const marginSheets = margins ? buildMarginSheets(margins, prov) : null;
+  const statColumns = [{ width: 14 }, { width: 14 }, { width: 14 }, { width: 8 }];
 
   const result = await writeXlsxFile([
     {
@@ -108,6 +130,20 @@ export async function buildSeriesWorkbook(
         { width: 16 },
       ],
     },
+    ...(marginSheets
+      ? [
+          {
+            data: marginSheets.dailyCycle,
+            sheet: XLSX_DAILY_CYCLE_SHEET,
+            columns: statColumns,
+          },
+          {
+            data: marginSheets.seasonalCourse,
+            sheet: XLSX_SEASONAL_COURSE_SHEET,
+            columns: statColumns,
+          },
+        ]
+      : []),
     {
       data: metadata,
       sheet: XLSX_METADATA_SHEET,
