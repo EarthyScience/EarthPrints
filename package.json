@@ -13,7 +13,7 @@
     "relief-tiles": "node scripts/relief-tiles/build.mjs"
   },
   "dependencies": {
-    "@base-ui/react": "^1.8.0",
+    "@base-ui/react": "^1.9.0",
     "@deck.gl/core": "^9.4.0",
     "class-variance-authority": "^0.7.1",
     "cn": "^0.4.0",
