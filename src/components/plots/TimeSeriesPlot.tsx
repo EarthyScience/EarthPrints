@@ -253,14 +253,14 @@ export function TimeSeriesPlot({
       hover &&
       shownPoint &&
       !pins.some((pin) => sameDay(pin, hover)) ? (
-        <MapSideTooltip
+        <PinnedTooltip
           point={shownPoint}
           previous={
             lastPin
               ? tooltipPoint(data[lastPin.index])
               : tooltipPoint(data[hover.index - 1])
           }
-          anchor={hover}
+          position={hover}
           units={units}
         />
       ) : null}

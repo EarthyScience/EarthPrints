@@ -150,7 +150,8 @@ export function PinnedTooltip({
   previous?: TooltipPoint;
   position: PinPosition;
   units?: string | null;
-  onClose: () => void;
+  /** Without it the tooltip is a hover readout and lets the pointer through. */
+  onClose?: () => void;
 }) {
   return (
     <div
@@ -158,6 +159,7 @@ export function PinnedTooltip({
         "absolute",
         tooltipBoxClass,
         position.flip && "-translate-x-full",
+        !onClose && "pointer-events-none",
       )}
       style={{
         left: position.flip

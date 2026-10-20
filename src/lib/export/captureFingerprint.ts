@@ -2,7 +2,11 @@ import {
   asymmetricExtents,
   defaultColormapId,
 } from "@/lib/map/fingerprintScale";
-import { drawFingerprint, fingerprintGrid } from "@/lib/plots/fingerprint";
+import {
+  drawFingerprint,
+  FINGERPRINT_STRIP,
+  fingerprintGrid,
+} from "@/lib/plots/fingerprint";
 import { canvasToPng, type CapturedImage } from "@/lib/export/capture";
 import { fingerprintPngWithLegend } from "@/lib/export/fingerprintImage";
 import {
@@ -38,7 +42,7 @@ export function captureFingerprint({
       width: EXPORT_PLOT_WIDTH,
       height: EXPORT_PLOT_HEIGHT,
       transposed: false,
-      margins: true,
+      margins: { top: FINGERPRINT_STRIP, left: FINGERPRINT_STRIP },
     },
     {
       colormapId,

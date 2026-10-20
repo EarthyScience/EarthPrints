@@ -15,7 +15,11 @@ import {
   drawFingerprint,
   fingerprintGrid,
   type FingerprintLayout,
-  FINGERPRINT_STRIP_HEIGHT,
+  FINGERPRINT_STRIP,
+  FINGERPRINT_STRIP_MAX,
+  fingerprintStripDividers,
+  fingerprintStripHeight,
+  type FingerprintStrips,
   type FingerprintTarget,
   fingerprintTargetAt,
 } from "@/lib/plots/fingerprint";
@@ -40,6 +44,12 @@ import {
 
 const LEGEND_STOPS = 32;
 const TRANSPOSED_MIN_HEIGHT = 380;
+// A strip dropped shorter than this is too small to read, so it closes.
+const STRIP_SNAP = 24;
+const STRIP_KEY_STEP = 8;
+const DRAG_START = 3;
+// The left strip takes its width from the cells, so it may only use part of the plot.
+const LEFT_STRIP_SHARE = 0.4;
 
 type FingerprintPlotProps = {
   values: Float32Array;
@@ -72,6 +82,83 @@ function targetKey(target: FingerprintTarget): string {
 const sameTarget = (a: Hover, b: Hover) =>
   targetKey(a.target) === targetKey(b.target);
 
+type StripSide = keyof FingerprintStrips;
+
+/** The full-length edge between a strip and the cells: drag to resize, drag to the edge or tap to hide. */
+function StripDivider({
+  side,
+  size,
+  max,
+  box,
+  onResize,
+}: {
+  side: StripSide;
+  size: number;
+  max: number;
+  box: { x: number; y: number; w: number; h: number };
+  onResize: (size: number) => void;
+}) {
+  const drag = useRef<{ from: number; size: number; moved: boolean } | null>(
+    null,
+  );
+  const vertical = side === "left";
+  const coord = (event: React.PointerEvent) =>
+    vertical ? event.clientX : event.clientY;
+  const clamp = (value: number) =>
+    Math.max(0, Math.min(max, Math.round(value)));
+  const toggle = () => onResize(size > 0 ? 0 : FINGERPRINT_STRIP);
+
+  return (
+    <div
+      role="separator"
+      tabIndex={0}
+      aria-orientation={vertical ? "vertical" : "horizontal"}
+      aria-label={`Resize the ${side} strip`}
+      aria-valuemin={0}
+      aria-valuemax={max}
+      aria-valuenow={size}
+      title={size > 0 ? "Drag to resize, tap to hide" : "Drag or tap to show"}
+      className={`group absolute flex touch-none items-center justify-center outline-none ${vertical ? "cursor-col-resize" : "cursor-row-resize"}`}
+      style={{ left: box.x, top: box.y, width: box.w, height: box.h }}
+      onPointerDown={(event) => {
+        drag.current = { from: coord(event), size, moved: false };
+        event.currentTarget.setPointerCapture(event.pointerId);
+      }}
+      onPointerMove={(event) => {
+        const current = drag.current;
+        if (!current) return;
+        const delta = coord(event) - current.from;
+        if (!current.moved && Math.abs(delta) < DRAG_START) return;
+        current.moved = true;
+        onResize(clamp(current.size + delta));
+      }}
+      onPointerUp={() => {
+        const current = drag.current;
+        drag.current = null;
+        if (!current) return;
+        if (!current.moved) toggle();
+        else if (size < STRIP_SNAP) onResize(0);
+      }}
+      onPointerCancel={() => {
+        drag.current = null;
+      }}
+      onKeyDown={(event) => {
+        const grow = vertical ? "ArrowRight" : "ArrowDown";
+        const shrink = vertical ? "ArrowLeft" : "ArrowUp";
+        if (event.key === grow) onResize(clamp(size + STRIP_KEY_STEP));
+        else if (event.key === shrink) onResize(clamp(size - STRIP_KEY_STEP));
+        else if (event.key === "Enter" || event.key === " ") toggle();
+        else return;
+        event.preventDefault();
+      }}
+    >
+      <span
+        className={`rounded-full bg-muted-foreground/40 transition-[background-color,width,height] group-hover:bg-foreground/70 group-focus-visible:bg-foreground/70 group-active:bg-foreground ${vertical ? "h-full w-px group-hover:w-0.5 group-active:w-0.5" : "h-px w-full group-hover:h-0.5 group-active:h-0.5"}`}
+      />
+    </div>
+  );
+}
+
 export function FingerprintPlot({
   values,
   units,
@@ -91,6 +178,10 @@ export function FingerprintPlot({
   const [width, setWidth] = useState(0);
   const [hover, setHover] = useState<Hover | null>(null);
   const [pins, setPins] = useState<Hover[]>([]);
+  const [strips, setStrips] = useState<FingerprintStrips>({
+    top: FINGERPRINT_STRIP,
+    left: FINGERPRINT_STRIP,
+  });
   const grid = useMemo(
     () => fingerprintGrid(values, hoursPerDay, selectedYears, scale),
     [values, hoursPerDay, selectedYears, scale],
@@ -112,14 +203,22 @@ export function FingerprintPlot({
     return () => observer.disconnect();
   }, []);
 
+  const shownStrips = margins ? strips : undefined;
   const height =
     (heightOverride ??
       (transposed ? TRANSPOSED_MIN_HEIGHT : TIME_SERIES_PLOT_HEIGHT)) +
-    (margins ? FINGERPRINT_STRIP_HEIGHT : 0);
+    fingerprintStripHeight(shownStrips);
   const layout: FingerprintLayout = useMemo(
-    () => ({ grid, width, height, transposed, margins }),
-    [grid, width, height, transposed, margins],
+    () => ({ grid, width, height, transposed, margins: shownStrips }),
+    [grid, width, height, transposed, shownStrips],
   );
+  const dividers = width > 0 ? fingerprintStripDividers(layout) : null;
+  const resizeStrip = (side: StripSide, size: number) => {
+    if (strips[side] === size) return;
+    setStrips((current) => ({ ...current, [side]: size }));
+    setPins([]);
+    setHover(null);
+  };
   const extents = useMemo(() => asymmetricExtents(grid.mean), [grid]);
   const nCols = grid.bins.length;
 
@@ -274,6 +373,25 @@ export function FingerprintPlot({
             }
           }}
         />
+        {dividers
+          ? (["top", "left"] as const).map((side) => (
+              <StripDivider
+                key={side}
+                side={side}
+                size={strips[side]}
+                max={
+                  side === "left"
+                    ? Math.min(
+                        FINGERPRINT_STRIP_MAX,
+                        Math.floor(width * LEFT_STRIP_SHARE),
+                      )
+                    : FINGERPRINT_STRIP_MAX
+                }
+                box={dividers[side]}
+                onResize={(size) => resizeStrip(side, size)}
+              />
+            ))
+          : null}
         {desktop && separate
           ? pins.map((pin) => (
               <PinnedTooltip
@@ -319,22 +437,22 @@ export function FingerprintPlot({
             ) : null}
           </div>
         ) : null}
+        {desktop &&
+        separate &&
+        hover &&
+        !pins.some((pin) => sameTarget(pin, hover)) ? (
+          <PinnedTooltip
+            point={pointFor(hover)}
+            previous={
+              lastPin && comparable(lastPin, hover)
+                ? pointFor(lastPin)
+                : previousFor(hover)
+            }
+            position={{ x: hover.left, y: hover.top, flip: hover.flip }}
+            units={units}
+          />
+        ) : null}
       </div>
-      {desktop &&
-      separate &&
-      hover?.anchor &&
-      !pins.some((pin) => sameTarget(pin, hover)) ? (
-        <MapSideTooltip
-          point={pointFor(hover)}
-          previous={
-            lastPin && comparable(lastPin, hover)
-              ? pointFor(lastPin)
-              : previousFor(hover)
-          }
-          anchor={hover.anchor}
-          units={units}
-        />
-      ) : null}
       {desktop && !separate && shown?.anchor ? (
         <MapSideTooltip
           point={pointFor(shown)}
