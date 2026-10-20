@@ -166,16 +166,9 @@ type PlotAreaProps = {
   display: SeriesDisplay;
   height?: number;
   pinLimit?: number;
-  margins?: boolean;
 };
 
-export function PlotArea({
-  series,
-  display,
-  height,
-  pinLimit,
-  margins,
-}: PlotAreaProps) {
+export function PlotArea({ series, display, height, pinLimit }: PlotAreaProps) {
   if (series.loading) {
     return (
       <div className="grid gap-3">
@@ -227,7 +220,6 @@ export function PlotArea({
       transposed={display.transposed}
       colormapId={display.colormapId}
       scale={display.fingerprintScale}
-      margins={margins}
       height={height}
       pinLimit={pinLimit}
     />

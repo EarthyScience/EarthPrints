@@ -138,7 +138,6 @@ export function DataView({
                       display={display}
                       height={plotHeight}
                       pinLimit={2}
-                      margins
                     />
                   </section>
                 </CardContent>
