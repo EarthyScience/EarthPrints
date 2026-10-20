@@ -4,8 +4,7 @@ import { useCallback, useState } from "react";
 import { captureFingerprint } from "@/lib/export/captureFingerprint";
 import { captureMap } from "@/lib/export/captureMap";
 import { captureTimeSeries } from "@/lib/export/captureTimeSeries";
-import { buildMarginCsv, buildSeriesCsv } from "@/lib/export/csv";
-import { buildMarginTables, marginColumns } from "@/lib/export/margins";
+import { buildSeriesCsv } from "@/lib/export/csv";
 import { downloadBlob } from "@/lib/export/download";
 import { buildSquareFingerprintCanvas } from "@/lib/export/fingerprintSquareLogo";
 import { buildReportPdf, type ReportAssets } from "@/lib/export/pdf";
@@ -121,8 +120,6 @@ export function useCellExport({
         }).toDataURL("image/png");
 
         const rows = buildSeriesRows(values, prov);
-        const margins = buildMarginTables(displayValues ?? values, prov);
-        const columns = marginColumns(prov);
         const [pdf, workbook] = await Promise.all([
           buildReportPdf({
             prov,
@@ -130,7 +127,7 @@ export function useCellExport({
             values: displayValues ?? values,
             attribution: mapCapture.attribution,
           }),
-          buildSeriesWorkbook(rows, prov, margins),
+          buildSeriesWorkbook(rows, prov),
         ]);
 
         const archive = await buildZip([
@@ -143,28 +140,6 @@ export function useCellExport({
           {
             name: `${base}.csv`,
             data: new TextEncoder().encode(buildSeriesCsv(rows, prov)),
-          },
-          {
-            name: `${base}_daily_cycle.csv`,
-            data: new TextEncoder().encode(
-              buildMarginCsv(
-                margins.dailyCycle,
-                columns.dailyCycle,
-                "mean daily cycle, each hour across all days",
-                prov,
-              ),
-            ),
-          },
-          {
-            name: `${base}_seasonal_course.csv`,
-            data: new TextEncoder().encode(
-              buildMarginCsv(
-                margins.seasonalCourse,
-                columns.seasonalCourse,
-                "seasonal course, each day across its hours",
-                prov,
-              ),
-            ),
           },
           {
             name: `${base}_badge.png`,

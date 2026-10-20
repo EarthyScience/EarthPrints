@@ -77,16 +77,7 @@ export type BinStats = {
   count: Uint32Array;
 };
 
-export function emptyStats(length: number): BinStats {
-  return {
-    mean: new Float32Array(length),
-    std: new Float32Array(length),
-    count: new Uint32Array(length),
-  };
-}
-
-/** Running NaN-aware mean and population std. */
-export class RunningStats {
+class Accumulator {
   sum = 0;
   sumSq = 0;
   count = 0;
@@ -112,6 +103,14 @@ export class RunningStats {
   }
 }
 
+function emptyStats(length: number): BinStats {
+  return {
+    mean: new Float32Array(length),
+    std: new Float32Array(length),
+    count: new Uint32Array(length),
+  };
+}
+
 /**
  * One value per bin and hour of day, laid out bin by bin. The std and count
  * describe how that hour varies across the days in the bin.
@@ -124,7 +123,7 @@ export function binHourGrid(
   const stats = emptyStats(bins.length * hoursPerDay);
   bins.forEach((bin, b) => {
     for (let hour = 0; hour < hoursPerDay; hour++) {
-      const acc = new RunningStats();
+      const acc = new Accumulator();
       for (let day = bin.startLocal; day <= bin.endLocal; day++) {
         acc.add(values[day * hoursPerDay + hour]);
       }
@@ -147,7 +146,7 @@ export function binLineStats(
 ): BinStats {
   const stats = emptyStats(bins.length);
   const dayMean = (day: number) => {
-    const acc = new RunningStats();
+    const acc = new Accumulator();
     for (let hour = 0; hour < hoursPerDay; hour++) {
       acc.add(values[day * hoursPerDay + hour]);
     }
@@ -155,7 +154,7 @@ export function binLineStats(
   };
 
   bins.forEach((bin, b) => {
-    const acc = new RunningStats();
+    const acc = new Accumulator();
     for (let day = bin.startLocal; day <= bin.endLocal; day++) {
       if (unit === "day") {
         for (let hour = 0; hour < hoursPerDay; hour++) {
