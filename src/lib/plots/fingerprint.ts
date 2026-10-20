@@ -26,9 +26,14 @@ const AXIS_LEFT_TRANSPOSED = 54;
 const AXIS_BOTTOM = 18;
 const AXIS_TOP = 4;
 const AXIS_RIGHT = 6;
-const STRIP = 56;
 const STRIP_GAP = 10;
 const STRIP_LABELS = 44;
+// Shorter strips would print their value labels on top of each other.
+const STRIP_LABELS_MIN = 32;
+const STRIP_INSET = 8;
+
+export const FINGERPRINT_STRIP = 56;
+export const FINGERPRINT_STRIP_MAX = 280;
 
 const LABEL_FONT =
   "11px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
@@ -71,24 +76,44 @@ export type FingerprintLayout = {
   width: number;
   height: number;
   transposed: boolean;
-  /** Draw mean ± std strips along both axes. */
-  margins?: boolean;
+  margins?: FingerprintStrips;
 };
 
+/** Size of each strip in pixels; 0 hides it but keeps its divider. */
+export type FingerprintStrips = { top: number; left: number };
+
+const stripSpace = (size: number) => size + STRIP_GAP;
+
 /** Extra height the strips need, so the cells keep their size. */
-export const FINGERPRINT_STRIP_HEIGHT = STRIP + STRIP_GAP;
+export function fingerprintStripHeight(margins?: FingerprintStrips): number {
+  return margins ? stripSpace(margins.top) : 0;
+}
 
 function plotBox({ width, height, transposed, margins }: FingerprintLayout) {
   const labels = transposed ? AXIS_LEFT_TRANSPOSED : AXIS_LEFT_DEFAULT;
   const axisLeft = margins
-    ? STRIP + STRIP_GAP + Math.max(labels, STRIP_LABELS)
+    ? stripSpace(margins.left) +
+      Math.max(labels, margins.top > 0 ? STRIP_LABELS : 0)
     : labels;
-  const top = margins ? AXIS_TOP + STRIP + STRIP_GAP : AXIS_TOP;
+  const top = AXIS_TOP + (margins ? stripSpace(margins.top) : 0);
   return {
     axisLeft,
     top,
     plotW: Math.max(1, width - axisLeft - AXIS_RIGHT),
     plotH: Math.max(1, height - top - AXIS_BOTTOM),
+  };
+}
+
+/** The gap between each strip and the cells, where its divider sits. */
+export function fingerprintStripDividers(
+  layout: FingerprintLayout,
+): { top: StripBox; left: StripBox } | null {
+  const { margins } = layout;
+  if (!margins) return null;
+  const { axisLeft, top, plotW, plotH } = plotBox(layout);
+  return {
+    top: { x: axisLeft, y: AXIS_TOP + margins.top, w: plotW, h: STRIP_GAP },
+    left: { x: margins.left, y: top, w: STRIP_GAP, h: plotH },
   };
 }
 
@@ -364,13 +389,19 @@ export function drawFingerprint(
   ctx.fillStyle = chartTickColor(isLight);
   ctx.font = LABEL_FONT;
 
-  if (layout.margins) {
+  const { margins } = layout;
+  if (margins) {
     const colors = {
       accent,
       grid: isLight ? "rgba(0, 0, 0, 0.08)" : "rgba(255, 255, 255, 0.08)",
     };
-    const topBox = { x: axisLeft, y: AXIS_TOP, w: plotW, h: STRIP };
-    const leftBox = { x: 0, y: top, w: STRIP, h: plotH };
+    const topBox = { x: axisLeft, y: AXIS_TOP, w: plotW, h: margins.top };
+    const leftBox = {
+      x: STRIP_INSET,
+      y: top,
+      w: Math.max(0, margins.left - STRIP_INSET),
+      h: plotH,
+    };
     const colCentre = (along: number, length: number) => (col: number) =>
       along + ((col + 0.5) / nSel) * length;
     const hourCentre = (hour: number) =>
@@ -378,31 +409,39 @@ export function drawFingerprint(
         ? axisLeft + ((hour + 0.5) * plotW) / hoursPerDay
         : top + ((hoursPerDay - 0.5 - hour) * plotH) / hoursPerDay;
 
-    const topTicks = drawStrip(
-      ctx,
-      transposed ? grid.margins.byHour : grid.margins.byColumn,
-      transposed ? hourCentre : colCentre(axisLeft, plotW),
-      topBox,
-      true,
-      colors,
-    );
-    const leftTicks = drawStrip(
-      ctx,
-      transposed ? grid.margins.byColumn : grid.margins.byHour,
-      transposed ? colCentre(top, plotH) : hourCentre,
-      leftBox,
-      false,
-      colors,
-    );
+    const topTicks =
+      margins.top > 0
+        ? drawStrip(
+            ctx,
+            transposed ? grid.margins.byHour : grid.margins.byColumn,
+            transposed ? hourCentre : colCentre(axisLeft, plotW),
+            topBox,
+            true,
+            colors,
+          )
+        : [];
+    const leftTicks =
+      margins.left > 0
+        ? drawStrip(
+            ctx,
+            transposed ? grid.margins.byColumn : grid.margins.byHour,
+            transposed ? colCentre(top, plotH) : hourCentre,
+            leftBox,
+            false,
+            colors,
+          )
+        : [];
+    const labelled = (size: number, ticks: typeof topTicks) =>
+      size >= STRIP_LABELS_MIN ? ticks : [];
 
     ctx.textAlign = "right";
     ctx.textBaseline = "middle";
-    for (const { label, at } of topTicks) {
+    for (const { label, at } of labelled(margins.top, topTicks)) {
       ctx.fillText(label, axisLeft - 6, at);
     }
     ctx.textAlign = "center";
     ctx.textBaseline = "top";
-    for (const { label, at } of leftTicks) {
+    for (const { label, at } of labelled(margins.left, leftTicks)) {
       const x = Math.max(leftBox.x + 10, Math.min(leftBox.x + leftBox.w - 10, at));
       ctx.fillText(label, x, top + plotH + 4);
     }
@@ -490,8 +529,8 @@ export function fingerprintTargetAt(
   }
   if (!margins) return null;
 
-  const inTopStrip = inCellsX && y >= AXIS_TOP && y < AXIS_TOP + STRIP;
-  const inLeftStrip = inCellsY && x >= 0 && x < STRIP;
+  const inTopStrip = inCellsX && y >= AXIS_TOP && y < AXIS_TOP + margins.top;
+  const inLeftStrip = inCellsY && x >= 0 && x < margins.left;
   if (inTopStrip) {
     return transposed
       ? { kind: "hour", hour: hourAt(inX, plotW) }
