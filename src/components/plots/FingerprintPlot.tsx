@@ -13,10 +13,11 @@ import {
 } from "@/lib/plots/chartTheme";
 import {
   drawFingerprint,
-  type FingerprintCell,
-  fingerprintCellAt,
   fingerprintGrid,
   type FingerprintLayout,
+  FINGERPRINT_STRIP_HEIGHT,
+  type FingerprintTarget,
+  fingerprintTargetAt,
 } from "@/lib/plots/fingerprint";
 import {
   binCountLabel,
@@ -49,18 +50,27 @@ type FingerprintPlotProps = {
   transposed: boolean;
   colormapId: ColormapId;
   scale?: BinUnit;
+  margins?: boolean;
   height?: number;
   pinLimit?: number;
 };
 
-type Hover = FingerprintCell & {
+type Hover = {
+  target: FingerprintTarget;
   left: number;
   top: number;
   flip: boolean;
   anchor: TooltipAnchor | null;
 };
 
-const sameCell = (a: Hover, b: Hover) => a.col === b.col && a.hour === b.hour;
+function targetKey(target: FingerprintTarget): string {
+  if (target.kind === "cell") return `cell-${target.col}-${target.hour}`;
+  if (target.kind === "column") return `column-${target.col}`;
+  return `hour-${target.hour}`;
+}
+
+const sameTarget = (a: Hover, b: Hover) =>
+  targetKey(a.target) === targetKey(b.target);
 
 export function FingerprintPlot({
   values,
@@ -71,6 +81,7 @@ export function FingerprintPlot({
   transposed,
   colormapId,
   scale = "day",
+  margins = false,
   height: heightOverride,
   pinLimit = 1,
 }: FingerprintPlotProps) {
@@ -102,11 +113,12 @@ export function FingerprintPlot({
   }, []);
 
   const height =
-    heightOverride ??
-    (transposed ? TRANSPOSED_MIN_HEIGHT : TIME_SERIES_PLOT_HEIGHT);
+    (heightOverride ??
+      (transposed ? TRANSPOSED_MIN_HEIGHT : TIME_SERIES_PLOT_HEIGHT)) +
+    (margins ? FINGERPRINT_STRIP_HEIGHT : 0);
   const layout: FingerprintLayout = useMemo(
-    () => ({ grid, width, height, transposed }),
-    [grid, width, height, transposed],
+    () => ({ grid, width, height, transposed, margins }),
+    [grid, width, height, transposed, margins],
   );
   const extents = useMemo(() => asymmetricExtents(grid.mean), [grid]);
   const nCols = grid.bins.length;
@@ -149,7 +161,7 @@ export function FingerprintPlot({
     const rect = event.currentTarget.getBoundingClientRect();
     const left = event.clientX - rect.left;
     const top = event.clientY - rect.top;
-    const cell = fingerprintCellAt(layout, left, top);
+    const target = fingerprintTargetAt(layout, left, top);
     const anchor = anchorBesidePanel(
       wrapperRef.current,
       event.clientX,
@@ -160,7 +172,39 @@ export function FingerprintPlot({
       event.clientX,
       event.clientY,
     );
-    setHover(cell ? { ...cell, left, top, flip, anchor } : null);
+    setHover(target ? { target, left, top, flip, anchor } : null);
+  };
+
+  const stripPointAt = (
+    kind: "column" | "hour",
+    index: number,
+  ): TooltipPoint | undefined => {
+    const stats =
+      kind === "column" ? grid.margins.byColumn : grid.margins.byHour;
+    if (index < 0 || index >= stats.mean.length) return undefined;
+    const count = stats.count[index] ?? 0;
+    const std = formatSeriesValue(stats.std[index] as number);
+    if (kind === "column") {
+      const bin = grid.bins[index]!;
+      return {
+        label: formatBinLabel(bin, scale),
+        shortLabel: formatBinShortLabel(bin, scale),
+        value: stats.mean[index] as number,
+        spread:
+          count > 0
+            ? `Std ${std} across ${count} hour${count === 1 ? "" : "s"}`
+            : undefined,
+      };
+    }
+    const time = `${String(index).padStart(2, "0")}:00`;
+    const suffix = timeBasisLabel ? ` ${shortTimeBasis(timeBasisLabel)}` : "";
+    return {
+      label: `${time}${suffix}`,
+      shortLabel: time,
+      value: stats.mean[index] as number,
+      spread:
+        count > 0 ? `Std ${std} across ${binCountLabel(count, scale)}` : undefined,
+    };
   };
 
   const pointAt = (
@@ -185,10 +229,21 @@ export function FingerprintPlot({
           : undefined,
     };
   };
-  const previousOf = (cell: FingerprintCell) =>
-    cell.hour > 0
-      ? pointAt(cell.col, cell.hour - 1, "time")
-      : pointAt(cell.col - 1, hoursPerDay - 1, "full");
+  const pointFor = ({ target }: Hover) =>
+    target.kind === "cell"
+      ? pointAt(target.col, target.hour, "full")!
+      : target.kind === "column"
+        ? stripPointAt("column", target.col)!
+        : stripPointAt("hour", target.hour)!;
+  const previousFor = ({ target }: Hover) => {
+    if (target.kind === "column") return stripPointAt("column", target.col - 1);
+    if (target.kind === "hour") return stripPointAt("hour", target.hour - 1);
+    return target.hour > 0
+      ? pointAt(target.col, target.hour - 1, "time")
+      : pointAt(target.col - 1, hoursPerDay - 1, "full");
+  };
+  // A change against a pin only reads sensibly between like targets.
+  const comparable = (a: Hover, b: Hover) => a.target.kind === b.target.kind;
 
   const separate = pinLimit > 1;
   const pinned = separate ? null : (pins[0] ?? null);
@@ -196,16 +251,10 @@ export function FingerprintPlot({
   const shown = pinned ?? hover;
   const hoverPoint =
     hover && !desktop
-      ? {
-          ...pointAt(hover.col, hover.hour, "full")!,
-          left: hover.left,
-          top: hover.top,
-        }
+      ? { ...pointFor(hover), left: hover.left, top: hover.top }
       : null;
   const comparing =
-    pinned &&
-    hover &&
-    (hover.col !== pinned.col || hover.hour !== pinned.hour);
+    pinned && hover && !sameTarget(hover, pinned) && comparable(hover, pinned);
 
   return (
     <div className="grid gap-2">
@@ -220,7 +269,7 @@ export function FingerprintPlot({
           onClick={() => {
             if (desktop && hover?.anchor) {
               setPins((current) =>
-                togglePin(current, hover, pinLimit, sameCell),
+                togglePin(current, hover, pinLimit, sameTarget),
               );
             }
           }}
@@ -228,14 +277,14 @@ export function FingerprintPlot({
         {desktop && separate
           ? pins.map((pin) => (
               <PinnedTooltip
-                key={`${pin.col}-${pin.hour}`}
-                point={pointAt(pin.col, pin.hour, "full")!}
-                previous={previousOf(pin)}
+                key={targetKey(pin.target)}
+                point={pointFor(pin)}
+                previous={previousFor(pin)}
                 position={{ x: pin.left, y: pin.top, flip: pin.flip }}
                 units={units}
                 onClose={() =>
                   setPins((current) =>
-                    current.filter((other) => !sameCell(other, pin)),
+                    current.filter((other) => !sameTarget(other, pin)),
                   )
                 }
               />
@@ -244,7 +293,7 @@ export function FingerprintPlot({
         {desktop && separate
           ? pins.map((pin) => (
               <span
-                key={`${pin.col}-${pin.hour}`}
+                key={targetKey(pin.target)}
                 aria-hidden="true"
                 className="pointer-events-none absolute size-2 -translate-1/2 rounded-full bg-foreground ring-2 ring-background"
                 style={{ left: pin.left, top: pin.top }}
@@ -274,13 +323,13 @@ export function FingerprintPlot({
       {desktop &&
       separate &&
       hover?.anchor &&
-      !pins.some((pin) => sameCell(pin, hover)) ? (
+      !pins.some((pin) => sameTarget(pin, hover)) ? (
         <MapSideTooltip
-          point={pointAt(hover.col, hover.hour, "full")!}
+          point={pointFor(hover)}
           previous={
-            lastPin
-              ? pointAt(lastPin.col, lastPin.hour, "full")
-              : previousOf(hover)
+            lastPin && comparable(lastPin, hover)
+              ? pointFor(lastPin)
+              : previousFor(hover)
           }
           anchor={hover.anchor}
           units={units}
@@ -288,11 +337,9 @@ export function FingerprintPlot({
       ) : null}
       {desktop && !separate && shown?.anchor ? (
         <MapSideTooltip
-          point={pointAt(shown.col, shown.hour, "full")!}
-          previous={previousOf(shown)}
-          compared={
-            comparing ? pointAt(hover.col, hover.hour, "full") : undefined
-          }
+          point={pointFor(shown)}
+          previous={previousFor(shown)}
+          compared={comparing ? pointFor(hover) : undefined}
           anchor={shown.anchor}
           units={units}
           onClose={pinned ? () => setPins([]) : undefined}
@@ -325,6 +372,7 @@ export function FingerprintPlot({
         {binCountLabel(nCols, scale)} × {hoursPerDay} hours
         {timeBasisLabel ? ` · ${timeBasisLabel}` : ""}
         {units ? ` · ${units}` : ""}
+        {margins ? " · strips show the mean ±1 std of each row and column" : ""}
       </p>
     </div>
   );
