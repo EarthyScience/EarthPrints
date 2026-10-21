@@ -6,7 +6,7 @@ import { ArrowLeftRight, ChevronDown } from "lucide-react";
 import { formatLatitude, formatLongitude } from "@/lib/map/geogrid";
 import { formatSelectedYearsLabel, ZARR_TIME } from "@/lib/zarr/timeRange";
 import { TIME_SERIES_PLOT_HEIGHT } from "@/lib/plots/chartTheme";
-import type { TimeBasis } from "@/lib/zarr/localTime";
+import { shortTimeBasis, type TimeBasis } from "@/lib/zarr/localTime";
 import type { CellSeries, SeriesProgress } from "@/hooks/useCellSeries";
 import type { PlotView, SeriesDisplay } from "@/hooks/useSeriesDisplay";
 import { TimeSeriesPlot } from "@/components/plots/TimeSeriesPlot";
@@ -108,6 +108,9 @@ export function CellView({
   );
 }
 
+const activeTriggerClass =
+  "data-active:bg-brand/15 data-active:text-brand dark:data-active:bg-brand/15 dark:data-active:text-brand";
+
 export function PlotControls({ display }: { display: SeriesDisplay }) {
   const disabled = display.isEmptyCell;
 
@@ -121,14 +124,14 @@ export function PlotControls({ display }: { display: SeriesDisplay }) {
           <TabsTrigger
             value="line"
             disabled={disabled}
-            className="data-active:bg-brand/15 data-active:text-brand dark:data-active:bg-brand/15 dark:data-active:text-brand"
+            className={activeTriggerClass}
           >
             Line
           </TabsTrigger>
           <TabsTrigger
             value="fingerprint"
             disabled={disabled}
-            className="data-active:bg-brand/15 data-active:text-brand dark:data-active:bg-brand/15 dark:data-active:text-brand"
+            className={activeTriggerClass}
           >
             Fingerprint
           </TabsTrigger>
@@ -163,9 +166,16 @@ type PlotAreaProps = {
   display: SeriesDisplay;
   height?: number;
   pinLimit?: number;
+  margins?: boolean;
 };
 
-export function PlotArea({ series, display, height, pinLimit }: PlotAreaProps) {
+export function PlotArea({
+  series,
+  display,
+  height,
+  pinLimit,
+  margins,
+}: PlotAreaProps) {
   if (series.loading) {
     return (
       <div className="grid gap-3">
@@ -201,6 +211,9 @@ export function PlotArea({ series, display, height, pinLimit }: PlotAreaProps) {
       values={display.displayValues}
       units={series.units}
       hoursPerDay={ZARR_TIME.hoursPerDay}
+      selectedYears={series.selectedYears}
+      resolution={display.lineResolution}
+      timeBasisSuffix={shortTimeBasis(display.timeBasisLabel)}
       height={height}
       pinLimit={pinLimit}
     />
@@ -213,6 +226,8 @@ export function PlotArea({ series, display, height, pinLimit }: PlotAreaProps) {
       timeBasisLabel={display.timeBasisLabel}
       transposed={display.transposed}
       colormapId={display.colormapId}
+      scale={display.fingerprintScale}
+      margins={margins}
       height={height}
       pinLimit={pinLimit}
     />

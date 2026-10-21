@@ -44,6 +44,10 @@ export function anchorBesidePanel(
 
 export type PinPosition = { x: number; y: number; flip: boolean };
 
+export function pinFlips(x: number, plotWidth: number): boolean {
+  return x + TOOLTIP_GAP + TOOLTIP_ROOM > plotWidth;
+}
+
 export function pinPosition(
   plot: Element,
   clientX: number,
@@ -54,7 +58,7 @@ export function pinPosition(
   return {
     x,
     y: clientY - rect.top,
-    flip: x + TOOLTIP_GAP + TOOLTIP_ROOM > rect.width,
+    flip: pinFlips(x, rect.width),
   };
 }
 
@@ -73,7 +77,12 @@ export function togglePin<T>(
 const tooltipBoxClass =
   "z-40 grid min-w-40 -translate-y-4 gap-1.5 rounded-lg border border-border/50 bg-background px-2.5 py-1.5 text-xs whitespace-nowrap shadow-xl";
 
-export type TooltipPoint = { label: string; shortLabel: string; value: number };
+export type TooltipPoint = {
+  label: string;
+  shortLabel: string;
+  value: number;
+  spread?: string;
+};
 
 function formatChange(point: TooltipPoint, base?: TooltipPoint) {
   if (!base || base.value === 0 || !Number.isFinite(base.value)) return null;
@@ -99,6 +108,11 @@ function PointRows({
           ? `${formatSeriesValue(point.value)}${units ? ` ${units}` : ""}`
           : "no data"}
       </span>
+      {point.spread ? (
+        <span className="text-muted-foreground tabular-nums">
+          {point.spread}
+        </span>
+      ) : null}
       {change ? <span className="text-muted-foreground">{change}</span> : null}
     </>
   );
@@ -140,7 +154,8 @@ export function PinnedTooltip({
   previous?: TooltipPoint;
   position: PinPosition;
   units?: string | null;
-  onClose: () => void;
+  /** Without it the tooltip is a hover readout and lets the pointer through. */
+  onClose?: () => void;
 }) {
   return (
     <div
@@ -148,6 +163,7 @@ export function PinnedTooltip({
         "absolute",
         tooltipBoxClass,
         position.flip && "-translate-x-full",
+        !onClose && "pointer-events-none",
       )}
       style={{
         left: position.flip

@@ -1,7 +1,8 @@
 "use client";
 
-import { useRef, useSyncExternalStore } from "react";
-import { ArrowLeft } from "lucide-react";
+import { useRef, useState, useSyncExternalStore } from "react";
+import { Collapsible } from "@base-ui/react/collapsible";
+import { ArrowLeft, ChevronDown } from "lucide-react";
 import { formatLatitude, formatLongitude } from "@/lib/map/geogrid";
 import { formatSelectedYearsLabel } from "@/lib/zarr/timeRange";
 import type { TimeBasis } from "@/lib/zarr/localTime";
@@ -9,6 +10,7 @@ import type { CellSeries } from "@/hooks/useCellSeries";
 import { useSeriesDisplay } from "@/hooks/useSeriesDisplay";
 import { CellExport } from "@/components/panels/CellExport";
 import { PlotArea, PlotControls } from "@/components/panels/CellView";
+import { ScaleField } from "@/components/panels/ScaleField";
 import { TimeBasisField } from "@/components/panels/TimeBasisField";
 import { YearPicker } from "@/components/panels/YearPicker";
 import { SeriesSummary } from "@/components/data/SeriesSummary";
@@ -32,6 +34,16 @@ function usePlotHeight() {
     subscribeResize,
     () => Math.round(Math.min(560, Math.max(260, window.innerHeight * 0.5))),
     () => 360,
+  );
+}
+
+const SIDEBAR_QUERY = "(width >= 64rem)";
+
+function useSidebarLayout() {
+  return useSyncExternalStore(
+    subscribeResize,
+    () => matchMedia(SIDEBAR_QUERY).matches,
+    () => true,
   );
 }
 
@@ -59,6 +71,8 @@ export function DataView({
   const display = useSeriesDisplay(series, timeBasis);
   const fadeRef = useRef<HTMLDivElement>(null);
   const plotHeight = usePlotHeight();
+  const wide = useSidebarLayout();
+  const [detailsOpen, setDetailsOpen] = useState(false);
   const { selection, selectedYears, units } = series;
 
   return (
@@ -79,33 +93,39 @@ export function DataView({
       />
       <div className="mx-auto grid max-w-7xl gap-6 px-3 pt-28 pb-40 md:px-6 md:pt-20 md:pb-60">
         {selection ? (
-          <div className="grid items-start gap-6 lg:grid-cols-[340px_minmax(0,1fr)]">
-            <aside className="grid content-start gap-3 max-lg:order-last">
-              <Card>
-                <CardContent>
-                  <YearPicker
-                    selectedYears={selectedYears}
-                    cachedYears={series.cachedYears}
-                    loading={series.loading}
-                    onSelectYears={series.selectYears}
-                  />
-                </CardContent>
-              </Card>
-              <Card>
-                <CardContent>
-                  <TimeBasisField
-                    value={timeBasis}
-                    onChange={onTimeBasisChange}
-                  />
-                </CardContent>
-              </Card>
-              <Card>
-                <CardContent>
-                  <CellExport series={series} display={display} />
-                </CardContent>
-              </Card>
-            </aside>
-            <div className="grid min-w-0 gap-6">
+          <div className="grid items-start gap-6 lg:grid-cols-[340px_minmax(0,1fr)] lg:grid-rows-[auto_1fr] lg:gap-y-3">
+            <Card className="lg:col-start-1 lg:row-start-1">
+              <CardContent>
+                <Collapsible.Root
+                  open={wide || detailsOpen}
+                  onOpenChange={setDetailsOpen}
+                  className="grid"
+                >
+                  {wide ? null : (
+                    <Collapsible.Trigger className="group flex w-fit items-center gap-1 rounded-sm text-sm text-muted-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/50">
+                      Details · Years {formatSelectedYearsLabel(selectedYears)}
+                      <ChevronDown className="size-4 transition-transform group-data-panel-open:rotate-180" />
+                    </Collapsible.Trigger>
+                  )}
+                  <Collapsible.Panel className="h-(--collapsible-panel-height) overflow-hidden transition-[height] duration-150 ease-out data-ending-style:h-0 data-starting-style:h-0 motion-reduce:transition-none">
+                    <div className="grid gap-6 max-lg:pt-4">
+                      <YearPicker
+                        selectedYears={selectedYears}
+                        cachedYears={series.cachedYears}
+                        loading={series.loading}
+                        onSelectYears={series.selectYears}
+                      />
+                      <ScaleField display={display} />
+                      <TimeBasisField
+                        value={timeBasis}
+                        onChange={onTimeBasisChange}
+                      />
+                    </div>
+                  </Collapsible.Panel>
+                </Collapsible.Root>
+              </CardContent>
+            </Card>
+            <div className="grid min-w-0 gap-6 lg:col-start-2 lg:row-span-2 lg:row-start-1">
               <Card>
                 <CardContent className="grid gap-6">
                   <header className="grid items-start gap-4 max-md:pr-10">
@@ -140,6 +160,7 @@ export function DataView({
                       display={display}
                       height={plotHeight}
                       pinLimit={2}
+                      margins
                     />
                   </section>
                 </CardContent>
@@ -151,6 +172,11 @@ export function DataView({
                 className="grid grid-cols-2 gap-3 xl:grid-cols-4"
               />
             </div>
+            <Card className="lg:col-start-1 lg:row-start-2">
+              <CardContent>
+                <CellExport series={series} display={display} />
+              </CardContent>
+            </Card>
           </div>
         ) : null}
       </div>
