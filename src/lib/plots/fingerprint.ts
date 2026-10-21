@@ -171,6 +171,29 @@ function pixelRuns(length: number, nSel: number, colHi: number) {
 
 type StripBox = { x: number; y: number; w: number; h: number };
 
+function stripBoxes(
+  margins: FingerprintStrips,
+  { axisLeft, top, plotW, plotH }: ReturnType<typeof plotBox>,
+): { top: StripBox; left: StripBox } {
+  return {
+    top: { x: axisLeft, y: AXIS_TOP, w: plotW, h: margins.top },
+    left: {
+      x: STRIP_INSET,
+      y: top,
+      w: Math.max(0, margins.left - STRIP_INSET),
+      h: plotH,
+    },
+  };
+}
+
+function stripValuePos(stats: BinStats, box: StripBox, alongX: boolean) {
+  const [lo, hi] = bandRange(stats);
+  return (value: number) =>
+    alongX
+      ? box.y + box.h - ((value - lo) / (hi - lo)) * box.h
+      : box.x + ((value - lo) / (hi - lo)) * box.w;
+}
+
 function formatTick(value: number): string {
   return String(Number(value.toFixed(2)));
 }
@@ -188,10 +211,7 @@ function drawStrip(
   colors: { accent: string; grid: string },
 ) {
   const [lo, hi] = bandRange(stats);
-  const valuePos = (value: number) =>
-    alongX
-      ? box.y + box.h - ((value - lo) / (hi - lo)) * box.h
-      : box.x + ((value - lo) / (hi - lo)) * box.w;
+  const valuePos = stripValuePos(stats, box, alongX);
   const point = (i: number, value: number): [number, number] =>
     alongX ? [centre(i), valuePos(value)] : [valuePos(value), centre(i)];
   const ticks = niceTicks(lo, hi);
@@ -395,13 +415,12 @@ export function drawFingerprint(
       accent,
       grid: isLight ? "rgba(0, 0, 0, 0.08)" : "rgba(255, 255, 255, 0.08)",
     };
-    const topBox = { x: axisLeft, y: AXIS_TOP, w: plotW, h: margins.top };
-    const leftBox = {
-      x: STRIP_INSET,
-      y: top,
-      w: Math.max(0, margins.left - STRIP_INSET),
-      h: plotH,
-    };
+    const { top: topBox, left: leftBox } = stripBoxes(margins, {
+      axisLeft,
+      top,
+      plotW,
+      plotH,
+    });
     const colCentre = (along: number, length: number) => (col: number) =>
       along + ((col + 0.5) / nSel) * length;
     const hourCentre = (hour: number) =>
@@ -542,4 +561,57 @@ export function fingerprintTargetAt(
       : { kind: "hour", hour: hoursPerDay - 1 - hourAt(inY, plotH) };
   }
   return null;
+}
+
+/** The inverse of `fingerprintTargetAt`; null when the target's strip is hidden. */
+export function fingerprintTargetPoint(
+  layout: FingerprintLayout,
+  target: FingerprintTarget,
+): { x: number; y: number } | null {
+  const { grid, transposed, margins } = layout;
+  const { hoursPerDay } = grid;
+  const box = plotBox(layout);
+  const { axisLeft, top, plotW, plotH } = box;
+  const nSel = Math.max(1, grid.bins.length);
+  const colAlong = (col: number, length: number) =>
+    ((col + 0.5) / nSel) * length;
+  const hourAlong = (hour: number, length: number) =>
+    ((hour + 0.5) / hoursPerDay) * length;
+
+  if (target.kind === "cell") {
+    return transposed
+      ? {
+          x: axisLeft + hourAlong(target.hour, plotW),
+          y: top + colAlong(target.col, plotH),
+        }
+      : {
+          x: axisLeft + colAlong(target.col, plotW),
+          y: top + hourAlong(hoursPerDay - 1 - target.hour, plotH),
+        };
+  }
+  if (!margins) return null;
+
+  const strips = stripBoxes(margins, box);
+  const byColumn = target.kind === "column";
+  const index = byColumn ? target.col : target.hour;
+  const stats = byColumn ? grid.margins.byColumn : grid.margins.byHour;
+  const onTop = byColumn !== transposed;
+  const strip = onTop ? strips.top : strips.left;
+  if (strip.w <= 0 || strip.h <= 0) return null;
+
+  const mean = stats.mean[index] as number;
+  const across = Number.isFinite(mean)
+    ? stripValuePos(stats, strip, onTop)(mean)
+    : onTop
+      ? strip.y + strip.h / 2
+      : strip.x + strip.w / 2;
+  const along = byColumn
+    ? colAlong(index, onTop ? plotW : plotH)
+    : onTop
+      ? hourAlong(index, plotW)
+      : hourAlong(hoursPerDay - 1 - index, plotH);
+
+  return onTop
+    ? { x: axisLeft + along, y: across }
+    : { x: across, y: top + along };
 }

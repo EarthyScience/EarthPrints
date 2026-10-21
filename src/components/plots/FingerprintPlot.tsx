@@ -22,6 +22,7 @@ import {
   type FingerprintStrips,
   type FingerprintTarget,
   fingerprintTargetAt,
+  fingerprintTargetPoint,
 } from "@/lib/plots/fingerprint";
 import {
   binCountLabel,
@@ -35,6 +36,7 @@ import {
   anchorBesidePanel,
   MapSideTooltip,
   PinnedTooltip,
+  pinFlips,
   pinPosition,
   togglePin,
   useDesktop,
@@ -343,6 +345,13 @@ export function FingerprintPlot({
   };
   // A change against a pin only reads sensibly between like targets.
   const comparable = (a: Hover, b: Hover) => a.target.kind === b.target.kind;
+  // Pins store their target, not the click, so they follow it when the layout changes.
+  const placedPins = pins.flatMap((pin) => {
+    const at = fingerprintTargetPoint(layout, pin.target);
+    return at
+      ? [{ ...pin, left: at.x, top: at.y, flip: pinFlips(at.x, width) }]
+      : [];
+  });
 
   const separate = pinLimit > 1;
   const pinned = separate ? null : (pins[0] ?? null);
@@ -393,7 +402,7 @@ export function FingerprintPlot({
             ))
           : null}
         {desktop && separate
-          ? pins.map((pin) => (
+          ? placedPins.map((pin) => (
               <PinnedTooltip
                 key={targetKey(pin.target)}
                 point={pointFor(pin)}
@@ -409,7 +418,7 @@ export function FingerprintPlot({
             ))
           : null}
         {desktop && separate
-          ? pins.map((pin) => (
+          ? placedPins.map((pin) => (
               <span
                 key={targetKey(pin.target)}
                 aria-hidden="true"

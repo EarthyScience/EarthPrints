@@ -44,6 +44,10 @@ export function anchorBesidePanel(
 
 export type PinPosition = { x: number; y: number; flip: boolean };
 
+export function pinFlips(x: number, plotWidth: number): boolean {
+  return x + TOOLTIP_GAP + TOOLTIP_ROOM > plotWidth;
+}
+
 export function pinPosition(
   plot: Element,
   clientX: number,
@@ -54,7 +58,7 @@ export function pinPosition(
   return {
     x,
     y: clientY - rect.top,
-    flip: x + TOOLTIP_GAP + TOOLTIP_ROOM > rect.width,
+    flip: pinFlips(x, rect.width),
   };
 }
 
