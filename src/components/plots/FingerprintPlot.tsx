@@ -120,9 +120,11 @@ function StripDivider({
       aria-valuemax={max}
       aria-valuenow={size}
       title={size > 0 ? "Drag to resize, tap to hide" : "Drag or tap to show"}
-      className={`group absolute flex touch-none items-center justify-center outline-none ${vertical ? "cursor-col-resize" : "cursor-row-resize"}`}
+      className={`group absolute flex touch-none items-center justify-center outline-none select-none ${vertical ? "cursor-col-resize" : "cursor-row-resize"}`}
       style={{ left: box.x, top: box.y, width: box.w, height: box.h }}
       onPointerDown={(event) => {
+        event.preventDefault();
+        event.currentTarget.focus();
         drag.current = { from: coord(event), size, moved: false };
         event.currentTarget.setPointerCapture(event.pointerId);
       }}
@@ -369,7 +371,7 @@ export function FingerprintPlot({
       <div ref={wrapperRef} className="relative w-full" style={{ height }}>
         <canvas
           ref={canvasRef}
-          className="block size-full"
+          className="block size-full select-none"
           role="img"
           aria-label="Diurnal fingerprint heatmap"
           onMouseMove={handleMove}
