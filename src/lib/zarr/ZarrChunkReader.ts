@@ -94,6 +94,13 @@ export type ZarrChunkReaderOptions = {
  */
 export const MAX_CHUNKS_PER_SERIES = 400;
 
+/**
+ * Most data, decoded, one series may download. Counting requests alone let a
+ * store with whole-globe chunks offer tens of gigabytes within 400 downloads;
+ * all 21 FLUXCOM-X years stay well under this.
+ */
+export const MAX_SERIES_BYTES = 2 * 1024 ** 3;
+
 /** Largest stored chunk, decoded, that one download may unpack. */
 export const MAX_CHUNK_BYTES = 1.5 * 1024 ** 3;
 
@@ -116,6 +123,8 @@ export class SeriesBudgetError extends DatasetError {
   constructor(
     message: string,
     readonly partialDays: number,
+    /** Upper bound, decoded, of what loading those days downloads. */
+    readonly partialBytes: number,
   ) {
     super(message);
     this.name = "SeriesBudgetError";
@@ -126,8 +135,15 @@ export type SeriesOptions = {
   /** Over budget, load what the budget covers from the start instead of failing. */
   partial?: boolean;
   /** Downloads left for this load, shared across the blocks of a year selection. */
-  budget?: { remaining: number };
+  budget?: SeriesBudget;
 };
+
+/** Downloads and decoded bytes left for one load. */
+type SeriesBudget = { remaining: number; bytes: number };
+
+function freshBudget(): SeriesBudget {
+  return { remaining: MAX_CHUNKS_PER_SERIES, bytes: MAX_SERIES_BYTES };
+}
 
 export type SeriesResult = {
   values: Float32Array;
@@ -641,15 +657,20 @@ export class ZarrChunkReader {
     );
     this.checkChunkSize(array);
 
-    const budget = options.budget ?? { remaining: MAX_CHUNKS_PER_SERIES };
+    const budget = options.budget ?? freshBudget();
+    const chunkBytes = this.rawChunkBytes(array);
+    const allowance = Math.min(
+      budget.remaining,
+      Math.floor(budget.bytes / chunkBytes),
+    );
     let coveredDays: number | undefined;
-    if (missing.length > budget.remaining) {
+    if (missing.length > allowance) {
       // The chunks the budget reaches, in time order, cached ones for free.
       const kept: number[] = [];
       let paid = 0;
       for (const index of context.timeChunkIndices) {
         const free = this.cache.has(keyFor(index));
-        if (!free && paid === budget.remaining) break;
+        if (!free && paid === allowance) break;
         if (!free) paid += 1;
         kept.push(index);
       }
@@ -664,13 +685,18 @@ export class ZarrChunkReader {
           dayRange[0],
       );
       if (!options.partial) {
-        throw new SeriesBudgetError(budgetMessage(missing.length, dayRange), coveredDays);
+        throw new SeriesBudgetError(
+          budgetMessage(missing.length, missing.length * chunkBytes),
+          coveredDays,
+          paid * chunkBytes,
+        );
       }
       context.timeChunkIndices = kept;
       missing = kept.filter((index) => !this.cache.has(keyFor(index)));
       sampleRange = [sampleRange[0], Math.max(sampleRange[0], stopSample)];
     }
     budget.remaining -= missing.length;
+    budget.bytes -= missing.length * chunkBytes;
 
     if (onProgress && missing.length === 0) onProgress(1, 1);
     // Large chunks go one at a time, so only one decoded chunk is resident:
@@ -773,7 +799,7 @@ export class ZarrChunkReader {
     }
     const shared: SeriesOptions = {
       ...options,
-      budget: options.budget ?? { remaining: MAX_CHUNKS_PER_SERIES },
+      budget: options.budget ?? freshBudget(),
     };
     const blocks = yearsToContiguousBlocks(years);
     if (blocks.length === 1) {
@@ -884,10 +910,13 @@ export class ZarrChunkReader {
   }
 }
 
-function budgetMessage(chunkCount: number, dayRange: AxisSlice): string {
-  const days = dayRange[1] - dayRange[0];
-  const perYear = Math.round((chunkCount / Math.max(1, days)) * 365);
-  return `This store is chunked by map, not by time, so one point's series needs ${chunkCount.toLocaleString("en-US")} downloads for the selected years (about ${perYear.toLocaleString("en-US")} a year). EarthPrints makes at most ${MAX_CHUNKS_PER_SERIES} per load.`;
+function budgetMessage(chunkCount: number, bytes: number): string {
+  return `This store keeps few time steps in each chunk, so one point's series for the selected years needs ${chunkCount.toLocaleString("en-US")} downloads, up to ${formatBytes(bytes)} of data. EarthPrints loads at most ${MAX_CHUNKS_PER_SERIES} downloads or ${formatBytes(MAX_SERIES_BYTES)} at a time.`;
+}
+
+function formatBytes(bytes: number): string {
+  if (bytes >= 1024 ** 3) return `${(bytes / 1024 ** 3).toFixed(1)} GB`;
+  return `${Math.max(1, Math.round(bytes / 1024 ** 2)).toLocaleString("en-US")} MB`;
 }
 
 const ALL_FLUXCOM_YEARS = Array.from({ length: 2021 - 2001 + 1 }, (_, i) => 2001 + i);

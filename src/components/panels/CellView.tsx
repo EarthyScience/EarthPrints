@@ -226,7 +226,8 @@ export function PlotArea({
               className="justify-self-start"
               onClick={series.loadPartial}
             >
-              Load the first {formatDays(series.partialOffer)}
+              Load the first {formatDays(series.partialOffer.days)} (up to{" "}
+              {formatBytes(series.partialOffer.bytes)})
             </Button>
           ) : null}
         </AlertDescription>
@@ -290,6 +291,7 @@ function formatDays(days: number): string {
 }
 
 function formatBytes(bytes: number): string {
+  if (bytes >= 1024 ** 3) return `${(bytes / 1024 ** 3).toFixed(1)} GB`;
   if (bytes >= 1_048_576) return `${(bytes / 1_048_576).toFixed(1)} MB`;
   if (bytes >= 1024) return `${Math.round(bytes / 1024)} KB`;
   return `${bytes} B`;

@@ -87,7 +87,7 @@ export function useCellSeries() {
   const [error, setError] = useState<string | null>(null);
   const [values, setValues] = useState<Float32Array | null>(null);
   /** Days a partial load could cover, offered when the full one is refused. */
-  const [partialOffer, setPartialOffer] = useState<number | null>(null);
+  const [partialOffer, setPartialOffer] = useState<{ days: number; bytes: number } | null>(null);
   /** Days a partial load did cover, from the start of the selection. */
   const [coveredDays, setCoveredDays] = useState<number | null>(null);
   const [units, setUnits] = useState<string | null>(null);
@@ -141,7 +141,7 @@ export function useCellSeries() {
         if (requestId !== requestIdRef.current) return;
         if (cause instanceof Error && cause.name === "AbortError") return;
         if (cause instanceof SeriesBudgetError && cause.partialDays > 0) {
-          setPartialOffer(cause.partialDays);
+          setPartialOffer({ days: cause.partialDays, bytes: cause.partialBytes });
         }
         setError(
           cause instanceof Error
