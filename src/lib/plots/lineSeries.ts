@@ -7,6 +7,7 @@ import {
   formatBinLabel,
   formatBinShortLabel,
   monthStartTicks,
+  roundYearStep,
   timeBins,
 } from "@/lib/plots/timeBins";
 import { getSelectedYearsDayMapping } from "@/lib/zarr/timeRange";
@@ -81,12 +82,15 @@ export function lineSeries(
   ).absoluteDays.slice(0, nDays);
   const years = timeBins(absoluteDays, "year");
   const yearBreaks = years.slice(1).map((year) => year.startLocal);
+  const yearStep = roundYearStep(years.length);
   const ticks: LineTick[] =
     years.length > 1
-      ? years.map((year) => ({
-          x: (year.startLocal + year.endLocal + 1) / 2,
-          label: String(year.year),
-        }))
+      ? years
+          .filter((year) => yearStep === 1 || year.year % yearStep === 0)
+          .map((year) => ({
+            x: (year.startLocal + year.endLocal + 1) / 2,
+            label: String(year.year),
+          }))
       : monthStartTicks(absoluteDays).map((day) => ({
           x: day,
           label: formatDayTick(absoluteDays[day] ?? 0),

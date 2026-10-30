@@ -538,11 +538,12 @@ export async function openDataset(
 }
 
 /**
- * The store's own title, else the CMIP facets ("CESM2 · piControl ·
+ * The store's own title or name, else the CMIP facets ("CESM2 · piControl ·
  * r1i1p1f1"), else the last part of the address that is not a version tag.
  */
 function storeTitle(attrs: Record<string, unknown>, url: string): string {
-  const title = stringAttr(attrs, "title");
+  const title =
+    stringAttr(attrs, "title") ?? stringAttr(attrs, "name") ?? stringAttr(attrs, "dataset_id");
   if (title) return title;
   const facets = ["source_id", "experiment_id", "variant_label"]
     .map((key) => stringAttr(attrs, key))

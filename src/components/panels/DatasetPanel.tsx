@@ -63,7 +63,9 @@ export function DatasetPanel({ series, onClose }: DatasetPanelProps) {
   // still opening shows its address rather than an empty field.
   const shownSource = requestedSource ?? dataset;
   const [url, setUrl] = useState(shownSource?.url ?? "");
-  const [variable, setVariable] = useState(requestedSource?.variable ?? "");
+  const [variable, setVariable] = useState(
+    requestedSource?.variable ?? dataset?.variable ?? "",
+  );
   const [prevSource, setPrevSource] = useState(shownSource);
   if (shownSource !== prevSource) {
     setPrevSource(shownSource);
@@ -75,7 +77,10 @@ export function DatasetPanel({ series, onClose }: DatasetPanelProps) {
   );
   if (promptsForVariable && !askedForVariable) setAskedForVariable(true);
   if (dataset && !datasetError && askedForVariable) setAskedForVariable(false);
-  const needsVariable = promptsForVariable || askedForVariable;
+  // A store that cannot list its arrays has no picker, so its variable stays
+  // a text field to switch or correct.
+  const unlisted = Boolean(dataset && dataset.variables.length === 0);
+  const needsVariable = promptsForVariable || askedForVariable || unlisted;
 
   const submit = (event: React.FormEvent) => {
     event.preventDefault();

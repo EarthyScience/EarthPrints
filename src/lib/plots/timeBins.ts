@@ -214,3 +214,14 @@ export function binCountLabel(count: number, unit: BinUnit): string {
   if (unit === "week") return plural(count, "week");
   return plural(count, "day");
 }
+
+/**
+ * Years worth a tick on a long axis: every year for a few, otherwise only
+ * round ones (every 2, 5, 10, 25, 50, ... years) so labels stay evenly spaced.
+ */
+export function roundYearStep(yearCount: number, maxTicks = 8): number {
+  for (const step of [1, 2, 5, 10, 20, 25, 50, 100, 200, 250, 500, 1000]) {
+    if (yearCount / step <= maxTicks) return step;
+  }
+  return Math.ceil(yearCount / maxTicks);
+}

@@ -18,6 +18,7 @@ import {
   emptyStats,
   formatBinLabel,
   monthStartTicks,
+  roundYearStep,
   type BinUnit,
   type TimeBin,
   timeBins,
@@ -245,10 +246,12 @@ function columnAxisTicks({ grid }: FingerprintLayout) {
   const breaks = yearBreaks(bins);
   if (breaks.length > 0 || grid.unit === "year") {
     const starts = [0, ...breaks];
-    return starts.map((start, i) => ({
-      at: (start + (starts[i + 1] ?? bins.length)) / 2,
-      label: `${bins[start]!.year}`,
-    }));
+    const step = roundYearStep(starts.length);
+    return starts.flatMap((start, i) => {
+      const year = bins[start]!.year;
+      if (step > 1 && year % step !== 0) return [];
+      return [{ at: (start + (starts[i + 1] ?? bins.length)) / 2, label: `${year}` }];
+    });
   }
   const days = bins.flatMap((bin) =>
     Array.from(
@@ -593,24 +596,29 @@ export function drawFingerprint(
     }
     ctx.textAlign = "center";
     ctx.textBaseline = "top";
+    // A narrow panel or a long record has more ticks than room; skip any
+    // label that would run into the one before it.
+    let lastRight = -Infinity;
     for (const { at, label } of ticks) {
       const x = clampLabelX(
         axisLeft + colFrac(at) * plotW,
         plotW,
         axisLeft,
       );
+      const half = ctx.measureText(label).width / 2;
+      if (x - half < lastRight + 6) continue;
       ctx.fillText(label, x, top + plotH + 4);
+      lastRight = x + half;
     }
   } else {
     ctx.textAlign = "right";
     ctx.textBaseline = "middle";
+    let lastBottom = -Infinity;
     for (const { at, label } of ticks) {
-      const y = top + colFrac(at) * plotH;
-      ctx.fillText(
-        label,
-        axisLeft - 6,
-        Math.max(top + 6, Math.min(top + plotH - 6, y)),
-      );
+      const y = Math.max(top + 6, Math.min(top + plotH - 6, top + colFrac(at) * plotH));
+      if (y - 6 < lastBottom + 2) continue;
+      ctx.fillText(label, axisLeft - 6, y);
+      lastBottom = y + 6;
     }
     ctx.textAlign = "center";
     ctx.textBaseline = "top";
