@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { buildTimeAxis, resampleToDays, sampleRangeForDays } from "@/lib/zarr/timeAxis";
+import {
+  buildTimeAxis,
+  resampleToDays,
+  sampleRangeForDays,
+  samplesInDays,
+} from "@/lib/zarr/timeAxis";
 
 const H = 3_600_000;
 const D = 24 * H;
@@ -51,5 +56,33 @@ describe("resampleToDays", () => {
     const out = resampleToDays(axis, Float32Array.from([1, 2]), range[0], [30, 33]);
     expect(range[0]).toBe(0);
     expect(Array.from(out)).toEqual([1, 2, 2]);
+  });
+
+  it("keeps an 8-daily window inside its year and the record", () => {
+    // ESDC stamps each 8-day window at its centre and restarts in January.
+    const times = Float64Array.from([
+      Date.UTC(2014, 11, 28),
+      Date.UTC(2015, 0, 5),
+      Date.UTC(2015, 0, 13),
+    ]);
+    const axis = buildTimeAxis(times);
+    expect(axis.span).toBe("days");
+    expect(axis.years).toEqual([2014, 2015]);
+    const out = resampleToDays(axis, Float32Array.from([1, 2, 3]), 0, [0, axis.totalDays]);
+    const day = (y: number, m: number, d: number) =>
+      Math.round((Date.UTC(y, m, d) - axis.originMs) / D);
+    expect(out[day(2014, 11, 31)]).toBe(1);
+    expect(out[day(2015, 0, 1)]).toBe(2);
+    expect(out[day(2015, 0, 13)]).toBe(3);
+    expect(axis.totalDays).toBe(day(2015, 0, 17));
+  });
+});
+
+describe("samplesInDays", () => {
+  it("counts store samples, not filled days", () => {
+    const times = Float64Array.from({ length: 12 }, (_, m) => Date.UTC(2001, m, 15));
+    const axis = buildTimeAxis(times);
+    expect(samplesInDays(axis, [0, axis.totalDays])).toBe(12);
+    expect(axis.years).toEqual([2001]);
   });
 });

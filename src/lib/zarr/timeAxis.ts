@@ -69,8 +69,18 @@ function spanFor(stepDays: number): TimeAxis["span"] {
 }
 
 /** Day 0 sits on the first sample's day, month or year, so bins line up. */
-function originFor(firstMs: number, span: TimeAxis["span"]): number {
+function originFor(
+  firstMs: number,
+  span: TimeAxis["span"],
+  stepDays: number,
+): number {
   const date = new Date(firstMs);
+  if (span === "days") {
+    const yearStart = Date.UTC(date.getUTCFullYear(), 0, 1);
+    return startOfUtcDay(
+      Math.max(yearStart, firstMs - (stepDays / 2) * MS_PER_DAY),
+    );
+  }
   if (span === "month") {
     return Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), 1);
   }
@@ -104,7 +114,7 @@ export function buildTimeAxis(
   }
   const stepDays = hourCount !== null ? 1 : steps.length > 0 ? median(steps) : 1;
   const span = hourCount !== null ? "slot" : spanFor(stepDays);
-  const originMs = originFor(firstMs, span);
+  const originMs = originFor(firstMs, span, stepDays);
   const samplePos = Float64Array.from(times, (t) => (t - originMs) / MS_PER_DAY);
   const lastPos = (lastMs - originMs) / MS_PER_DAY;
 
@@ -121,8 +131,11 @@ export function buildTimeAxis(
         ? Date.UTC(last.getUTCFullYear(), last.getUTCMonth() + 1, 1)
         : span === "year"
           ? Date.UTC(last.getUTCFullYear() + 1, 0, 1)
-          : lastMs + stepDays * MS_PER_DAY;
-    totalDays = Math.max(1, Math.round((coveredUntil - originMs) / MS_PER_DAY));
+          : Math.min(
+              lastMs + (stepDays / 2) * MS_PER_DAY,
+              Date.UTC(last.getUTCFullYear() + 1, 0, 1),
+            );
+    totalDays = Math.max(1, Math.ceil((coveredUntil - originMs) / MS_PER_DAY - EPSILON));
   }
 
   return {
@@ -162,31 +175,47 @@ export function sampleRangeForDays(axis: TimeAxis, [d0, d1]: AxisSlice): AxisSli
   return [start, Math.max(start, lowerBound(axis.samplePos, d1))];
 }
 
-function coverEnd(axis: TimeAxis, index: number): number {
-  const pos = axis.samplePos[index]!;
-  const next = axis.samplePos[index + 1];
-  if (axis.span === "month" || axis.span === "year") {
-    const date = new Date(axis.originMs + pos * MS_PER_DAY);
-    const end =
-      axis.span === "month"
-        ? Date.UTC(date.getUTCFullYear(), date.getUTCMonth() + 1, 1)
-        : Date.UTC(date.getUTCFullYear() + 1, 0, 1);
-    return (end - axis.originMs) / MS_PER_DAY;
-  }
-  return next !== undefined && Number.isFinite(next) ? next : pos + axis.stepDays;
+function yearBounds(axis: TimeAxis, pos: number): [number, number] {
+  const year = new Date(axis.originMs + pos * MS_PER_DAY).getUTCFullYear();
+  return [
+    (Date.UTC(year, 0, 1) - axis.originMs) / MS_PER_DAY,
+    (Date.UTC(year + 1, 0, 1) - axis.originMs) / MS_PER_DAY,
+  ];
 }
 
-function coverStart(axis: TimeAxis, index: number): number {
+/**
+ * The days `[start, end)` one coarse sample stands for. A month or year
+ * fills its calendar period. Other steps (8-daily, weekly) are taken as
+ * centred on their timestamp, as aggregated products usually stamp them, and
+ * stop halfway to their neighbours and at the end of their year, since such
+ * products restart their windows every January.
+ */
+function coverRange(axis: TimeAxis, index: number): [number, number] {
   const pos = axis.samplePos[index]!;
   if (axis.span === "month" || axis.span === "year") {
     const date = new Date(axis.originMs + pos * MS_PER_DAY);
-    const start =
+    const y = date.getUTCFullYear();
+    const m = date.getUTCMonth();
+    const [from, to] =
       axis.span === "month"
-        ? Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), 1)
-        : Date.UTC(date.getUTCFullYear(), 0, 1);
-    return (start - axis.originMs) / MS_PER_DAY;
+        ? [Date.UTC(y, m, 1), Date.UTC(y, m + 1, 1)]
+        : [Date.UTC(y, 0, 1), Date.UTC(y + 1, 0, 1)];
+    return [(from - axis.originMs) / MS_PER_DAY, (to - axis.originMs) / MS_PER_DAY];
   }
-  return pos;
+  const half = axis.stepDays / 2;
+  const prev = axis.samplePos[index - 1];
+  const next = axis.samplePos[index + 1];
+  const [yearStart, yearEnd] = yearBounds(axis, pos);
+  let start = Math.max(pos - half, yearStart);
+  let end = Math.min(pos + half, yearEnd);
+  if (prev !== undefined && Number.isFinite(prev)) start = Math.max(start, (prev + pos) / 2);
+  if (next !== undefined && Number.isFinite(next)) end = Math.min(end, (pos + next) / 2);
+  return [start, end];
+}
+
+/** Store samples whose timestamp falls on the days `[d0, d1)`. */
+export function samplesInDays(axis: TimeAxis, [d0, d1]: AxisSlice): number {
+  return lowerBound(axis.samplePos, d1) - lowerBound(axis.samplePos, d0);
 }
 
 /**
@@ -225,8 +254,9 @@ export function resampleToDays(
       continue;
     }
 
-    const from = Math.max(d0, Math.round(coverStart(axis, index)));
-    const to = Math.min(d1, Math.round(coverEnd(axis, index)));
+    const [start, end] = coverRange(axis, index);
+    const from = Math.max(d0, Math.round(start));
+    const to = Math.min(d1, Math.round(end));
     for (let day = from; day < to; day++) out[day - d0] = value;
   }
 

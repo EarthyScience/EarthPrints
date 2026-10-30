@@ -501,7 +501,11 @@ export function FingerprintPlot({
       </div>
       <p className="text-muted-foreground">
         {binCountLabel(nCols, scale)} × {hoursPerDay}{" "}
-        {hoursPerDay === 24 ? "hours" : "steps a day"}
+        {hoursPerDay === 24
+          ? "hours"
+          : hoursPerDay === 1
+            ? "step a day"
+            : "steps a day"}
         {timeBasisLabel ? ` · ${timeBasisLabel}` : ""}
         {units ? ` · ${units}` : ""}
         {margins ? " · strips show the mean ±1 std of each row and column" : ""}

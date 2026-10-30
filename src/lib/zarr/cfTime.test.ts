@@ -32,10 +32,16 @@ describe("decodeCfTimes", () => {
     expect(iso(out[1]!)).toBe("2000-03-01T00:00:00.000Z");
   });
 
-  it("gives every 360_day month 30 days", () => {
-    const out = decodeCfTimes([30, 359, 360], "days since 2000-01-01", "360_day")!;
-    expect(iso(out[0]!).slice(0, 10)).toBe("2000-02-01");
-    expect(iso(out[2]!).slice(0, 10)).toBe("2001-01-01");
+  it("stretches a 360_day year over the real one without collisions", () => {
+    const raw = Array.from({ length: 361 }, (_, i) => i);
+    const out = decodeCfTimes(raw, "days since 2000-01-01", "360_day")!;
+    const days = Array.from(out.subarray(0, 360), (ms) => iso(ms).slice(0, 10));
+    expect(new Set(days).size).toBe(360);
+    expect(days[0]).toBe("2000-01-01");
+    // Model February 30th (day 59) stays in February.
+    expect(days[59]!.slice(0, 7)).toBe("2000-02");
+    expect(days[359]).toBe("2000-12-30");
+    expect(iso(out[360]!).slice(0, 10)).toBe("2001-01-01");
   });
 
   it("labels julian dates in the julian calendar", () => {

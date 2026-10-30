@@ -52,6 +52,10 @@ const MEANS_LABEL: Record<Exclude<LineResolution, "hour">, string> = {
   month: "monthly",
 };
 
+function plural(count: number, noun: string): string {
+  return `${count.toLocaleString()} ${noun}${count === 1 ? "" : "s"}`;
+}
+
 type Readout = TooltipAnchor & PinPosition & { index: number };
 
 const sameDay = (a: Readout, b: Readout) => a.index === b.index;
@@ -69,6 +73,8 @@ type TimeSeriesPlotProps = {
   selectedYears: number[];
   resolution?: LineResolution;
   timeBasisSuffix?: string;
+  /** Values the store holds for the selection; defaults to the grid's length. */
+  stepCount?: number | null;
   height?: number;
   width?: number;
   pinLimit?: number;
@@ -82,6 +88,7 @@ export function TimeSeriesPlot({
   selectedYears,
   resolution = "day",
   timeBasisSuffix,
+  stepCount,
   height = TIME_SERIES_PLOT_HEIGHT,
   width,
   pinLimit = 1,
@@ -300,10 +307,10 @@ export function TimeSeriesPlot({
         />
       ) : null}
       <p className="text-muted-foreground">
-        {values.length.toLocaleString()} {activeSource().stepLabel} steps
+        {plural(stepCount ?? values.length, `${activeSource().stepLabel} step`)}
         {resolution === "hour"
           ? ""
-          : ` · ${series.binCount.toLocaleString()} ${MEANS_LABEL[resolution]} means, band ±1 std`}
+          : ` · ${plural(series.binCount, `${MEANS_LABEL[resolution]} mean`)}, band ±1 std`}
         {units ? ` · ${units}` : ""}
       </p>
     </div>

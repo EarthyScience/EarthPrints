@@ -5,8 +5,11 @@
  * Model calendars have no real-world instants: a `noleap` or `360_day` date is
  * only a label. Each value is therefore read in its own calendar as a
  * year-month-day plus a time of day, and that label is placed on the
- * proleptic Gregorian axis the plots use. A `360_day` February 30th rolls over
- * into March, and a `noleap` year simply has no February 29th.
+ * proleptic Gregorian axis the plots use. A `noleap` year simply has no
+ * February 29th. A `360_day` year is stretched over the real one by day of
+ * year, as cftime's `convert_calendar(align_on="year")` does: its 360 days
+ * keep their order, none collide, and the five or six spare real days are
+ * spread through the year instead of piling up on the 31sts.
  */
 
 const MS_PER_DAY = 86_400_000;
@@ -43,6 +46,10 @@ function utcMidnight(year: number, month: number, day: number): number {
   const date = new Date(0);
   date.setUTCFullYear(year, month - 1, day);
   return date.getTime();
+}
+
+function isGregorianLeap(year: number): boolean {
+  return (year % 4 === 0 && year % 100 !== 0) || year % 400 === 0;
 }
 
 const NOLEAP_MONTHS = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
@@ -233,7 +240,15 @@ export function decodeCfTimes(
     const elapsedMs = parsed.reference.msOfDay + value * parsed.unit.ms;
     const dayShift = Math.floor(elapsedMs / MS_PER_DAY);
     const msOfDay = elapsedMs - dayShift * MS_PER_DAY;
-    const civil = fromDayCount(cal, refDays + dayShift);
+    const count = refDays + dayShift;
+    if (cal === "360_day") {
+      const year = Math.floor(count / 360);
+      const realDays = isGregorianLeap(year) ? 366 : 365;
+      const dayOfYear = Math.floor(((count - year * 360) * realDays) / 360);
+      out[i] = utcMidnight(year, 1, 1 + dayOfYear) + msOfDay;
+      continue;
+    }
+    const civil = fromDayCount(cal, count);
     out[i] = utcMidnight(civil.year, civil.month, civil.day) + msOfDay;
   }
 

@@ -1,11 +1,12 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { geoPointToZarrGrid, isPointInGrid } from "@/lib/map/geogrid";
 import { SeriesBudgetError, ZarrChunkReader } from "@/lib/zarr/ZarrChunkReader";
 import { openDataset, type Dataset } from "@/lib/zarr/dataset";
 import { setActiveSource } from "@/lib/zarr/activeSource";
-import { setActiveTime } from "@/lib/zarr/timeRange";
+import { setActiveTime, yearToDateRange } from "@/lib/zarr/timeRange";
+import { samplesInDays } from "@/lib/zarr/timeAxis";
 import {
   defaultYears,
   readSourceFromUrl,
@@ -290,6 +291,21 @@ export function useCellSeries() {
     [load, selectedYears, selection],
   );
 
+  // Coarse stores fill several days per sample, so the filled grid's length
+  // says nothing about how many values the store holds for these years.
+  const stepCount = useMemo(() => {
+    if (!dataset) return null;
+    return selectedYears.reduce(
+      (sum, year) =>
+        sum +
+        samplesInDays(
+          dataset.time,
+          yearToDateRange(year, dataset.time.totalDays),
+        ),
+      0,
+    );
+  }, [dataset, selectedYears]);
+
   return {
     dataset,
     datasetLoading,
@@ -298,6 +314,7 @@ export function useCellSeries() {
     extraIndices,
     setExtraIndex,
     slotsPerDay: dataset?.time.slotsPerDay ?? 24,
+    stepCount,
     gridSpec,
     selection,
     select,
