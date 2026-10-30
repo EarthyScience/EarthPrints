@@ -20,6 +20,8 @@ export type ExportProvenance = {
   variable: string;
   units: string | null;
   resolutionDeg: number;
+  /** The store's time step: "hourly", "6-hourly", "monthly". */
+  stepLabel: string;
   click: GeoPoint;
   cell: GridCell;
   historyYears: number;
@@ -98,6 +100,7 @@ export function buildProvenance({
     variable,
     units,
     resolutionDeg: activeSource().resolutionDeg,
+    stepLabel: activeSource().stepLabel,
     click: selection.click,
     cell: selection.grid,
     historyYears: resolvedHistoryYears,

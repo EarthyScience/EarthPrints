@@ -19,8 +19,51 @@ import { useTheme } from "@/providers/ThemeProvider";
 import type { BinUnit } from "@/lib/plots/timeBins";
 import type { LineResolution } from "@/lib/plots/lineSeries";
 import type { CellSeries } from "@/hooks/useCellSeries";
+import type { TimeAxis } from "@/lib/zarr/timeAxis";
+
+type TimeSpan = TimeAxis["span"];
 
 export type PlotView = "line" | "fingerprint";
+
+const RANK: Record<LineResolution | BinUnit, number> = {
+  hour: 0,
+  day: 1,
+  week: 2,
+  month: 3,
+  year: 4,
+};
+
+const LINE_RESOLUTIONS: { value: LineResolution; label: string }[] = [
+  { value: "hour", label: "Hourly" },
+  { value: "day", label: "Daily" },
+  { value: "week", label: "Weekly" },
+  { value: "month", label: "Monthly" },
+];
+
+const FINGERPRINT_SCALES: {
+  value: BinUnit;
+  label: string;
+  disabled?: boolean;
+  title?: string;
+}[] = [
+  { value: "day", label: "Daily" },
+  { value: "week", label: "Weekly" },
+  { value: "month", label: "Monthly" },
+  { value: "year", label: "Yearly" },
+];
+
+function finestResolution(
+  slotsPerDay: number,
+  span: TimeSpan,
+): LineResolution {
+  if (span === "month" || span === "year") return "month";
+  if (span === "days") return "day";
+  return slotsPerDay > 1 ? "hour" : "day";
+}
+
+function capitalize(text: string): string {
+  return text.charAt(0).toUpperCase() + text.slice(1);
+}
 
 export function useSeriesDisplay(
   {
@@ -29,20 +72,55 @@ export function useSeriesDisplay(
     values,
     loading,
     slotsPerDay,
+    timeSpan,
+    stepLabel,
   }: Pick<
     CellSeries,
-    "selection" | "selectedYears" | "values" | "loading" | "slotsPerDay"
+    | "selection"
+    | "selectedYears"
+    | "values"
+    | "loading"
+    | "slotsPerDay"
+    | "timeSpan"
+    | "stepLabel"
   >,
-  timeBasis: TimeBasis,
+  requestedTimeBasis: TimeBasis,
 ) {
   const { isLight } = useTheme();
   const [plotView, setPlotView] = useState<PlotView>("line");
   const [transposed, setTransposed] = useState(false);
-  const [lineResolution, setLineResolution] = useState<LineResolution>("day");
+  const [lineChoice, setLineResolution] = useState<LineResolution>("day");
   const [scaleChoice, setFingerprintScale] = useState<BinUnit>("day");
   const canShowYearly = selectedYears.length > 1;
+
+  // Nothing finer than the store's own step is offered, and the finest
+  // option carries the step's name ("6-hourly", "8-daily").
+  const finest = finestResolution(slotsPerDay, timeSpan);
+  const stepName = capitalize(stepLabel);
+  const lineResolutions = LINE_RESOLUTIONS.filter(
+    (option) => RANK[option.value] >= RANK[finest],
+  ).map((option) =>
+    option.value === finest ? { ...option, label: stepName } : option,
+  );
+  const lineResolution =
+    RANK[lineChoice] >= RANK[finest] ? lineChoice : finest;
+  const finestScale: BinUnit = finest === "hour" ? "day" : finest;
+  const fingerprintScales = FINGERPRINT_SCALES.filter(
+    (option) => RANK[option.value] >= RANK[finestScale],
+  ).map((option) =>
+    option.value === "year" && !canShowYearly
+      ? { ...option, disabled: true, title: "Pick two or more years" }
+      : option,
+  );
+  const allowedScale =
+    RANK[scaleChoice] >= RANK[finestScale] ? scaleChoice : finestScale;
   const fingerprintScale =
-    scaleChoice === "year" && !canShowYearly ? "day" : scaleChoice;
+    allowedScale === "year" && !canShowYearly ? finestScale : allowedScale;
+
+  // Shifting to local time moves whole slots, so it is only honest when a
+  // slot is an hour or less; a 6-hourly store would label Tokyo UTC+12.
+  const canUseLocalTime = slotsPerDay >= 24;
+  const timeBasis: TimeBasis = canUseLocalTime ? requestedTimeBasis : "utc";
   const [palette, setPaletteState] = useState<Palette>(
     () => loadPalette() ?? DEFAULT_PALETTE,
   );
@@ -86,9 +164,12 @@ export function useSeriesDisplay(
     setTransposed,
     lineResolution,
     setLineResolution,
+    lineResolutions,
     fingerprintScale,
     setFingerprintScale,
+    fingerprintScales,
     canShowYearly,
+    canUseLocalTime,
     timeBasis,
     utcOffsetHours,
     timeBasisLabel,

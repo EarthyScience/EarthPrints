@@ -120,10 +120,12 @@ export function DataView({
                         onSelectYears={series.selectYears}
                       />
                       <ScaleField display={display} />
-                      <TimeBasisField
-                        value={timeBasis}
-                        onChange={onTimeBasisChange}
-                      />
+                      {display.canUseLocalTime ? (
+                        <TimeBasisField
+                          value={timeBasis}
+                          onChange={onTimeBasisChange}
+                        />
+                      ) : null}
                     </div>
                   </Collapsible.Panel>
                 </Collapsible.Root>

@@ -16,7 +16,7 @@ function buildHeader(rowCount: number, prov: ExportProvenance): string[] {
     "EarthPrints export",
     `generated: ${prov.generatedAt.toISOString()}`,
     `dataset: ${prov.dataset}`,
-    `grid: ${prov.resolutionDeg} deg, hourly`,
+    `grid: ${prov.resolutionDeg} deg, ${prov.stepLabel}`,
     `source: ${prov.sourceUrl}`,
     `variable: ${prov.variable}`,
     `units: ${prov.units ?? "unspecified"}`,

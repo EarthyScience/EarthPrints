@@ -82,7 +82,9 @@ export function CellView({
           <div className="grid gap-4 pt-3">
             <CardDescription>
               {describeRecord(series)} The dashed box marks the{" "}
-              {patchWindow}×{patchWindow} cells around it kept in memory.
+              {Math.min(patchWindow, series.gridSpec.nativeChunks.lat)}×
+              {Math.min(patchWindow, series.gridSpec.nativeChunks.lon)} cells
+              around it kept in memory.
             </CardDescription>
             <YearPicker
               selectedYears={series.selectedYears}
@@ -90,7 +92,7 @@ export function CellView({
               loading={series.loading}
               onSelectYears={series.selectYears}
             />
-            {desktop ? null : (
+            {desktop || !display.canUseLocalTime ? null : (
               <TimeBasisField value={timeBasis} onChange={onTimeBasisChange} />
             )}
           </div>
@@ -114,11 +116,13 @@ export function describeRecord(series: CellSeries): string {
   const name = dataset ? (dataset.longName ?? dataset.variable) : "net ecosystem exchange";
   const step = dataset?.time.stepLabel ?? "hourly";
   const resolution = formatResolution(series.gridSpec.spatialResolutionDeg);
-  // Lowercase "Net ecosystem exchange", but leave "NEE" and "PRMSL" alone.
-  const lowered = /^[A-Z][a-z]/.test(name)
+  // Lowercase a sentence-case name ("Net ecosystem exchange"), but leave
+  // acronyms ("NEE") and title case ("Gross Primary Productivity") alone.
+  const lowered = /^[A-Z][a-z]*(?:[\s-][a-z0-9][^\s]*)*$/.test(name)
     ? `${name.charAt(0).toLowerCase()}${name.slice(1)}`
     : name;
-  const phrase = `${step} ${lowered}`;
+  const repeatsStep = lowered.toLowerCase().includes(step.toLowerCase());
+  const phrase = repeatsStep ? lowered : `${step} ${lowered}`;
   return `${phrase.charAt(0).toUpperCase()}${phrase.slice(1)} for this ${resolution} cell.`;
 }
 

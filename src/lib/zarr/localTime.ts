@@ -70,7 +70,7 @@ export function formatUtcOffset(offsetHours: number): string {
 /** Caption and tooltip wording for the basis in force. */
 export function formatTimeBasis(basis: TimeBasis, offsetHours: number): string {
   if (basis === "utc") return "UTC";
-  return `local solar time (${formatUtcOffset(offsetHours)})`;
+  return `local solar time (${offsetHours === 0 ? "UTC±0" : formatUtcOffset(offsetHours)})`;
 }
 
 /** The time basis as a short suffix for an hour readout: "local" or "UTC". */

@@ -314,6 +314,8 @@ export function useCellSeries() {
     extraIndices,
     setExtraIndex,
     slotsPerDay: dataset?.time.slotsPerDay ?? 24,
+    timeSpan: dataset?.time.span ?? "slot",
+    stepLabel: dataset?.time.stepLabel ?? "hourly",
     stepCount,
     gridSpec,
     selection,

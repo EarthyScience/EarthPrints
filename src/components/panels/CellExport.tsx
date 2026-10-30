@@ -43,7 +43,7 @@ const FORMATS: { value: ExportFormat; title: string; description: string }[] = [
   {
     value: "csv",
     title: "Series data (.csv)",
-    description: "The hourly values as stored",
+    description: "The {step} values as stored",
   },
   {
     value: "badge",
@@ -92,7 +92,9 @@ export function CellExport({ series, display }: CellExportProps) {
             <Field orientation="horizontal">
               <FieldContent>
                 <FieldTitle>{option.title}</FieldTitle>
-                <FieldDescription>{option.description}</FieldDescription>
+                <FieldDescription>
+                  {option.description.replace("{step}", series.stepLabel)}
+                </FieldDescription>
               </FieldContent>
               <RadioGroupItem
                 value={option.value}
