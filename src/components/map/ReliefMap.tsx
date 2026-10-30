@@ -133,7 +133,12 @@ export function ReliefMap() {
     (cell: GridCell) => {
       const map = mapRef.current;
       if (!map) return;
-      const target = viewStateFocusedOnCell(readViewState(map), cell, viewMode);
+      const target = viewStateFocusedOnCell(
+        readViewState(map),
+        cell,
+        viewMode,
+        series.gridSpec.spatialResolutionDeg,
+      );
       map.flyTo({
         center: [target.longitude, target.latitude],
         zoom: target.zoom,
@@ -142,7 +147,7 @@ export function ReliefMap() {
         duration: SELECTION_FOCUS_TRANSITION_MS,
       });
     },
-    [viewMode],
+    [viewMode, series.gridSpec.spatialResolutionDeg],
   );
 
   const pick = useCallback(

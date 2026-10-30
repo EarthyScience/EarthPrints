@@ -58,15 +58,30 @@ export const SELECTION_FOCUS_TRANSITION_MS = 1000;
 
 const selectionFocusInterpolator = new FlyToInterpolator();
 
-/** Center on a snapped cell and zoom in only if the view is still too wide. */
+/**
+ * The zoom at which a cell `cellDeg` wide spans about 120 px: 512 px tiles
+ * cover 360° at zoom 0, so the width doubles with each level.
+ */
+function zoomFittingCell(cellDeg: number): number {
+  return Math.log2((120 * 360) / (512 * cellDeg));
+}
+
+/**
+ * Center on a snapped cell and zoom in only if the view is still too wide.
+ * A coarse cell (a 2.8° model grid) would fill far more than the screen at
+ * the usual focus zoom, so it is framed at the zoom that fits it instead.
+ */
 export function viewStateFocusedOnCell(
   current: MapViewState,
   cell: GridCell,
   mode: MapViewMode = "2d",
+  cellDeg = 0,
 ): MapViewState {
   const focusZoom =
     mode === "sphere" ? SPHERE_SELECTION_FOCUS_ZOOM : SELECTION_FOCUS_ZOOM;
-  const nextZoom = Math.max(current.zoom, focusZoom);
+  const fitZoom = cellDeg > 0 ? zoomFittingCell(cellDeg) : Infinity;
+  const nextZoom =
+    fitZoom < focusZoom ? fitZoom : Math.max(current.zoom, focusZoom);
   const isChangingView =
     current.longitude !== cell.lon ||
     current.latitude !== cell.lat ||
