@@ -572,9 +572,13 @@ export function drawFingerprint(
     }
     ctx.textAlign = "center";
     ctx.textBaseline = "top";
+    let stripRight = -Infinity;
     for (const { label, at } of labelled(margins.left, leftTicks)) {
       const x = Math.max(leftBox.x + 10, Math.min(leftBox.x + leftBox.w - 10, at));
+      const half = ctx.measureText(label).width / 2;
+      if (x - half < stripRight + 4) continue;
       ctx.fillText(label, x, top + plotH + 4);
+      stripRight = x + half;
     }
   }
 

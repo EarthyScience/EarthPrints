@@ -81,7 +81,7 @@ export function buildSeriesRows(
       date: timestamp.toISOString().slice(0, 10),
       dayIndex,
       hour,
-      hourLocal: timestampLocal.getUTCHours(),
+      hourLocal: timestampLocal.getUTCHours() + timestampLocal.getUTCMinutes() / 60,
       dateLocal: timestampLocal.toISOString().slice(0, 10),
       value: Number.isFinite(raw) ? roundFloat32(raw) : null,
     };

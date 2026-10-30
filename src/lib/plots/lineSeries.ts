@@ -125,7 +125,7 @@ export function lineSeries(
   } else {
     const bins = timeBins(absoluteDays, resolution);
     const stats = binLineStats(values, hoursPerDay, bins, resolution);
-    binCount = bins.length;
+    binCount = stats.count.filter((count) => count > 0).length;
     let gapOpen = false;
     bins.forEach((bin, b) => {
       const count = stats.count[b] ?? 0;
