@@ -4,7 +4,7 @@ import { useState } from "react";
 import { LoaderCircle } from "lucide-react";
 import { DATASET_PRESETS } from "@/lib/constants/datasets";
 import { formatSelectedYearsLabel } from "@/lib/zarr/timeRange";
-import type { Dataset } from "@/lib/zarr/dataset";
+import type { Dataset, VariableInfo } from "@/lib/zarr/dataset";
 import type { CellSeries } from "@/hooks/useCellSeries";
 import { FloatingPanel } from "@/components/panels/FloatingPanel";
 import { formatResolution } from "@/components/panels/CellView";
@@ -23,6 +23,14 @@ import {
   FieldSeparator,
 } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
+import {
+  Combobox,
+  ComboboxContent,
+  ComboboxEmpty,
+  ComboboxInput,
+  ComboboxItem,
+  ComboboxList,
+} from "@/components/ui/combobox";
 import {
   Select,
   SelectContent,
@@ -193,29 +201,12 @@ export function DatasetPanel({ series, onClose }: DatasetPanelProps) {
             </div>
 
             {dataset.variables.length > 1 ? (
-              <Field>
-                <FieldLabel>Variable</FieldLabel>
-                <Select
-                  value={dataset.variable}
-                  disabled={datasetLoading}
-                  onValueChange={(next) =>
-                    openSource({ url: dataset.url, variable: String(next) })
-                  }
-                >
-                  <SelectTrigger aria-label="Variable" className="w-full">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {dataset.variables.map((option) => (
-                      <SelectItem key={option.path} value={option.path}>
-                        {option.longName
-                          ? `${option.path} · ${option.longName}`
-                          : option.path}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </Field>
+              <VariablePicker
+                variables={dataset.variables}
+                value={dataset.variable}
+                disabled={datasetLoading}
+                onChange={(next) => openSource({ url: dataset.url, variable: next })}
+              />
             ) : null}
 
             {dataset.layout.extras
@@ -275,5 +266,89 @@ export function DatasetPanel({ series, onClose }: DatasetPanelProps) {
         </Field>
       </FieldGroup>
     </FloatingPanel>
+  );
+}
+
+/** "atmosphere/tas" as its leaf and the groups it sits in. */
+function splitPath(path: string): { leaf: string; groups: string } {
+  const at = path.lastIndexOf("/");
+  return at < 0
+    ? { leaf: path, groups: "" }
+    : { leaf: path.slice(at + 1), groups: path.slice(0, at) };
+}
+
+/**
+ * Some stores hold hundreds of arrays (ERA5 has 273), so the variable is
+ * picked by typing part of its name, long name or group path.
+ */
+function VariablePicker({
+  variables,
+  value,
+  disabled,
+  onChange,
+}: {
+  variables: VariableInfo[];
+  value: string;
+  disabled: boolean;
+  onChange: (path: string) => void;
+}) {
+  const selected = variables.find((option) => option.path === value) ?? null;
+  return (
+    <Field>
+      <FieldLabel htmlFor="dataset-variable-picker">Variable</FieldLabel>
+      <Combobox<VariableInfo>
+        items={variables}
+        value={selected}
+        onValueChange={(next) => {
+          if (next && next.path !== value) onChange(next.path);
+        }}
+        itemToStringLabel={(option) => option.path}
+        isItemEqualToValue={(a, b) => a.path === b.path}
+        filter={(option, query) => {
+          const needle = query.trim().toLowerCase();
+          return (
+            !needle ||
+            option.path.toLowerCase().includes(needle) ||
+            (option.longName?.toLowerCase().includes(needle) ?? false)
+          );
+        }}
+        disabled={disabled}
+        autoHighlight
+      >
+        <ComboboxInput
+          id="dataset-variable-picker"
+          placeholder="Search variables"
+          autoComplete="off"
+          spellCheck={false}
+          className="w-full"
+          disabled={disabled}
+        />
+        <ComboboxContent>
+          <ComboboxEmpty>No variable matches.</ComboboxEmpty>
+          <ComboboxList>
+            {(option: VariableInfo) => {
+              const { leaf, groups } = splitPath(option.path);
+              return (
+                <ComboboxItem key={option.path} value={option}>
+                  <span className="grid min-w-0 gap-0.5">
+                    <span className="break-words">
+                      <span className="font-medium">{leaf}</span>
+                      {groups ? (
+                        <span className="text-muted-foreground"> in {groups}</span>
+                      ) : null}
+                    </span>
+                    {option.longName ? (
+                      <span className="text-xs break-words text-muted-foreground">
+                        {option.longName}
+                      </span>
+                    ) : null}
+                  </span>
+                </ComboboxItem>
+              );
+            }}
+          </ComboboxList>
+        </ComboboxContent>
+      </Combobox>
+    </Field>
   );
 }
