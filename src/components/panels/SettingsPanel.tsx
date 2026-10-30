@@ -6,7 +6,7 @@ import {
   PATCH_WINDOW_SIZES,
   type PatchWindowSize,
 } from "@/lib/settings/patchWindow";
-import type { MapViewMode } from "@/types/map";
+import type { GridSpec, MapViewMode } from "@/types/map";
 import type { MapSettings } from "@/hooks/useMapSettings";
 import { FloatingPanel } from "@/components/panels/FloatingPanel";
 import { ViewModeTabs } from "@/components/map/ViewModeTabs";
@@ -25,6 +25,7 @@ import { Switch } from "@/components/ui/switch";
 
 type SettingsPanelProps = {
   settings: MapSettings;
+  nativeChunks: GridSpec["nativeChunks"];
   patchWindow: PatchWindowSize;
   onPatchWindowChange: (size: PatchWindowSize) => void;
   viewMode: MapViewMode;
@@ -34,6 +35,7 @@ type SettingsPanelProps = {
 
 export function SettingsPanel({
   settings,
+  nativeChunks,
   patchWindow,
   onPatchWindowChange,
   viewMode,
@@ -87,8 +89,9 @@ export function SettingsPanel({
         <FieldSet>
           <FieldLegend variant="label">Cells kept per download</FieldLegend>
           <FieldDescription>
-            A click downloads a 40 x 40 patch either way. This sets how much of
-            it is kept, and what every year of it costs in memory.
+            A click downloads a {nativeChunks.lat} x {nativeChunks.lon} patch
+            either way. This sets how much of it is kept, and what every year
+            of it costs in memory.
           </FieldDescription>
           <RadioGroup
             value={String(patchWindow)}

@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { ZARR_TIME, getSelectedYearsDayMapping } from "@/lib/zarr/timeRange";
+import { getSelectedYearsDayMapping } from "@/lib/zarr/timeRange";
 import {
   formatTimeBasis,
   localHourOffset,
@@ -28,7 +28,11 @@ export function useSeriesDisplay(
     selectedYears,
     values,
     loading,
-  }: Pick<CellSeries, "selection" | "selectedYears" | "values" | "loading">,
+    slotsPerDay,
+  }: Pick<
+    CellSeries,
+    "selection" | "selectedYears" | "values" | "loading" | "slotsPerDay"
+  >,
   timeBasis: TimeBasis,
 ) {
   const { isLight } = useTheme();
@@ -56,7 +60,9 @@ export function useSeriesDisplay(
   );
   const isEmptyCell = !loading && values !== null && !hasPlottableData;
 
-  const utcOffsetHours = localHourOffset(selection?.grid.lon ?? 0);
+  // The shift moves whole slots, so a 6-hourly store rounds to 6 hours.
+  const utcOffsetSlots = localHourOffset(selection?.grid.lon ?? 0, slotsPerDay);
+  const utcOffsetHours = (utcOffsetSlots * 24) / slotsPerDay;
   const timeBasisLabel = formatTimeBasis(timeBasis, utcOffsetHours);
 
   const displayValues = useMemo(() => {
@@ -64,14 +70,14 @@ export function useSeriesDisplay(
     const { absoluteDays } = getSelectedYearsDayMapping(
       selectedYears,
       undefined,
-      Math.floor(values.length / ZARR_TIME.hoursPerDay),
+      Math.floor(values.length / slotsPerDay),
     );
     return shiftSeriesToLocalTime(values, {
-      hoursPerDay: ZARR_TIME.hoursPerDay,
-      offsetHours: utcOffsetHours,
+      hoursPerDay: slotsPerDay,
+      offsetHours: utcOffsetSlots,
       absoluteDays,
     });
-  }, [values, selectedYears, timeBasis, utcOffsetHours]);
+  }, [values, selectedYears, timeBasis, utcOffsetSlots, slotsPerDay]);
 
   return {
     plotView,

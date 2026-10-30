@@ -5,7 +5,7 @@ import {
   type ColormapId,
   dayIndexTicks,
   formatDayTick,
-  FINGERPRINT_HOUR_TICKS,
+  fingerprintSlotTicks,
 } from "@/lib/map/fingerprintScale";
 import { formatSeriesValue } from "@/lib/plots/chartTheme";
 import {
@@ -133,7 +133,7 @@ export function buildSquareFingerprintCanvas(
 
       for (let hour = 0; hour < hoursPerDay; hour++) {
         const val = values[dayOffset * hoursPerDay + hour] as number;
-        const color = scale(val, extents.negMax, extents.posMax);
+        const color = scale(val - extents.pivot, extents.negMax, extents.posMax);
         if (color === "transparent") continue;
 
         const x0 = Math.floor(hour * colW);
@@ -217,9 +217,9 @@ export function buildSquareFingerprintCanvas(
   ctx.textAlign = "center";
   ctx.textBaseline = "top";
 
-  for (const hour of FINGERPRINT_HOUR_TICKS) {
-    if (hour === 0) continue; // Skip corner 0h tick
-    const x = Math.round(((hour + 0.5) * size) / hoursPerDay);
+  for (const { slot, label: hour } of fingerprintSlotTicks(hoursPerDay)) {
+    if (slot === 0) continue; // Skip corner 0h tick
+    const x = Math.round(((slot + 0.5) * size) / hoursPerDay);
 
     ctx.beginPath();
     ctx.moveTo(x, 0);
@@ -406,8 +406,11 @@ export function buildSquareFingerprintCanvas(
   // different magnitudes whenever uptake and release do.
   const maxVal = extents.posMax;
   const minVal = -extents.negMax;
-  const maxLabel = `+${formatSeriesValue(maxVal)}`;
-  const minLabel = formatSeriesValue(minVal);
+  const maxLabel =
+    extents.pivot === 0
+      ? `+${formatSeriesValue(maxVal)}`
+      : formatSeriesValue(extents.pivot + maxVal);
+  const minLabel = formatSeriesValue(extents.pivot + minVal);
   const unitLabel = units || "";
 
   // Zero-crossing fraction along the bar (top = posMax, bottom = negMax).
@@ -514,7 +517,11 @@ export function buildSquareFingerprintCanvas(
   ctx.font = `400 ${Math.round(tickFontSize * 0.85)}px ${MONO_FONT_FAMILY}`;
   ctx.textAlign = "left";
   ctx.textBaseline = "middle";
-  ctx.fillText("0", zeroTickX, zeroBarY);
+  ctx.fillText(
+    extents.pivot === 0 ? "0" : formatSeriesValue(extents.pivot),
+    zeroTickX,
+    zeroBarY,
+  );
 
   // 4. Bottom Number Label (-negMax / Uptake)
   const botNumY = barTop + vBarH + gap;

@@ -9,7 +9,11 @@ import type { TimeBasis } from "@/lib/zarr/localTime";
 import type { CellSeries } from "@/hooks/useCellSeries";
 import { useSeriesDisplay } from "@/hooks/useSeriesDisplay";
 import { CellExport } from "@/components/panels/CellExport";
-import { PlotArea, PlotControls } from "@/components/panels/CellView";
+import {
+  describeRecord,
+  PlotArea,
+  PlotControls,
+} from "@/components/panels/CellView";
 import { ScaleField } from "@/components/panels/ScaleField";
 import { TimeBasisField } from "@/components/panels/TimeBasisField";
 import { YearPicker } from "@/components/panels/YearPicker";
@@ -134,9 +138,7 @@ export function DataView({
                         {formatLongitude(selection.grid.lon)},{" "}
                         {formatLatitude(selection.grid.lat)}
                       </CardTitle>
-                      <CardDescription>
-                        Net ecosystem exchange, 0.05° cell
-                      </CardDescription>
+                      <CardDescription>{describeRecord(series)}</CardDescription>
                       <div className="flex flex-wrap gap-1.5 pt-2">
                         <Chip>
                           Years {formatSelectedYearsLabel(selectedYears)}

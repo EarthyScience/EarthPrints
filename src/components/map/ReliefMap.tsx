@@ -42,6 +42,7 @@ import { MapTour } from "@/components/map/MapTour";
 import { GlobeSelectionOverlay } from "@/components/map/GlobeSelectionOverlay";
 import { UserPositionMarker } from "@/components/map/UserPositionMarker";
 import { CellPanel } from "@/components/panels/CellPanel";
+import { DatasetPanel } from "@/components/panels/DatasetPanel";
 import { HelpPanel } from "@/components/panels/HelpPanel";
 import { SettingsPanel } from "@/components/panels/SettingsPanel";
 import { Alert, AlertAction, AlertDescription } from "@/components/ui/alert";
@@ -386,9 +387,16 @@ export function ReliefMap() {
                 onTimeBasisChange={settings.setTimeBasis}
               />
             ) : null}
+            {openPanel === "data" ? (
+              <DatasetPanel
+                series={series}
+                onClose={() => setOpenPanel(null)}
+              />
+            ) : null}
             {openPanel === "settings" ? (
               <SettingsPanel
                 settings={settings}
+                nativeChunks={series.gridSpec.nativeChunks}
                 patchWindow={series.patchWindow}
                 onPatchWindowChange={series.setPatchWindow}
                 viewMode={viewMode}

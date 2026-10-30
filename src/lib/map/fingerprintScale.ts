@@ -298,29 +298,48 @@ export function symmetricAbsMax(values: ArrayLike<number>): number {
   return max;
 }
 
-/**
- * For the Flux colormap: compute separate extents for the negative and positive
- * halves so each half spans the full ramp independently.
- *
- * Returns `{ negMax, posMax }` where `negMax ≥ 0` and `posMax ≥ 0`.
- * If all values are on one side, the other extent is set to a tiny positive
- * sentinel (1e-10) to avoid a division-by-zero degenerate state.
- */
-export function asymmetricExtents(values: ArrayLike<number>): {
+export type ColorExtents = {
   negMax: number;
   posMax: number;
-} {
-  let negMax = 0;
-  let posMax = 0;
+  /**
+   * The value the ramp is centred on. Zero for signed data such as a flux, and
+   * for data that starts near zero such as rainfall; the mean for data that
+   * sits far from zero, such as pressure in hPa or temperature in kelvin,
+   * which would otherwise fill only the top end of the ramp.
+   */
+  pivot: number;
+};
+
+/**
+ * Separate extents for the two halves around the pivot, so each half spans
+ * the full ramp independently. Colour a value with
+ * `scale(value - pivot, negMax, posMax)`.
+ *
+ * `negMax` and `posMax` are both positive: a half with no data gets a tiny
+ * sentinel (1e-10) to avoid a division-by-zero degenerate state.
+ */
+export function asymmetricExtents(values: ArrayLike<number>): ColorExtents {
+  let min = Infinity;
+  let max = -Infinity;
+  let sum = 0;
+  let count = 0;
   for (let i = 0; i < values.length; i++) {
     const v = values[i];
     if (!Number.isFinite(v)) continue;
-    if (v < 0 && -v > negMax) negMax = -v;
-    if (v > 0 && v > posMax) posMax = v;
+    if (v < min) min = v;
+    if (v > max) max = v;
+    sum += v;
+    count++;
   }
+  if (count === 0) return { negMax: 1e-10, posMax: 1e-10, pivot: 0 };
+
+  const width = max - min;
+  const farFromZero = min > 0 ? min > width : max < 0 ? -max > width : false;
+  const pivot = farFromZero ? sum / count : 0;
   return {
-    negMax: negMax > 0 ? negMax : 1e-10,
-    posMax: posMax > 0 ? posMax : 1e-10,
+    negMax: Math.max(1e-10, pivot - min),
+    posMax: Math.max(1e-10, max - pivot),
+    pivot,
   };
 }
 
@@ -447,6 +466,17 @@ export function fingerprintColorScale(
 
 /** Hour-of-day gridlines/labels worth annotating on the hour axis. */
 export const FINGERPRINT_HOUR_TICKS = [0, 6, 12, 18] as const;
+
+/** The rows to label, as slots, for a day split into `slotsPerDay`. */
+export function fingerprintSlotTicks(
+  slotsPerDay: number,
+): { slot: number; label: string }[] {
+  if (slotsPerDay < 4) return [];
+  return FINGERPRINT_HOUR_TICKS.flatMap((hour) => {
+    const slot = (hour * slotsPerDay) / 24;
+    return Number.isInteger(slot) ? [{ slot, label: String(hour) }] : [];
+  });
+}
 
 const SHORT_MONTHS = [
   "Jan",

@@ -1,9 +1,17 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { geoPointToZarrGrid } from "@/lib/map/geogrid";
-import { openZarrStore } from "@/lib/zarr/store";
-import { ZarrChunkReader } from "@/lib/zarr/ZarrChunkReader";
+import { geoPointToZarrGrid, isPointInGrid } from "@/lib/map/geogrid";
+import { SeriesBudgetError, ZarrChunkReader } from "@/lib/zarr/ZarrChunkReader";
+import { openDataset, type Dataset } from "@/lib/zarr/dataset";
+import { setActiveSource } from "@/lib/zarr/activeSource";
+import { setActiveTime } from "@/lib/zarr/timeRange";
+import {
+  defaultYears,
+  readSourceFromUrl,
+  writeSourceToUrl,
+  type SourceRequest,
+} from "@/lib/zarr/sourceUrl";
 import {
   cacheBytesFor,
   DEFAULT_PATCH_WINDOW,
@@ -17,12 +25,30 @@ import type { GridSpec, MapSelection } from "@/types/map";
 
 export type SeriesProgress = { loaded: number; total: number };
 
+function activate(dataset: Dataset) {
+  setActiveTime(dataset.time);
+  setActiveSource({
+    title: dataset.title,
+    url: dataset.url,
+    variable: dataset.variable,
+    longName: dataset.longName,
+    resolutionDeg: dataset.grid.spatialResolutionDeg,
+    stepLabel: dataset.time.stepLabel,
+  });
+}
+
 export function useCellSeries() {
+  const readerRef = useRef<ZarrChunkReader | null>(null);
   const readerPromiseRef = useRef<Promise<ZarrChunkReader> | null>(null);
   const requestIdRef = useRef(0);
+  const openIdRef = useRef(0);
   const seriesAbortRef = useRef<AbortController | null>(null);
   const patchWindowRef = useRef<PatchWindowSize>(DEFAULT_PATCH_WINDOW);
 
+  const [dataset, setDataset] = useState<Dataset | null>(null);
+  const [datasetLoading, setDatasetLoading] = useState(true);
+  const [datasetError, setDatasetError] = useState<string | null>(null);
+  const [extraIndices, setExtraIndices] = useState<Record<number, number>>({});
   const [gridSpec, setGridSpec] = useState<GridSpec>(DEFAULT_GRID_SPEC);
   const [selection, setSelection] = useState<MapSelection | null>(null);
   const [selectedYears, setSelectedYears] = useState<number[]>([2021]);
@@ -33,44 +59,14 @@ export function useCellSeries() {
   const [progress, setProgress] = useState<SeriesProgress | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [values, setValues] = useState<Float32Array | null>(null);
+  /** Days a partial load could cover, offered when the full one is refused. */
+  const [partialOffer, setPartialOffer] = useState<number | null>(null);
+  /** Days a partial load did cover, from the start of the selection. */
+  const [coveredDays, setCoveredDays] = useState<number | null>(null);
   const [units, setUnits] = useState<string | null>(null);
 
-  const ensureReader = useCallback(() => {
-    if (!readerPromiseRef.current) {
-      readerPromiseRef.current = openZarrStore()
-        .then(
-          (ds) =>
-            new ZarrChunkReader(ds, {
-              windowSize: patchWindowRef.current,
-              maxBytes: cacheBytesFor(
-                patchWindowRef.current,
-                deviceCacheBytes(),
-              ),
-            }),
-        )
-        .catch((cause) => {
-          readerPromiseRef.current = null;
-          throw cause;
-        });
-    }
-    return readerPromiseRef.current;
-  }, []);
-
-  useEffect(() => {
-    let cancelled = false;
-    ensureReader()
-      .then((reader) => reader.getGridSpec())
-      .then((spec) => {
-        if (!cancelled) setGridSpec(spec);
-      })
-      .catch(() => {});
-    return () => {
-      cancelled = true;
-    };
-  }, [ensureReader]);
-
   const load = useCallback(
-    async (nextSelection: MapSelection, years: number[]) => {
+    async (nextSelection: MapSelection, years: number[], partial = false) => {
       const requestId = ++requestIdRef.current;
       seriesAbortRef.current?.abort();
       const abort = new AbortController();
@@ -80,9 +76,21 @@ export function useCellSeries() {
       setError(null);
       setValues(null);
       setUnits(null);
+      setPartialOffer(null);
+      setCoveredDays(null);
 
       try {
-        const reader = await ensureReader();
+        const reader = await readerPromiseRef.current;
+        if (requestId !== requestIdRef.current) return;
+        if (!reader) {
+          setError("No dataset is open. Open one from the Data panel.");
+          return;
+        }
+        const spec = reader.getDataset()?.grid ?? DEFAULT_GRID_SPEC;
+        if (!isPointInGrid(nextSelection.click, spec)) {
+          setError("This point is outside the area the dataset covers. Pick a point inside it.");
+          return;
+        }
         setCachedYears(new Set(reader.getCachedYears(nextSelection.grid)));
 
         const result = await reader.getTimeSeriesForYears(
@@ -94,16 +102,21 @@ export function useCellSeries() {
             setProgress({ loaded, total });
           },
           abort.signal,
+          { partial },
         );
 
         if (requestId !== requestIdRef.current) return;
 
         setValues(result.values);
+        setCoveredDays(result.coveredDays ?? null);
         setUnits(result.units ?? null);
         setCachedYears(new Set(reader.getCachedYears(nextSelection.grid)));
       } catch (cause) {
         if (requestId !== requestIdRef.current) return;
         if (cause instanceof Error && cause.name === "AbortError") return;
+        if (cause instanceof SeriesBudgetError && cause.partialDays > 0) {
+          setPartialOffer(cause.partialDays);
+        }
         setError(
           cause instanceof Error
             ? cause.message
@@ -116,7 +129,100 @@ export function useCellSeries() {
         }
       }
     },
-    [ensureReader],
+    [],
+  );
+
+  // Kept in refs so opening a store can re-snap and reload whatever is picked.
+  const selectionRef = useRef<MapSelection | null>(null);
+  const selectedYearsRef = useRef(selectedYears);
+  useEffect(() => {
+    selectionRef.current = selection;
+    selectedYearsRef.current = selectedYears;
+  }, [selection, selectedYears]);
+
+  // Sets state only once the store answers, so the first open can run from an
+  // effect; `openSource` below flags the loading state first.
+  const startOpen = useCallback(
+    (request: SourceRequest) => {
+      const openId = ++openIdRef.current;
+      const promise = openDataset(request.url, request.variable).then(
+        ({ dataset: next, store }) => {
+          const reader = new ZarrChunkReader(store, {
+            dataset: next,
+            windowSize: patchWindowRef.current,
+            maxBytes: cacheBytesFor(patchWindowRef.current, deviceCacheBytes()),
+          });
+          const picks: Record<number, number> = {};
+          for (const dim of next.layout.extras) {
+            const wanted = request.picks?.[dim.name] ?? 0;
+            const index = Math.min(Math.max(0, wanted), dim.size - 1);
+            picks[dim.axis] = index;
+            reader.setExtraIndex(dim.axis, index);
+          }
+          return { next, reader, picks };
+        },
+      );
+
+      readerPromiseRef.current = promise
+        .then(({ reader }) => reader)
+        .catch(() => readerRef.current as ZarrChunkReader);
+
+      promise
+        .then(({ next, reader, picks }) => {
+          if (openId !== openIdRef.current) {
+            reader.dispose();
+            return;
+          }
+          readerRef.current?.dispose();
+          readerRef.current = reader;
+          activate(next);
+          setDataset(next);
+          setExtraIndices(picks);
+          setGridSpec(next.grid);
+          setDatasetLoading(false);
+          writeSourceToUrl(next, picks);
+
+          const years = defaultYears(next.time.years, selectedYearsRef.current);
+          setSelectedYears(years);
+          const previous = selectionRef.current;
+          if (previous) {
+            const moved: MapSelection = {
+              click: previous.click,
+              grid: geoPointToZarrGrid(previous.click, next.grid),
+            };
+            setSelection(moved);
+            void load(moved, years);
+          }
+        })
+        .catch((cause) => {
+          if (openId !== openIdRef.current) return;
+          setDatasetLoading(false);
+          setDatasetError(
+            cause instanceof Error ? cause.message : "The store could not be opened.",
+          );
+        });
+    },
+    [load],
+  );
+
+  const openSource = useCallback(
+    (request: SourceRequest) => {
+      setDatasetLoading(true);
+      setDatasetError(null);
+      startOpen(request);
+    },
+    [startOpen],
+  );
+
+  useEffect(() => {
+    startOpen(readSourceFromUrl());
+  }, [startOpen]);
+
+  useEffect(
+    () => () => {
+      readerRef.current?.dispose();
+    },
+    [],
   );
 
   const select = useCallback(
@@ -140,15 +246,33 @@ export function useCellSeries() {
     [load, selection],
   );
 
+  const loadPartial = useCallback(() => {
+    if (selection) void load(selection, selectedYears, true);
+  }, [load, selectedYears, selection]);
+
+  const setExtraIndex = useCallback(
+    (axis: number, index: number) => {
+      const reader = readerRef.current;
+      if (!reader || !dataset) return;
+      reader.setExtraIndex(axis, index);
+      const picks = { ...extraIndices, [axis]: index };
+      setExtraIndices(picks);
+      writeSourceToUrl(dataset, picks);
+      if (selection) void load(selection, selectedYears);
+    },
+    [dataset, extraIndices, load, selectedYears, selection],
+  );
+
   useEffect(() => {
     const stored = loadPatchWindow();
     if (stored === patchWindowRef.current) return;
 
     patchWindowRef.current = stored;
     setPatchWindowState(stored);
-    void readerPromiseRef.current?.then((reader) => {
-      reader.setWindowSize(stored, cacheBytesFor(stored, deviceCacheBytes()));
-    });
+    readerRef.current?.setWindowSize(
+      stored,
+      cacheBytesFor(stored, deviceCacheBytes()),
+    );
   }, []);
 
   const setPatchWindow = useCallback(
@@ -160,15 +284,20 @@ export function useCellSeries() {
       savePatchWindow(size);
       // Cached entries are cut to the old window and cannot be reused.
       setCachedYears(new Set());
-      void readerPromiseRef.current?.then((reader) => {
-        reader.setWindowSize(size, cacheBytesFor(size, deviceCacheBytes()));
-        if (selection) void load(selection, selectedYears);
-      });
+      readerRef.current?.setWindowSize(size, cacheBytesFor(size, deviceCacheBytes()));
+      if (selection) void load(selection, selectedYears);
     },
     [load, selectedYears, selection],
   );
 
   return {
+    dataset,
+    datasetLoading,
+    datasetError,
+    openSource,
+    extraIndices,
+    setExtraIndex,
+    slotsPerDay: dataset?.time.slotsPerDay ?? 24,
     gridSpec,
     selection,
     select,
@@ -177,11 +306,14 @@ export function useCellSeries() {
     cachedYears,
     patchWindow,
     setPatchWindow,
-    loading,
+    loading: loading || (datasetLoading && selection !== null),
     progress,
     error,
+    partialOffer,
+    coveredDays,
+    loadPartial,
     values,
-    units,
+    units: units ?? dataset?.units ?? null,
   };
 }
 

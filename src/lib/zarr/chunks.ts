@@ -309,3 +309,70 @@ export function sliceBlockFromNativeChunk(
     shape: [timeCount, hourCount, localLatCount, localLonCount],
   };
 }
+
+/** Which axis of a stored chunk plays which role, and where the others are pinned. */
+export type ChunkPlan = {
+  time: number;
+  /** -1 when the store has no hour-of-day axis. */
+  hour: number;
+  lat: number;
+  lon: number;
+  /** Chunk-local index kept on every other axis (ensemble member, level). */
+  fixed: { axis: number; local: number }[];
+};
+
+export type ChunkDecode = {
+  scale: number;
+  offset: number;
+  fill: number[];
+};
+
+/**
+ * Turn a decoded chunk of any axis order, dtype and packing into the reader's
+ * own layout: a `[time, hour, lat, lon]` Float32Array holding only `block`,
+ * with fill values as NaN and CF scale and offset applied. `stride` is the
+ * chunk's own, so column-major (`order: "F"`) chunks read correctly too.
+ */
+export function canonicalizeChunk(
+  data: ArrayLike<number | bigint>,
+  shape: readonly number[],
+  stride: readonly number[],
+  plan: ChunkPlan,
+  block: LocalBlock,
+  decode: ChunkDecode,
+): { data: Float32Array; shape: number[] } {
+  const timeCount = shape[plan.time] ?? 1;
+  const hourCount = plan.hour >= 0 ? (shape[plan.hour] ?? 1) : 1;
+  const { localLatStart, localLatCount, localLonStart, localLonCount } = block;
+  const out = new Float32Array(timeCount * hourCount * localLatCount * localLonCount);
+
+  let base = 0;
+  for (const { axis, local } of plan.fixed) base += local * (stride[axis] ?? 0);
+  const tStride = stride[plan.time] ?? 0;
+  const hStride = plan.hour >= 0 ? (stride[plan.hour] ?? 0) : 0;
+  const latStride = stride[plan.lat] ?? 0;
+  const lonStride = stride[plan.lon] ?? 0;
+  const fill = decode.fill;
+  const plain = decode.scale === 1 && decode.offset === 0 && fill.length === 0;
+
+  let cursor = 0;
+  for (let t = 0; t < timeCount; t++) {
+    for (let h = 0; h < hourCount; h++) {
+      const plane = base + t * tStride + h * hStride;
+      for (let lat = 0; lat < localLatCount; lat++) {
+        let index = plane + (localLatStart + lat) * latStride + localLonStart * lonStride;
+        for (let lon = 0; lon < localLonCount; lon++) {
+          const raw = Number(data[index]);
+          out[cursor++] = plain
+            ? raw
+            : Number.isNaN(raw) || fill.includes(raw)
+              ? NaN
+              : raw * decode.scale + decode.offset;
+          index += lonStride;
+        }
+      }
+    }
+  }
+
+  return { data: out, shape: [timeCount, hourCount, localLatCount, localLonCount] };
+}

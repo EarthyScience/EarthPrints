@@ -37,6 +37,9 @@ export type GridSpec = {
   };
   /** Cell size in degrees (absolute lon step). */
   spatialResolutionDeg: number;
+  /** Cell centres, kept only when an axis is not evenly spaced. */
+  latValues?: Float64Array;
+  lonValues?: Float64Array;
 };
 
 export type MapSelection = {

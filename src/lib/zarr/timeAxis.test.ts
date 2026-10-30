@@ -1,0 +1,55 @@
+import { describe, expect, it } from "vitest";
+import { buildTimeAxis, resampleToDays, sampleRangeForDays } from "@/lib/zarr/timeAxis";
+
+const H = 3_600_000;
+const D = 24 * H;
+
+describe("buildTimeAxis", () => {
+  it("reads a 6-hourly axis as 4 slots a day", () => {
+    const start = Date.UTC(2023, 0, 1);
+    const times = Float64Array.from({ length: 8 }, (_, i) => start + i * 6 * H);
+    const axis = buildTimeAxis(times);
+    expect(axis.slotsPerDay).toBe(4);
+    expect(axis.totalDays).toBe(2);
+    expect(axis.stepLabel).toBe("6-hourly");
+    expect(axis.years).toEqual([2023]);
+  });
+
+  it("anchors a monthly axis on the first of the month", () => {
+    const times = Float64Array.from([Date.UTC(2000, 0, 15), Date.UTC(2000, 1, 15), Date.UTC(2000, 2, 15)]);
+    const axis = buildTimeAxis(times);
+    expect(axis.span).toBe("month");
+    expect(axis.originMs).toBe(Date.UTC(2000, 0, 1));
+    expect(axis.totalDays).toBe(31 + 29 + 31);
+  });
+
+  it("keeps a separate hour axis as the day's slots", () => {
+    const times = Float64Array.from({ length: 3 }, (_, i) => Date.UTC(2001, 0, 1) + i * D);
+    const axis = buildTimeAxis(times, 24);
+    expect(axis.hourAxis).toBe(true);
+    expect(axis.slotsPerDay).toBe(24);
+    expect(axis.totalDays).toBe(3);
+  });
+});
+
+describe("resampleToDays", () => {
+  it("places sub-daily samples in their slots and leaves gaps NaN", () => {
+    const start = Date.UTC(2023, 0, 1);
+    // The second day's 12:00 sample is missing.
+    const times = Float64Array.from([0, 6, 12, 18, 24, 30, 42].map((h) => start + h * H));
+    const axis = buildTimeAxis(times);
+    const range = sampleRangeForDays(axis, [1, 2]);
+    expect(range).toEqual([4, 7]);
+    const out = resampleToDays(axis, Float32Array.from([4, 5, 6]), range[0], [1, 2]);
+    expect(Array.from(out)).toEqual([4, 5, NaN, 6]);
+  });
+
+  it("fills every day of a monthly sample", () => {
+    const times = Float64Array.from([Date.UTC(2001, 0, 1), Date.UTC(2001, 1, 1)]);
+    const axis = buildTimeAxis(times);
+    const range = sampleRangeForDays(axis, [30, 33]);
+    const out = resampleToDays(axis, Float32Array.from([1, 2]), range[0], [30, 33]);
+    expect(range[0]).toBe(0);
+    expect(Array.from(out)).toEqual([1, 2, 2]);
+  });
+});

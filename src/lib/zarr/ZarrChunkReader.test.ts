@@ -313,14 +313,15 @@ describe("ZarrChunkReader", () => {
   });
 
   it("evicts least-recently-used patches once the byte budget is spent", async () => {
-    // A one-byte budget keeps only the most recent patch.
+    // A one-byte budget keeps only the most recent patch. The one still held
+    // is read before the evicted one is fetched again, so only that one is.
     const reader = new ZarrChunkReader(ds, 1);
     await reader.getTimeSeries(makeGrid(50, 50));
     mockGetChunk.mockClear();
 
     await reader.getTimeSeries(makeGrid(50, 50));
 
-    expect(mockGetChunk).toHaveBeenCalledTimes(2);
+    expect(mockGetChunk).toHaveBeenCalledTimes(1);
   });
 
   it("keeps both patches when the budget has room", async () => {

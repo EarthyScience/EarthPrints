@@ -4,7 +4,7 @@ import { useMemo } from "react";
 import { formatIsoDate } from "@/lib/map/fingerprintScale";
 import { formatSeriesValue } from "@/lib/plots/chartTheme";
 import { dailyMeanSeries } from "@/lib/zarr/series";
-import { getSelectedYearsDayMapping, ZARR_TIME } from "@/lib/zarr/timeRange";
+import { getSelectedYearsDayMapping } from "@/lib/zarr/timeRange";
 import type { CellSeries } from "@/hooks/useCellSeries";
 import type { SeriesDisplay } from "@/hooks/useSeriesDisplay";
 import { Card, CardContent } from "@/components/ui/card";
@@ -21,8 +21,8 @@ type Summary = {
 function summarize(
   values: Float32Array,
   selectedYears: number[],
+  hoursPerDay: number,
 ): Summary | null {
-  const hoursPerDay = ZARR_TIME.hoursPerDay;
   const daily = dailyMeanSeries(values, hoursPerDay);
   if (daily.length === 0) return null;
   const { absoluteDays } = getSelectedYearsDayMapping(
@@ -53,8 +53,8 @@ function summarize(
 function summarizeByYear(
   values: Float32Array,
   selectedYears: number[],
+  hoursPerDay: number,
 ): { year: number; summary: Summary }[] {
-  const hoursPerDay = ZARR_TIME.hoursPerDay;
   const { yearIntervals } = getSelectedYearsDayMapping(
     selectedYears,
     undefined,
@@ -64,6 +64,7 @@ function summarizeByYear(
     const summary = summarize(
       values.subarray(startDayLocal * hoursPerDay, (endDayLocal + 1) * hoursPerDay),
       [year],
+      hoursPerDay,
     );
     return summary ? [{ year, summary }] : [];
   });
@@ -115,21 +116,23 @@ export function SeriesSummary({
   display,
   className,
 }: SeriesSummaryProps) {
-  const { selectedYears, units } = series;
+  const { selectedYears, units, slotsPerDay } = series;
   const values = display.displayValues;
 
   const summary = useMemo(
     () =>
-      values && !display.isEmptyCell ? summarize(values, selectedYears) : null,
-    [values, display.isEmptyCell, selectedYears],
+      values && !display.isEmptyCell
+        ? summarize(values, selectedYears, slotsPerDay)
+        : null,
+    [values, display.isEmptyCell, selectedYears, slotsPerDay],
   );
 
   const byYear = useMemo(
     () =>
       values && !display.isEmptyCell && selectedYears.length > 1
-        ? summarizeByYear(values, selectedYears)
+        ? summarizeByYear(values, selectedYears, slotsPerDay)
         : [],
-    [values, display.isEmptyCell, selectedYears],
+    [values, display.isEmptyCell, selectedYears, slotsPerDay],
   );
 
   if (!summary) return null;

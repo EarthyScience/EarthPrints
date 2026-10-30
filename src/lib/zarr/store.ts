@@ -62,6 +62,34 @@ export function getActiveAbortSignal(): AbortSignal | null {
   return activeAbortSignal;
 }
 
+/**
+ * Per-request progress and abort, for downloads that overlap. The swapped
+ * globals above only work one request at a time; here the request carries a
+ * tag that `progressFetch` resolves to its own sink and strips again before
+ * the request leaves, so it never reaches the server or triggers a CORS
+ * preflight.
+ */
+const REQUEST_TAG = "x-earthprints-request";
+const taggedSinks = new Map<string, ByteSink | null>();
+let nextTag = 0;
+
+export async function withRequestContext<T>(
+  sink: ByteSink | null,
+  signal: AbortSignal | null,
+  run: (init: RequestInit) => Promise<T>,
+): Promise<T> {
+  const tag = String(++nextTag);
+  taggedSinks.set(tag, sink);
+  try {
+    return await run({
+      headers: { [REQUEST_TAG]: tag },
+      ...(signal ? { signal } : {}),
+    });
+  } finally {
+    taggedSinks.delete(tag);
+  }
+}
+
 /** The rejection used when a caller abandons a decode. */
 export function abortError(): Error {
   const error = new Error("Chunk decode aborted");
@@ -128,13 +156,19 @@ export async function fetchWithRetry(request: Request): Promise<Response> {
  * untouched, so data loading never depends on the instrumentation.
  */
 async function progressFetch(request: Request): Promise<Response> {
+  const tag = request.headers.get(REQUEST_TAG);
+  if (tag !== null) {
+    const headers = new Headers(request.headers);
+    headers.delete(REQUEST_TAG);
+    request = new Request(request, { headers });
+  }
   // Capture the sink synchronously, before the await, so this fetch binds to
   // the request that was active when it started even if another request swaps
   // the global sink in while we await the response.
-  const sink = activeByteSink;
+  const sink = tag !== null ? (taggedSinks.get(tag) ?? null) : activeByteSink;
   // Bind the signal onto the Request so fetchWithRetry's clones keep it and
   // its own aborted check sees it.
-  const signal = activeAbortSignal;
+  const signal = tag !== null ? null : activeAbortSignal;
   const response = await fetchWithRetry(
     signal ? new Request(request, { signal }) : request,
   );
@@ -196,7 +230,9 @@ export function metadataOnlyKey(
 
 export async function openZarrStore(url: string = ZARR_STORE.url) {
   const raw = new zarr.FetchStore(url, { fetch: progressFetch });
-  const consolidated = await zarr.withConsolidatedMetadata(raw);
+  // Stores without consolidated metadata still open; they just cannot list
+  // their arrays.
+  const consolidated = await zarr.withMaybeConsolidatedMetadata(raw);
   const store = zarr.withByteCaching(consolidated, { keyFor: metadataOnlyKey });
   return {
     store,
@@ -286,5 +322,59 @@ export async function fetchPixelTimeSeries(
     values: result.data as Float32Array,
     variable,
     units,
+  };
+}
+
+/**
+ * Byte progress for chunks downloading side by side. Chunks not yet started
+ * are estimated at the average size of the finished ones.
+ */
+export function createConcurrentProgressTracker(
+  chunkCount: number,
+  onProgress: (loaded: number, total: number) => void,
+) {
+  const inflight = new Map<number, { loaded: number; total: number }>();
+  let completedBytes = 0;
+  let completedChunks = 0;
+  let nextId = 0;
+
+  function emit() {
+    let loaded = completedBytes;
+    let known = completedBytes;
+    let sizes = 0;
+    for (const bytes of inflight.values()) {
+      loaded += bytes.loaded;
+      known += Math.max(bytes.total, bytes.loaded);
+      if (bytes.total > 0) sizes += 1;
+    }
+    const average =
+      completedChunks > 0
+        ? completedBytes / completedChunks
+        : sizes > 0
+          ? (known - completedBytes) / sizes
+          : 0;
+    const pending = Math.max(0, chunkCount - completedChunks - inflight.size);
+    onProgress(loaded, Math.max(loaded, known + average * pending));
+  }
+
+  return {
+    /** A tracker for one chunk, shaped like `createSeriesProgressTracker`'s. */
+    start(): SeriesProgressTracker {
+      const id = nextId++;
+      inflight.set(id, { loaded: 0, total: 0 });
+      return {
+        update(loaded: number, total: number) {
+          inflight.set(id, { loaded, total });
+          emit();
+        },
+        complete() {
+          const bytes = inflight.get(id);
+          inflight.delete(id);
+          completedBytes += bytes ? Math.max(bytes.total, bytes.loaded) : 0;
+          completedChunks += 1;
+          emit();
+        },
+      };
+    },
   };
 }

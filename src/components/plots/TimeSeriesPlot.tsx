@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useRef, useState, type Ref } from "react";
+import { activeSource } from "@/lib/zarr/activeSource";
 import {
   Area,
   CartesianGrid,
@@ -279,7 +280,7 @@ export function TimeSeriesPlot({
         />
       ) : null}
       <p className="text-muted-foreground">
-        {values.length.toLocaleString()} hourly steps
+        {values.length.toLocaleString()} {activeSource().stepLabel} steps
         {resolution === "hour"
           ? ""
           : ` · ${series.binCount.toLocaleString()} ${MEANS_LABEL[resolution]} means, band ±1 std`}

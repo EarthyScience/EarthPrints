@@ -30,7 +30,7 @@ import {
   formatBinLabel,
   formatBinShortLabel,
 } from "@/lib/plots/timeBins";
-import { shortTimeBasis } from "@/lib/zarr/localTime";
+import { formatSlotTime, shortTimeBasis } from "@/lib/zarr/localTime";
 import { useTheme } from "@/providers/ThemeProvider";
 import {
   anchorBesidePanel,
@@ -295,11 +295,11 @@ export function FingerprintPlot({
         value: stats.mean[index] as number,
         spread:
           count > 0
-            ? `Std ${std} across ${count} hour${count === 1 ? "" : "s"}`
+            ? `Std ${std} across ${count} ${hoursPerDay === 1 ? "day" : "step"}${count === 1 ? "" : "s"}`
             : undefined,
       };
     }
-    const time = `${String(index).padStart(2, "0")}:00`;
+    const time = formatSlotTime(index, hoursPerDay);
     const suffix = timeBasisLabel ? ` ${shortTimeBasis(timeBasisLabel)}` : "";
     return {
       label: `${time}${suffix}`,
@@ -319,7 +319,7 @@ export function FingerprintPlot({
     if (!bin || hour < 0) return undefined;
     const at = col * hoursPerDay + hour;
     const count = grid.count[at] ?? 0;
-    const time = `${String(hour).padStart(2, "0")}:00`;
+    const time = formatSlotTime(hour, hoursPerDay);
     const suffix = timeBasisLabel ? ` ${shortTimeBasis(timeBasisLabel)}` : "";
     return {
       label: `${formatBinLabel(bin, scale)} · ${time}${suffix}`,
@@ -484,21 +484,22 @@ export function FingerprintPlot({
         />
         <div className="relative h-4 text-xs text-muted-foreground tabular-nums">
           <span className="absolute left-0">
-            {formatSeriesValue(-extents.negMax)}
+            {formatSeriesValue(extents.pivot - extents.negMax)}
           </span>
           <span
             className="absolute -translate-x-1/2"
             style={{ left: `${legend.zeroPct.toFixed(1)}%` }}
           >
-            0
+            {extents.pivot === 0 ? "0" : formatSeriesValue(extents.pivot)}
           </span>
           <span className="absolute right-0">
-            {formatSeriesValue(extents.posMax)}
+            {formatSeriesValue(extents.pivot + extents.posMax)}
           </span>
         </div>
       </div>
       <p className="text-muted-foreground">
-        {binCountLabel(nCols, scale)} × {hoursPerDay} hours
+        {binCountLabel(nCols, scale)} × {hoursPerDay}{" "}
+        {hoursPerDay === 24 ? "hours" : "steps a day"}
         {timeBasisLabel ? ` · ${timeBasisLabel}` : ""}
         {units ? ` · ${units}` : ""}
         {margins ? " · strips show the mean ±1 std of each row and column" : ""}

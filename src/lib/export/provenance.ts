@@ -1,4 +1,4 @@
-import { ZARR_STORE } from "@/lib/constants/store";
+import { activeSource } from "@/lib/zarr/activeSource";
 import {
   ZARR_TIME,
   dayIndexToUTCDate,
@@ -64,7 +64,7 @@ export function buildProvenance({
   selectedYears = null,
   valueCount,
   units = null,
-  variable = ZARR_STORE.defaultVariable,
+  variable = activeSource().variable,
   hoursPerDay = ZARR_TIME.hoursPerDay,
   totalDays = ZARR_TIME.totalDays,
   timeBasis = "local",
@@ -93,11 +93,11 @@ export function buildProvenance({
 
   return {
     generatedAt,
-    dataset: ZARR_STORE.kicker,
-    sourceUrl: ZARR_STORE.url,
+    dataset: activeSource().title,
+    sourceUrl: activeSource().url,
     variable,
     units,
-    resolutionDeg: ZARR_STORE.spatialResolutionDeg,
+    resolutionDeg: activeSource().resolutionDeg,
     click: selection.click,
     cell: selection.grid,
     historyYears: resolvedHistoryYears,
@@ -105,7 +105,8 @@ export function buildProvenance({
     selectedYears: years,
     hoursPerDay,
     timeBasis,
-    utcOffsetHours: localHourOffset(selection.grid.lon, hoursPerDay),
+    utcOffsetHours:
+      localHourOffset(selection.grid.lon, hoursPerDay) * (24 / hoursPerDay),
     dayCount,
     baseDay: startDay,
     windowStart,

@@ -5,10 +5,34 @@ function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
 }
 
-function snapToAxis(value: number, start: number, step: number, count: number): {
-  index: number;
-  coordinate: number;
-} {
+function nearestIndex(values: Float64Array, value: number): number {
+  const n = values.length;
+  const ascending = values[n - 1]! >= values[0]!;
+  let lo = 0;
+  let hi = n - 1;
+  while (lo < hi) {
+    const mid = (lo + hi) >>> 1;
+    const before = ascending ? values[mid]! < value : values[mid]! > value;
+    if (before) lo = mid + 1;
+    else hi = mid;
+  }
+  if (lo > 0 && Math.abs(values[lo - 1]! - value) <= Math.abs(values[lo]! - value)) {
+    return lo - 1;
+  }
+  return lo;
+}
+
+function snapToAxis(
+  value: number,
+  start: number,
+  step: number,
+  count: number,
+  values?: Float64Array,
+): { index: number; coordinate: number } {
+  if (values && values.length === count) {
+    const index = nearestIndex(values, value);
+    return { index, coordinate: values[index]! };
+  }
   const index = clamp(Math.round((value - start) / step), 0, count - 1);
   return {
     index,
@@ -16,17 +40,66 @@ function snapToAxis(value: number, start: number, step: number, count: number): 
   };
 }
 
-/** Snap a WGS-84 point to the nearest Zarr grid cell center. */
+/** Centre of cell `index` along one axis of the store. */
+export function axisCoordinate(
+  spec: GridSpec,
+  axis: "lat" | "lon",
+  index: number,
+): number {
+  const values = axis === "lat" ? spec.latValues : spec.lonValues;
+  if (values?.[index] !== undefined) return values[index]!;
+  const start = axis === "lat" ? spec.grid.latStart : spec.grid.lonStart;
+  const step = axis === "lat" ? spec.grid.latStep : spec.grid.lonStep;
+  return start + index * step;
+}
+
+/** The store's lon range, edge to edge, in its own convention (-180..180 or 0..360). */
+function lonExtent(spec: GridSpec): { west: number; east: number } {
+  const first = axisCoordinate(spec, "lon", 0);
+  const last = axisCoordinate(spec, "lon", spec.dimensions.lon - 1);
+  const half = Math.abs(spec.grid.lonStep) / 2;
+  return { west: Math.min(first, last) - half, east: Math.max(first, last) + half };
+}
+
+/**
+ * The copy of `lon` (shifted by whole turns) that lands inside the store's
+ * range, or nearest to it: a 0..360 store is clicked in -180..180.
+ */
+function lonInStoreRange(lon: number, spec: GridSpec): number {
+  const { west, east } = lonExtent(spec);
+  if (east - west >= 359.999) return west + ((((lon - west) % 360) + 360) % 360);
+  const centre = (west + east) / 2;
+  return lon + 360 * Math.round((centre - lon) / 360);
+}
+
+/** Whether a point falls on the store's grid at all (regional stores). */
+export function isPointInGrid(point: GeoPoint, spec: GridSpec): boolean {
+  const { west, east } = lonExtent(spec);
+  const lon = lonInStoreRange(point.lon, spec);
+  const firstLat = axisCoordinate(spec, "lat", 0);
+  const lastLat = axisCoordinate(spec, "lat", spec.dimensions.lat - 1);
+  const halfLat = Math.abs(spec.grid.latStep) / 2;
+  const south = Math.min(firstLat, lastLat) - halfLat;
+  const north = Math.max(firstLat, lastLat) + halfLat;
+  return lon >= west && lon <= east && point.lat >= south && point.lat <= north;
+}
+
+/**
+ * Snap a WGS-84 point to the nearest Zarr grid cell center. The cell's `lon`
+ * stays on the clicked side of the antimeridian, whatever the store's own
+ * longitude convention, so the map draws it under the pointer.
+ */
 export function geoPointToZarrGrid(
   point: GeoPoint,
   spec: GridSpec = DEFAULT_GRID_SPEC,
 ): GridCell {
   const { grid, dimensions } = spec;
-  const lon = snapToAxis(point.lon, grid.lonStart, grid.lonStep, dimensions.lon);
-  const lat = snapToAxis(point.lat, grid.latStart, grid.latStep, dimensions.lat);
+  const storeLon = lonInStoreRange(point.lon, spec);
+  const lon = snapToAxis(storeLon, grid.lonStart, grid.lonStep, dimensions.lon, spec.lonValues);
+  const lat = snapToAxis(point.lat, grid.latStart, grid.latStep, dimensions.lat, spec.latValues);
 
   return {
-    lon: lon.coordinate,
+    lon: lon.coordinate - (storeLon - point.lon),
     lat: lat.coordinate,
     lonIndex: lon.index,
     latIndex: lat.index,
@@ -94,10 +167,12 @@ export function chunkPatchBounds(
   const firstLonIdx = Math.floor(cell.lonIndex / chunkLon) * chunkLon;
   const lastLonIdx = Math.min(firstLonIdx + chunkLon, dimensions.lon) - 1;
 
-  const latEdgeA = grid.latStart + firstLatIdx * grid.latStep;
-  const latEdgeB = grid.latStart + lastLatIdx * grid.latStep;
-  const lonEdgeA = grid.lonStart + firstLonIdx * grid.lonStep;
-  const lonEdgeB = grid.lonStart + lastLonIdx * grid.lonStep;
+  // The cell's lon is in map space; shift the patch the same way.
+  const lonShift = cell.lon - axisCoordinate(spec, "lon", cell.lonIndex);
+  const latEdgeA = axisCoordinate(spec, "lat", firstLatIdx);
+  const latEdgeB = axisCoordinate(spec, "lat", lastLatIdx);
+  const lonEdgeA = axisCoordinate(spec, "lon", firstLonIdx) + lonShift;
+  const lonEdgeB = axisCoordinate(spec, "lon", lastLonIdx) + lonShift;
 
   const halfLon = Math.abs(grid.lonStep) / 2;
   const halfLat = Math.abs(grid.latStep) / 2;

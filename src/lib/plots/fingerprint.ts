@@ -1,7 +1,7 @@
 import {
   type ColormapId,
-  FINGERPRINT_HOUR_TICKS,
   fingerprintColorScale,
+  fingerprintSlotTicks,
   formatDayTick,
 } from "@/lib/map/fingerprintScale";
 import { getSelectedYearsDayMapping } from "@/lib/zarr/timeRange";
@@ -38,7 +38,7 @@ export const FINGERPRINT_STRIP_MAX = 280;
 const LABEL_FONT =
   "11px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
 
-export type FingerprintExtents = { negMax: number; posMax: number };
+export type FingerprintExtents = { negMax: number; posMax: number; pivot?: number };
 
 /** Hourly values grouped into columns of days, weeks, months or years. */
 export type FingerprintGrid = BinStats & {
@@ -324,7 +324,7 @@ export function drawFingerprint(
   const scale = fingerprintColorScale(colormapId);
   const cellColor = (col: number, hour: number) =>
     scale(
-      grid.mean[col * hoursPerDay + hour] as number,
+      (grid.mean[col * hoursPerDay + hour] as number) - (extents.pivot ?? 0),
       extents.negMax,
       extents.posMax,
     );
@@ -474,10 +474,10 @@ export function drawFingerprint(
       top + (fromTop * plotH) / hoursPerDay;
     ctx.textAlign = "right";
     ctx.textBaseline = "middle";
-    for (const hour of FINGERPRINT_HOUR_TICKS) {
-      const fromTop = hoursPerDay - 1 - hour;
+    for (const { slot, label } of fingerprintSlotTicks(hoursPerDay)) {
+      const fromTop = hoursPerDay - 1 - slot;
       ctx.fillText(
-        String(hour),
+        label,
         axisLeft - 6,
         (rowY(fromTop) + rowY(fromTop + 1)) / 2,
       );
@@ -505,9 +505,9 @@ export function drawFingerprint(
     }
     ctx.textAlign = "center";
     ctx.textBaseline = "top";
-    for (const hour of FINGERPRINT_HOUR_TICKS) {
-      const x = axisLeft + ((hour + 0.5) * plotW) / hoursPerDay;
-      ctx.fillText(String(hour), x, top + plotH + 4);
+    for (const { slot, label } of fingerprintSlotTicks(hoursPerDay)) {
+      const x = axisLeft + ((slot + 0.5) * plotW) / hoursPerDay;
+      ctx.fillText(label, x, top + plotH + 4);
     }
   }
 }

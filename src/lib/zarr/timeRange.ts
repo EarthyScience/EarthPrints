@@ -3,30 +3,75 @@ import type { AxisSlice } from "@/lib/zarr/chunks";
 
 export const DEFAULT_HISTORY_YEARS = 1;
 
-/** Days per native time chunk, matching the store's `[1461, 24, 40, 40]`. */
-export const NATIVE_TIME_CHUNK = 1461;
-
 /**
- * Calendar origin of the time axis, mirroring the store's time coordinate
- * (`units: "days since 2001-01-01"`). Kept as a constant alongside the other
- * hardcoded time facts; a day index maps to `origin + index days`.
+ * Calendar origin of the FLUXCOM-X time axis (`units: "days since
+ * 2001-01-01"`), and the default until another store is opened.
  */
 export const ZARR_TIME_ORIGIN_UTC = Date.UTC(2001, 0, 1);
 
 const MS_PER_DAY = 86_400_000;
 
+/** The time facts of the open store, as day indices from its origin. */
+export type ActiveTime = {
+  originMs: number;
+  totalDays: number;
+  /** Values per day; "hours" for FLUXCOM-X, 4 for a 6-hourly store. */
+  slotsPerDay: number;
+  years: number[];
+};
+
+function yearsOf(originMs: number, totalDays: number): number[] {
+  const first = new Date(originMs).getUTCFullYear();
+  const last = new Date(originMs + (totalDays - 1) * MS_PER_DAY).getUTCFullYear();
+  return Array.from({ length: last - first + 1 }, (_, i) => first + i);
+}
+
+const FLUXCOM_TIME: ActiveTime = {
+  originMs: ZARR_TIME_ORIGIN_UTC,
+  totalDays: ZARR_STORE.dimensions.time,
+  slotsPerDay: ZARR_STORE.dimensions.hour,
+  years: yearsOf(ZARR_TIME_ORIGIN_UTC, ZARR_STORE.dimensions.time),
+};
+
+// One store is open at a time, and every day index in the app is relative to
+// its origin. Module state rather than a prop, because the helpers below are
+// called from plots, exports and tooltips alike.
+let active: ActiveTime = FLUXCOM_TIME;
+
+export function setActiveTime(time: Omit<ActiveTime, "years"> | null): void {
+  active = time
+    ? { ...time, years: yearsOf(time.originMs, time.totalDays) }
+    : FLUXCOM_TIME;
+}
+
+export function activeTime(): ActiveTime {
+  return active;
+}
+
+/** Calendar years the open store has data for. */
+export function availableYears(): number[] {
+  return active.years;
+}
+
 /** Absolute day index (0 = origin) to its UTC calendar date. */
 export function dayIndexToUTCDate(absoluteDay: number): Date {
-  return new Date(ZARR_TIME_ORIGIN_UTC + absoluteDay * MS_PER_DAY);
+  return new Date(active.originMs + absoluteDay * MS_PER_DAY);
 }
 
 export const ZARR_TIME = {
-  totalDays: ZARR_STORE.dimensions.time,
-  hoursPerDay: ZARR_STORE.dimensions.hour,
+  get totalDays() {
+    return active.totalDays;
+  },
+  /** Values per day. Hours for hourly data, but 4 for 6-hourly, 1 for daily. */
+  get hoursPerDay() {
+    return active.slotsPerDay;
+  },
   defaultHistoryYears: DEFAULT_HISTORY_YEARS,
   /** Whole years covered by the archive (~21 for FLUXCOM-X NEE). */
-  maxHistoryYears: Math.ceil(ZARR_STORE.dimensions.time / 365.25),
-} as const;
+  get maxHistoryYears() {
+    return Math.ceil(active.totalDays / 365.25);
+  },
+};
 
 /** Map a "last N years" control value to a half-open day slice `[start, stop)`. */
 export function yearsToDayRange(
@@ -43,11 +88,6 @@ export function yearsToDayRange(
   return [start, stop];
 }
 
-export const ALL_AVAILABLE_YEARS = Array.from(
-  { length: 2021 - 2001 + 1 },
-  (_, index) => 2001 + index,
-);
-
 /** Convert a calendar year into an absolute `[startDay, stopDay)` slice. */
 export function yearToDateRange(
   year: number,
@@ -55,32 +95,13 @@ export function yearToDateRange(
 ): AxisSlice {
   const start = Math.max(
     0,
-    Math.round((Date.UTC(year, 0, 1) - ZARR_TIME_ORIGIN_UTC) / MS_PER_DAY),
+    Math.round((Date.UTC(year, 0, 1) - active.originMs) / MS_PER_DAY),
   );
   const stop = Math.min(
     totalDays,
-    Math.round((Date.UTC(year + 1, 0, 1) - ZARR_TIME_ORIGIN_UTC) / MS_PER_DAY),
+    Math.round((Date.UTC(year + 1, 0, 1) - active.originMs) / MS_PER_DAY),
   );
   return [start, stop];
-}
-
-/** Get the native temporal chunk index (0..N) containing the given year. */
-export function yearToTimeChunkIndex(
-  year: number,
-  chunkTime = 1461,
-): number {
-  const [start] = yearToDateRange(year);
-  return Math.floor(start / chunkTime);
-}
-
-/** Get all available calendar years that fall into a specific time chunk index. */
-export function timeChunkIndexToYears(
-  chunkIdx: number,
-  chunkTime = 1461,
-): number[] {
-  return ALL_AVAILABLE_YEARS.filter(
-    (year) => yearToTimeChunkIndex(year, chunkTime) === chunkIdx,
-  );
 }
 
 export function chunkIndexToStartDay(chunkIdx: number, chunkTime: number): number {

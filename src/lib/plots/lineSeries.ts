@@ -10,6 +10,7 @@ import {
   timeBins,
 } from "@/lib/plots/timeBins";
 import { getSelectedYearsDayMapping } from "@/lib/zarr/timeRange";
+import { formatSlotTime } from "@/lib/zarr/localTime";
 
 export type LineResolution = "hour" | Exclude<BinUnit, "year">;
 
@@ -37,9 +38,6 @@ export type LineSeries = {
   binCount: number;
 };
 
-function hourLabel(hour: number) {
-  return `${String(hour).padStart(2, "0")}:00`;
-}
 
 /** Keep the lowest and highest point of each slice, in time order. */
 export function keepExtremes<T extends { value: number }>(
@@ -107,8 +105,8 @@ export function lineSeries(
         points.push({
           x: day + (hour + 0.5) / hoursPerDay,
           value,
-          label: `${date} · ${hourLabel(hour)}${suffix}`,
-          shortLabel: `${date} ${hourLabel(hour)}`,
+          label: `${date} · ${formatSlotTime(hour, hoursPerDay)}${suffix}`,
+          shortLabel: `${date} ${formatSlotTime(hour, hoursPerDay)}`,
         });
       }
     }
@@ -125,7 +123,7 @@ export function lineSeries(
       const std = stats.std[b] as number;
       const across =
         resolution === "day"
-          ? `${count.toLocaleString()} hour${count === 1 ? "" : "s"}`
+          ? `${count.toLocaleString()} step${count === 1 ? "" : "s"}`
           : binCountLabel(count, "day");
       points.push({
         x: (bin.startLocal + bin.endLocal + 1) / 2,

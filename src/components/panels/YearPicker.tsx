@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import {
-  ALL_AVAILABLE_YEARS,
+  availableYears,
   formatSelectedYearsLabel,
 } from "@/lib/zarr/timeRange";
 import { Field, FieldDescription, FieldLabel } from "@/components/ui/field";
@@ -23,13 +23,18 @@ export function YearPicker({
 }: YearPickerProps) {
   const [lastClickedYear, setLastClickedYear] = useState<number | null>(null);
   const selected = new Set(selectedYears);
+  const years = availableYears();
+  // Two digits only while every year shares a century, or 1950 and 2050 collide.
+  const oneCentury =
+    years.length > 0 &&
+    Math.floor(years[0]! / 100) === Math.floor(years[years.length - 1]! / 100);
 
   const handleClick = (year: number, event: React.MouseEvent) => {
     if (event.shiftKey && lastClickedYear !== null) {
       const min = Math.min(lastClickedYear, year);
       const max = Math.max(lastClickedYear, year);
       setLastClickedYear(year);
-      onSelectYears(ALL_AVAILABLE_YEARS.filter((y) => y >= min && y <= max));
+      onSelectYears(years.filter((y) => y >= min && y <= max));
       return;
     }
 
@@ -50,8 +55,10 @@ export function YearPicker({
         Shift+click for a range. Outlined years are cached
         {cachedYears.size > 0 ? ` (${cachedYears.size})` : ""}.
       </FieldDescription>
-      <div className="grid grid-cols-7 gap-1">
-        {ALL_AVAILABLE_YEARS.map((year) => {
+      <div
+        className={`grid gap-1 ${oneCentury ? "grid-cols-7" : "grid-cols-5"} ${years.length > 42 ? "max-h-48 overflow-y-auto pr-1" : ""}`}
+      >
+        {years.map((year) => {
           const isSelected = selected.has(year);
           // Other years stay clickable mid-load so they can be dropped at once.
           const isLocked = isSelected && loading && selectedYears.length === 1;
@@ -67,7 +74,7 @@ export function YearPicker({
               aria-label={String(year)}
               className="aria-pressed:bg-brand/15 aria-pressed:text-brand"
             >
-              {year.toString().slice(2)}
+              {oneCentury ? year.toString().slice(2) : year}
             </Toggle>
           );
         })}

@@ -2,12 +2,14 @@ import type { jsPDF } from "jspdf";
 import {
   fingerprintColorScale,
   asymmetricExtents,
+  type ColorExtents,
   defaultColormapId,
   zeroFrac,
 } from "@/lib/map/fingerprintScale";
 import { formatSeriesValue } from "@/lib/plots/chartTheme";
 import { formatSelectedYearsLabel } from "@/lib/zarr/timeRange";
 import { formatTimeBasis } from "@/lib/zarr/localTime";
+import { activeSource } from "@/lib/zarr/activeSource";
 import type { CapturedImage } from "./capture";
 import { isoDate, type ExportProvenance } from "./provenance";
 
@@ -205,7 +207,7 @@ function drawPlot(
  */
 function drawLegend(
   doc: jsPDF,
-  { negMax, posMax }: { negMax: number; posMax: number },
+  { negMax, posMax, pivot: centre }: ColorExtents,
   y: number,
 ): number {
   // The report always renders light whatever theme the app is in, so it keeps a
@@ -245,8 +247,8 @@ function drawLegend(
   doc.setFont("courier", "normal");
   doc.setFontSize(7.5);
   doc.setTextColor(...INK_SOFT);
-  doc.text(formatSeriesValue(-negMax), MARGIN, y + barH - 0.3);
-  doc.text(formatSeriesValue(posMax), barX + barW + 3, y + barH - 0.3);
+  doc.text(formatSeriesValue(centre - negMax), MARGIN, y + barH - 0.3);
+  doc.text(formatSeriesValue(centre + posMax), barX + barW + 3, y + barH - 0.3);
 
   return y + barH + 4;
 }
@@ -322,7 +324,7 @@ export async function buildReportPdf({
     doc,
     assets.timeSeries,
     "Daily mean",
-    `${rowCount.toLocaleString()} hourly steps, ${prov.dayCount.toLocaleString()} daily means${
+    `${rowCount.toLocaleString()} ${activeSource().stepLabel} steps, ${prov.dayCount.toLocaleString()} daily means${
       prov.units ? ` - ${prov.units}` : ""
     }`,
     cursor,
@@ -333,7 +335,7 @@ export async function buildReportPdf({
     doc,
     assets.fingerprint,
     "Diurnal fingerprint",
-    `${prov.dayCount.toLocaleString()} days x ${prov.hoursPerDay} hours - ${formatTimeBasis(
+    `${prov.dayCount.toLocaleString()} days x ${prov.hoursPerDay} ${prov.hoursPerDay === 24 ? "hours" : "steps a day"} - ${formatTimeBasis(
       prov.timeBasis,
       prov.utcOffsetHours,
     )}${prov.units ? ` - ${prov.units}` : ""} - strips: mean +/-1 std per row and column`,
