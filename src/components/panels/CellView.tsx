@@ -1,5 +1,6 @@
 "use client";
 
+import { ZARR_STORE } from "@/lib/constants/store";
 import { useState } from "react";
 import { Collapsible } from "@base-ui/react/collapsible";
 import { ArrowLeftRight, ChevronDown } from "lucide-react";
@@ -132,10 +133,10 @@ export function formatResolution(degrees: number): string {
 }
 
 function emptyCellMessage(series: CellSeries): string {
-  const isFluxcom = !series.dataset || series.dataset.variable === "NEE";
+  const isFluxcom = !series.dataset || series.dataset.url === ZARR_STORE.url;
   return isFluxcom
     ? "No data at this cell. NEE is estimated over vegetated land, so ocean and bare-ground cells are empty. Pick a cell over land."
-    : "No data at this cell for the selected years. The dataset may not cover it, for example over ocean or outside its mask. Pick another cell or other years.";
+    : "No data at this cell for the selected years. The store leaves it empty, for example outside its land or ocean mask, or the years fall outside its record. Pick another cell or other years.";
 }
 
 const activeTriggerClass =
