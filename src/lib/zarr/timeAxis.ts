@@ -62,8 +62,15 @@ function startOfUtcDay(ms: number): number {
   return Math.floor(ms / MS_PER_DAY) * MS_PER_DAY;
 }
 
+/**
+ * Below this typical step a coarse-looking axis is daily data with gaps (a
+ * satellite product missing most days), not windows: each value keeps its
+ * own day instead of being spread over its neighbours'.
+ */
+const MIN_WINDOW_DAYS = 5;
+
 function spanFor(stepDays: number): TimeAxis["span"] {
-  if (stepDays < 1 + EPSILON) return "slot";
+  if (stepDays < MIN_WINDOW_DAYS) return "slot";
   if (stepDays >= 27.5 && stepDays <= 31.5) return "month";
   if (stepDays >= 360 && stepDays <= 367) return "year";
   return "days";

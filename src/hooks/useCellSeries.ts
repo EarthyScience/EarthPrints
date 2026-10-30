@@ -161,6 +161,7 @@ export function useCellSeries() {
   // Kept in refs so opening a store can re-snap and reload whatever is picked.
   const selectionRef = useRef<MapSelection | null>(null);
   const selectedYearsRef = useRef(selectedYears);
+  const pickedYearsRef = useRef(false);
   useEffect(() => {
     selectionRef.current = selection;
     selectedYearsRef.current = selectedYears;
@@ -212,7 +213,12 @@ export function useCellSeries() {
           setDatasetLoading(false);
           writeSourceToUrl(next, picks);
 
-          const years = defaultYears(next.time.years, selectedYearsRef.current);
+          // Years the reader picked carry over to the new store; the
+          // starting 2021 does not, so a store opens on its own last year.
+          const years = defaultYears(
+            next.time.years,
+            pickedYearsRef.current ? selectedYearsRef.current : [],
+          );
           setSelectedYears(years);
           const previous = selectionRef.current;
           if (previous) {
@@ -268,6 +274,7 @@ export function useCellSeries() {
 
   const selectYears = useCallback(
     (years: number[]) => {
+      pickedYearsRef.current = true;
       setSelectedYears(years);
       if (selection) void load(selection, years);
     },

@@ -97,3 +97,17 @@ describe("records before year 100", () => {
     expect(new Date(axis.originMs).getUTCFullYear()).toBe(1);
   });
 });
+
+describe("gappy daily records", () => {
+  it("keeps each value on its own day instead of spreading it", () => {
+    // Daily stamps with most days missing: the median step is 2 days.
+    const days = [0, 2, 4, 5, 8, 10, 12, 15, 16];
+    const times = Float64Array.from(days, (d) => Date.UTC(2019, 0, 1) + d * D);
+    const axis = buildTimeAxis(times);
+    expect(axis.span).toBe("slot");
+    expect(axis.stepLabel).toBe("daily");
+    const out = resampleToDays(axis, Float32Array.from(days), 0, [0, axis.totalDays]);
+    expect(Array.from(out).filter(Number.isFinite)).toHaveLength(days.length);
+    expect(Number.isNaN(out[1]!)).toBe(true);
+  });
+});
