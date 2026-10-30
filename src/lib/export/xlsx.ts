@@ -132,11 +132,15 @@ export async function buildSeriesWorkbook(
     },
     ...(marginSheets
       ? [
-          {
-            data: marginSheets.dailyCycle,
-            sheet: XLSX_DAILY_CYCLE_SHEET,
-            columns: statColumns,
-          },
+          ...(marginSheets.dailyCycle.length > 1
+            ? [
+                {
+                  data: marginSheets.dailyCycle,
+                  sheet: XLSX_DAILY_CYCLE_SHEET,
+                  columns: statColumns,
+                },
+              ]
+            : []),
           {
             data: marginSheets.seasonalCourse,
             sheet: XLSX_SEASONAL_COURSE_SHEET,

@@ -84,11 +84,16 @@ export type TooltipPoint = {
   spread?: string;
 };
 
+/**
+ * The difference in the variable's own units. A percentage means nothing for
+ * kelvin, degrees Celsius or a signed flux, and blows up near zero.
+ */
 function formatChange(point: TooltipPoint, base?: TooltipPoint) {
-  if (!base || base.value === 0 || !Number.isFinite(base.value)) return null;
-  if (!Number.isFinite(point.value)) return null;
-  const change = ((point.value - base.value) / Math.abs(base.value)) * 100;
-  return `${change >= 0 ? "+" : "−"}${Math.abs(change).toFixed(1)}% vs ${base.shortLabel}`;
+  if (!base || !Number.isFinite(base.value) || !Number.isFinite(point.value)) {
+    return null;
+  }
+  const change = point.value - base.value;
+  return `${change >= 0 ? "+" : "−"}${formatSeriesValue(Math.abs(change))} vs ${base.shortLabel}`;
 }
 
 function PointRows({

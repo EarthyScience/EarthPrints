@@ -135,7 +135,7 @@ export function lineSeries(
         band: [mean - std, mean + std],
         label: formatBinLabel(bin, resolution),
         shortLabel: formatBinShortLabel(bin, resolution),
-        spread: `Std ${formatSeriesValue(std)} across ${across}`,
+        spread: count > 1 ? `Std ${formatSeriesValue(std)} across ${across}` : undefined,
       });
     });
   }

@@ -73,3 +73,29 @@ describe("buildMarginTables", () => {
     expect(sheets.seasonalCourse[1]).toEqual(["2019-01-01", 12, expect.any(Number), 23]);
   });
 });
+
+describe("buildMarginTables for other time steps", () => {
+  const tablesFor = (hoursPerDay: number) => {
+    const prov = {
+      ...buildProvenance({
+        selection: SELECTION,
+        historyYears: 1,
+        selectedYears: [2019],
+        valueCount: 2 * hoursPerDay,
+        units: "K",
+        timeBasis: "utc",
+      }),
+      hoursPerDay,
+    };
+    const values = Float32Array.from({ length: 2 * hoursPerDay }, (_, i) => i);
+    return buildMarginTables(values, prov);
+  };
+
+  it("keys a 3-hourly cycle by the hour each slot starts", () => {
+    expect(tablesFor(8).dailyCycle.map((row) => row.key)).toEqual([0, 3, 6, 9, 12, 15, 18, 21]);
+  });
+
+  it("has no daily cycle for one value a day", () => {
+    expect(tablesFor(1).dailyCycle).toEqual([]);
+  });
+});
