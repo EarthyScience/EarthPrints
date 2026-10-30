@@ -516,8 +516,8 @@ export async function openDataset(
   if (!target) {
     throw new DatasetError(
       variables.length === 0 && typeof (ds.store as { contents?: unknown }).contents !== "function"
-        ? "This store has no consolidated metadata, so its arrays cannot be listed. Type the variable's name."
-        : "No array in this store has time, latitude and longitude dimensions.",
+        ? "This store does not list its arrays. Type the variable's name, for example t2m."
+        : "No array in this store has time, latitude and longitude dimensions. EarthPrints reads regular latitude and longitude grids; projected, curvilinear and unstructured grids are not supported yet.",
     );
   }
 
@@ -544,6 +544,13 @@ function storeErrorMessage(cause: unknown): string {
   }
   if (/not ?found|404/i.test(message)) {
     return "No Zarr metadata was found at this address. Check that it points at the store's root.";
+  }
+  const refused = /\b(401|403|409)\b/.exec(message);
+  if (refused) {
+    return `The server refused access (HTTP ${refused[1]}). The store is probably private or requester-pays, which a browser cannot open.`;
+  }
+  if (/json|unexpected token|syntax/i.test(message)) {
+    return "This address answered with something other than Zarr metadata. Check that it points at a Zarr store.";
   }
   return `The store could not be opened: ${message}`;
 }

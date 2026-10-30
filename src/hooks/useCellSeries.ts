@@ -22,9 +22,33 @@ import {
   type PatchWindowSize,
 } from "@/lib/settings/patchWindow";
 import { DEFAULT_GRID_SPEC } from "@/lib/constants/store";
-import type { GridSpec, MapSelection } from "@/types/map";
+import type { GeoPoint, GridSpec, MapSelection } from "@/types/map";
 
 export type SeriesProgress = { loaded: number; total: number };
+
+const OPEN_TIMEOUT_MS = 30_000;
+
+function withTimeout<T>(promise: Promise<T>, ms: number, message: string): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error(message)), ms);
+    promise.then(
+      (value) => {
+        clearTimeout(timer);
+        resolve(value);
+      },
+      (cause) => {
+        clearTimeout(timer);
+        reject(cause);
+      },
+    );
+  });
+}
+
+function selectionAt(click: GeoPoint, spec: GridSpec): MapSelection {
+  const grid = geoPointToZarrGrid(click, spec);
+  if (isPointInGrid(click, spec)) return { click, grid };
+  return { click, grid: { ...grid, lon: click.lon, lat: click.lat }, outside: true };
+}
 
 function activate(dataset: Dataset) {
   setActiveTime(dataset.time);
@@ -49,6 +73,8 @@ export function useCellSeries() {
   const [dataset, setDataset] = useState<Dataset | null>(null);
   const [datasetLoading, setDatasetLoading] = useState(true);
   const [datasetError, setDatasetError] = useState<string | null>(null);
+  /** The store last asked for, so a failed or slow open can still show it. */
+  const [requestedSource, setRequestedSource] = useState<SourceRequest | null>(null);
   const [extraIndices, setExtraIndices] = useState<Record<number, number>>({});
   const [gridSpec, setGridSpec] = useState<GridSpec>(DEFAULT_GRID_SPEC);
   const [selection, setSelection] = useState<MapSelection | null>(null);
@@ -87,8 +113,7 @@ export function useCellSeries() {
           setError("No dataset is open. Open one from the Data panel.");
           return;
         }
-        const spec = reader.getDataset()?.grid ?? DEFAULT_GRID_SPEC;
-        if (!isPointInGrid(nextSelection.click, spec)) {
+        if (nextSelection.outside) {
           setError("This point is outside the area the dataset covers. Pick a point inside it.");
           return;
         }
@@ -146,7 +171,11 @@ export function useCellSeries() {
   const startOpen = useCallback(
     (request: SourceRequest) => {
       const openId = ++openIdRef.current;
-      const promise = openDataset(request.url, request.variable).then(
+      const promise = withTimeout(
+        openDataset(request.url, request.variable),
+        OPEN_TIMEOUT_MS,
+        "The store did not answer within 30 seconds. It may be offline or very slow.",
+      ).then(
         ({ dataset: next, store }) => {
           const reader = new ZarrChunkReader(store, {
             dataset: next,
@@ -187,10 +216,7 @@ export function useCellSeries() {
           setSelectedYears(years);
           const previous = selectionRef.current;
           if (previous) {
-            const moved: MapSelection = {
-              click: previous.click,
-              grid: geoPointToZarrGrid(previous.click, next.grid),
-            };
+            const moved = selectionAt(previous.click, next.grid);
             setSelection(moved);
             void load(moved, years);
           }
@@ -210,13 +236,17 @@ export function useCellSeries() {
     (request: SourceRequest) => {
       setDatasetLoading(true);
       setDatasetError(null);
+      setRequestedSource(request);
       startOpen(request);
     },
     [startOpen],
   );
 
   useEffect(() => {
-    startOpen(readSourceFromUrl());
+    const request = readSourceFromUrl();
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- mirrors the address bar once on load
+    setRequestedSource(request);
+    startOpen(request);
   }, [startOpen]);
 
   useEffect(
@@ -228,10 +258,7 @@ export function useCellSeries() {
 
   const select = useCallback(
     (lon: number, lat: number): MapSelection => {
-      const nextSelection: MapSelection = {
-        click: { lon, lat },
-        grid: geoPointToZarrGrid({ lon, lat }, gridSpec),
-      };
+      const nextSelection = selectionAt({ lon, lat }, gridSpec);
       setSelection(nextSelection);
       void load(nextSelection, selectedYears);
       return nextSelection;
@@ -310,6 +337,7 @@ export function useCellSeries() {
     dataset,
     datasetLoading,
     datasetError,
+    requestedSource,
     openSource,
     extraIndices,
     setExtraIndex,

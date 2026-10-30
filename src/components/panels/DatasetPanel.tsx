@@ -57,20 +57,30 @@ function Facts({ dataset }: { dataset: Dataset }) {
 }
 
 export function DatasetPanel({ series, onClose }: DatasetPanelProps) {
-  const { dataset, datasetLoading, datasetError, openSource } = series;
-  const [url, setUrl] = useState(dataset?.url ?? "");
-  const [variable, setVariable] = useState("");
-  const [prevUrl, setPrevUrl] = useState(dataset?.url);
-  if (dataset?.url !== prevUrl) {
-    setPrevUrl(dataset?.url);
-    if (dataset) setUrl(dataset.url);
+  const { dataset, datasetLoading, datasetError, openSource, requestedSource } =
+    series;
+  // The field follows the store last asked for, so a link that failed or is
+  // still opening shows its address rather than an empty field.
+  const shownSource = requestedSource ?? dataset;
+  const [url, setUrl] = useState(shownSource?.url ?? "");
+  const [variable, setVariable] = useState(requestedSource?.variable ?? "");
+  const [prevSource, setPrevSource] = useState(shownSource);
+  if (shownSource !== prevSource) {
+    setPrevSource(shownSource);
+    if (shownSource) setUrl(dataset && !datasetError ? dataset.url : shownSource.url);
   }
-  const needsVariable = Boolean(datasetError?.includes("Type the variable"));
+  const [askedForVariable, setAskedForVariable] = useState(false);
+  const promptsForVariable = Boolean(
+    datasetError && /Type the variable|no array called/.test(datasetError),
+  );
+  if (promptsForVariable && !askedForVariable) setAskedForVariable(true);
+  if (dataset && !datasetError && askedForVariable) setAskedForVariable(false);
+  const needsVariable = promptsForVariable || askedForVariable;
 
   const submit = (event: React.FormEvent) => {
     event.preventDefault();
     if (!url.trim()) return;
-    openSource({ url, variable: needsVariable ? variable : null });
+    openSource({ url: url.trim(), variable: needsVariable ? variable : null });
   };
 
   return (
@@ -93,7 +103,7 @@ export function DatasetPanel({ series, onClose }: DatasetPanelProps) {
                 autoComplete="off"
                 inputMode="url"
               />
-              <Button type="submit" disabled={datasetLoading || !url.trim()}>
+              <Button type="submit" disabled={!url.trim()}>
                 {datasetLoading ? (
                   <LoaderCircle className="animate-spin" />
                 ) : null}
@@ -111,12 +121,16 @@ export function DatasetPanel({ series, onClose }: DatasetPanelProps) {
                 placeholder="e.g. t2m"
                 spellCheck={false}
                 autoComplete="off"
+                autoFocus
               />
             </Field>
           ) : null}
           {datasetError ? (
-            <Alert role="alert">
-              <AlertDescription>{datasetError}</AlertDescription>
+            <Alert role="alert" variant="destructive">
+              <AlertDescription>
+                {datasetError}
+                {dataset ? ` Still showing ${dataset.title}.` : ""}
+              </AlertDescription>
             </Alert>
           ) : null}
         </form>
@@ -205,7 +219,7 @@ export function DatasetPanel({ series, onClose }: DatasetPanelProps) {
                 <button
                   key={preset.url}
                   type="button"
-                  disabled={datasetLoading || current}
+                  disabled={current && !datasetError}
                   onClick={() => openSource(preset)}
                   className="grid gap-0.5 rounded-md px-2 py-1.5 text-left outline-none hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring/50 disabled:pointer-events-none aria-[current=true]:bg-brand/10"
                   aria-current={current}

@@ -172,6 +172,17 @@ describe("stores with other longitude conventions", () => {
     expect(isPointInGrid({ lon: 10, lat: 20 }, europe)).toBe(false);
   });
 
+  it("lets the outermost rows of a global grid reach the poles", () => {
+    // T63 Gaussian rows stop at 87.86 with a mean step of about 2.8.
+    const gaussian: GridSpec = {
+      ...spec0to360,
+      grid: { lonStart: 0, lonStep: 2.8125, latStart: -87.86, latStep: 2.79 },
+      dimensions: { ...spec0to360.dimensions, lat: 64, lon: 128 },
+    };
+    expect(isPointInGrid({ lon: 10, lat: -89.9 }, gaussian)).toBe(true);
+    expect(isPointInGrid({ lon: 10, lat: 89.9 }, gaussian)).toBe(true);
+  });
+
   it("snaps to the nearest centre of an uneven axis", () => {
     const gaussian: GridSpec = {
       ...spec0to360,

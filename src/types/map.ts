@@ -45,6 +45,11 @@ export type GridSpec = {
 export type MapSelection = {
   click: GeoPoint;
   grid: GridCell;
+  /**
+   * The click fell outside the store's grid. `grid` then carries the click's
+   * own coordinates for the title, and no cell is drawn.
+   */
+  outside?: boolean;
 };
 
 export type MapViewMode = "2d" | "sphere";

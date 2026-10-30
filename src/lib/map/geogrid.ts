@@ -78,9 +78,14 @@ export function isPointInGrid(point: GeoPoint, spec: GridSpec): boolean {
   const lon = lonInStoreRange(point.lon, spec);
   const firstLat = axisCoordinate(spec, "lat", 0);
   const lastLat = axisCoordinate(spec, "lat", spec.dimensions.lat - 1);
-  const halfLat = Math.abs(spec.grid.latStep) / 2;
-  const south = Math.min(firstLat, lastLat) - halfLat;
-  const north = Math.max(firstLat, lastLat) + halfLat;
+  const step = Math.abs(spec.grid.latStep);
+  // The outermost row of a global grid stands for the cap up to the pole,
+  // which a Gaussian grid's uneven rows stop short of by up to a step.
+  const reachesPole = (edge: number) => 90 - Math.abs(edge) < step * 1.5;
+  const southRow = Math.min(firstLat, lastLat);
+  const northRow = Math.max(firstLat, lastLat);
+  const south = reachesPole(southRow) && southRow < 0 ? -90 : southRow - step / 2;
+  const north = reachesPole(northRow) && northRow > 0 ? 90 : northRow + step / 2;
   return lon >= west && lon <= east && point.lat >= south && point.lat <= north;
 }
 

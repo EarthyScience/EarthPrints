@@ -149,7 +149,9 @@ export function ReliefMap() {
     (lon: number, lat: number, options?: { fly?: boolean }) => {
       const selection = series.select(lon, lat);
       if (!showsData) setOpenPanel("chart");
-      if (options?.fly ?? settings.autoZoom) flyToCell(selection.grid);
+      if (!selection.outside && (options?.fly ?? settings.autoZoom)) {
+        flyToCell(selection.grid);
+      }
     },
     [flyToCell, series, settings.autoZoom, showsData],
   );
@@ -314,7 +316,7 @@ export function ReliefMap() {
           attributionControl={false}
           style={{ width: "100%", height: "100%" }}
         >
-          {selection && mapSize.width > 0 && mapSize.height > 0 ? (
+          {selection && !selection.outside && mapSize.width > 0 && mapSize.height > 0 ? (
             <GlobeSelectionOverlay
               cell={selection.grid}
               gridSpec={series.gridSpec}
