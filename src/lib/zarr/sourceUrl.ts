@@ -75,11 +75,18 @@ export function writeSourceToUrl(
 
 /**
  * Keep the years already picked where the new store has them, otherwise
- * start on its last year.
+ * start on its last year up to the present.
  */
-export function defaultYears(available: number[], current: number[]): number[] {
+export function defaultYears(
+  available: number[],
+  current: number[],
+  thisYear = new Date().getUTCFullYear(),
+): number[] {
   const kept = current.filter((year) => available.includes(year));
   if (kept.length > 0) return kept;
-  const last = available.at(-1);
+  // Stores often allocate their time axis years ahead (ERA5 runs to 2050),
+  // and those years hold no data yet.
+  const past = available.filter((year) => year <= thisYear);
+  const last = past.at(-1) ?? available.at(-1);
   return last === undefined ? [] : [last];
 }

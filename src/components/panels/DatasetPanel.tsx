@@ -8,6 +8,11 @@ import type { Dataset } from "@/lib/zarr/dataset";
 import type { CellSeries } from "@/hooks/useCellSeries";
 import { FloatingPanel } from "@/components/panels/FloatingPanel";
 import { formatResolution } from "@/components/panels/CellView";
+import {
+  formatLatitude,
+  formatLongitude,
+  regionalExtent,
+} from "@/lib/map/geogrid";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import {
@@ -43,7 +48,14 @@ function Facts({ dataset }: { dataset: Dataset }) {
     ["Grid", `${formatResolution(grid.spatialResolutionDeg)} · ${grid.dimensions.lat.toLocaleString()} × ${grid.dimensions.lon.toLocaleString()} cells`],
     ["Time", `${time.stepLabel} · ${formatSelectedYearsLabel(time.years)}`],
   ];
-  if (dataset.units) rows.push(["Units", dataset.units]);
+  const extent = regionalExtent(grid);
+  if (extent) {
+    rows.push([
+      "Coverage",
+      `${formatLatitude(extent.south, 1)} to ${formatLatitude(extent.north, 1)}, ${formatLongitude(extent.west > 180 ? extent.west - 360 : extent.west, 1)} to ${formatLongitude(extent.east > 180 ? extent.east - 360 : extent.east, 1)}`,
+    ]);
+  }
+  rows.push(["Units", dataset.units ?? "not given in the store"]);
   return (
     <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-sm">
       {rows.map(([term, value]) => (
@@ -66,10 +78,17 @@ export function DatasetPanel({ series, onClose }: DatasetPanelProps) {
   const [variable, setVariable] = useState(
     requestedSource?.variable ?? dataset?.variable ?? "",
   );
-  const [prevSource, setPrevSource] = useState(shownSource);
-  if (shownSource !== prevSource) {
-    setPrevSource(shownSource);
-    if (shownSource) setUrl(dataset && !datasetError ? dataset.url : shownSource.url);
+  // A new request shows its own address; a store that then opens shows the
+  // root it resolved to. A failed open leaves the requested address alone.
+  const [prevRequest, setPrevRequest] = useState(requestedSource);
+  const [prevDataset, setPrevDataset] = useState(dataset);
+  if (requestedSource !== prevRequest) {
+    setPrevRequest(requestedSource);
+    if (requestedSource) setUrl(requestedSource.url);
+  }
+  if (dataset !== prevDataset) {
+    setPrevDataset(dataset);
+    if (dataset) setUrl(dataset.url);
   }
   const [askedForVariable, setAskedForVariable] = useState(false);
   const promptsForVariable = Boolean(

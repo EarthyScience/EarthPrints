@@ -7,6 +7,7 @@ import { openDataset, type Dataset } from "@/lib/zarr/dataset";
 import { setActiveSource } from "@/lib/zarr/activeSource";
 import { setActiveTime, yearToDateRange } from "@/lib/zarr/timeRange";
 import { samplesInDays } from "@/lib/zarr/timeAxis";
+import { hasFiniteValues } from "@/lib/zarr/series";
 import {
   defaultYears,
   readSourceFromUrl,
@@ -28,7 +29,14 @@ export type SeriesProgress = { loaded: number; total: number };
 
 const OPEN_TIMEOUT_MS = 30_000;
 
-function withTimeout<T>(promise: Promise<T>, ms: number, message: string): Promise<T> {
+/** Empty default years tried before reporting a cell as empty. */
+const MAX_STEPS_BACK = 2;
+
+function withTimeout<T>(
+  promise: Promise<T>,
+  ms: number,
+  message: string,
+): Promise<T> {
   return new Promise<T>((resolve, reject) => {
     const timer = setTimeout(() => reject(new Error(message)), ms);
     promise.then(
@@ -47,7 +55,11 @@ function withTimeout<T>(promise: Promise<T>, ms: number, message: string): Promi
 function selectionAt(click: GeoPoint, spec: GridSpec): MapSelection {
   const grid = geoPointToZarrGrid(click, spec);
   if (isPointInGrid(click, spec)) return { click, grid };
-  return { click, grid: { ...grid, lon: click.lon, lat: click.lat }, outside: true };
+  return {
+    click,
+    grid: { ...grid, lon: click.lon, lat: click.lat },
+    outside: true,
+  };
 }
 
 function activate(dataset: Dataset) {
@@ -74,7 +86,9 @@ export function useCellSeries() {
   const [datasetLoading, setDatasetLoading] = useState(true);
   const [datasetError, setDatasetError] = useState<string | null>(null);
   /** The store last asked for, so a failed or slow open can still show it. */
-  const [requestedSource, setRequestedSource] = useState<SourceRequest | null>(null);
+  const [requestedSource, setRequestedSource] = useState<SourceRequest | null>(
+    null,
+  );
   const [extraIndices, setExtraIndices] = useState<Record<number, number>>({});
   const [gridSpec, setGridSpec] = useState<GridSpec>(DEFAULT_GRID_SPEC);
   const [selection, setSelection] = useState<MapSelection | null>(null);
@@ -87,13 +101,30 @@ export function useCellSeries() {
   const [error, setError] = useState<string | null>(null);
   const [values, setValues] = useState<Float32Array | null>(null);
   /** Days a partial load could cover, offered when the full one is refused. */
-  const [partialOffer, setPartialOffer] = useState<{ days: number; bytes: number } | null>(null);
+  const [partialOffer, setPartialOffer] = useState<{
+    days: number;
+    bytes: number;
+  } | null>(null);
   /** Days a partial load did cover, from the start of the selection. */
   const [coveredDays, setCoveredDays] = useState<number | null>(null);
   const [units, setUnits] = useState<string | null>(null);
 
+  const pickedYearsRef = useRef(false);
+  const retryRef = useRef<
+    (
+      selection: MapSelection,
+      years: number[],
+      partial: boolean,
+      stepsBack: number,
+    ) => void
+  >(() => {});
   const load = useCallback(
-    async (nextSelection: MapSelection, years: number[], partial = false) => {
+    async (
+      nextSelection: MapSelection,
+      years: number[],
+      partial = false,
+      stepsBack = 0,
+    ) => {
       const requestId = ++requestIdRef.current;
       seriesAbortRef.current?.abort();
       const abort = new AbortController();
@@ -114,7 +145,9 @@ export function useCellSeries() {
           return;
         }
         if (nextSelection.outside) {
-          setError("This point is outside the area the dataset covers. Pick a point inside it.");
+          setError(
+            "This point is outside the area the dataset covers. Pick a point inside it.",
+          );
           return;
         }
         setCachedYears(new Set(reader.getCachedYears(nextSelection.grid)));
@@ -133,6 +166,25 @@ export function useCellSeries() {
 
         if (requestId !== requestIdRef.current) return;
 
+        // One variable can end before the store's axis does (ESDC GPP stops
+        // a year early), so an untouched default year that comes back empty
+        // steps back to an earlier one.
+        if (
+          !pickedYearsRef.current &&
+          years.length === 1 &&
+          stepsBack < MAX_STEPS_BACK &&
+          !hasFiniteValues(result.values)
+        ) {
+          const earlier = (reader.getDataset()?.time.years ?? [])
+            .filter((year) => year < years[0]!)
+            .at(-1);
+          if (earlier !== undefined) {
+            setSelectedYears([earlier]);
+            retryRef.current(nextSelection, [earlier], partial, stepsBack + 1);
+            return;
+          }
+        }
+
         setValues(result.values);
         setCoveredDays(result.coveredDays ?? null);
         setUnits(result.units ?? null);
@@ -141,7 +193,10 @@ export function useCellSeries() {
         if (requestId !== requestIdRef.current) return;
         if (cause instanceof Error && cause.name === "AbortError") return;
         if (cause instanceof SeriesBudgetError && cause.partialDays > 0) {
-          setPartialOffer({ days: cause.partialDays, bytes: cause.partialBytes });
+          setPartialOffer({
+            days: cause.partialDays,
+            bytes: cause.partialBytes,
+          });
         }
         setError(
           cause instanceof Error
@@ -158,10 +213,14 @@ export function useCellSeries() {
     [],
   );
 
+  useEffect(() => {
+    retryRef.current = (selection, years, partial, stepsBack) =>
+      void load(selection, years, partial, stepsBack);
+  }, [load]);
+
   // Kept in refs so opening a store can re-snap and reload whatever is picked.
   const selectionRef = useRef<MapSelection | null>(null);
   const selectedYearsRef = useRef(selectedYears);
-  const pickedYearsRef = useRef(false);
   useEffect(() => {
     selectionRef.current = selection;
     selectedYearsRef.current = selectedYears;
@@ -176,23 +235,21 @@ export function useCellSeries() {
         openDataset(request.url, request.variable),
         OPEN_TIMEOUT_MS,
         "The store did not answer within 30 seconds. It may be offline or very slow.",
-      ).then(
-        ({ dataset: next, store }) => {
-          const reader = new ZarrChunkReader(store, {
-            dataset: next,
-            windowSize: patchWindowRef.current,
-            maxBytes: cacheBytesFor(patchWindowRef.current, deviceCacheBytes()),
-          });
-          const picks: Record<number, number> = {};
-          for (const dim of next.layout.extras) {
-            const wanted = request.picks?.[dim.name] ?? 0;
-            const index = Math.min(Math.max(0, wanted), dim.size - 1);
-            picks[dim.axis] = index;
-            reader.setExtraIndex(dim.axis, index);
-          }
-          return { next, reader, picks };
-        },
-      );
+      ).then(({ dataset: next, store }) => {
+        const reader = new ZarrChunkReader(store, {
+          dataset: next,
+          windowSize: patchWindowRef.current,
+          maxBytes: cacheBytesFor(patchWindowRef.current, deviceCacheBytes()),
+        });
+        const picks: Record<number, number> = {};
+        for (const dim of next.layout.extras) {
+          const wanted = request.picks?.[dim.name] ?? 0;
+          const index = Math.min(Math.max(0, wanted), dim.size - 1);
+          picks[dim.axis] = index;
+          reader.setExtraIndex(dim.axis, index);
+        }
+        return { next, reader, picks };
+      });
 
       readerPromiseRef.current = promise
         .then(({ reader }) => reader)
@@ -231,7 +288,9 @@ export function useCellSeries() {
           if (openId !== openIdRef.current) return;
           setDatasetLoading(false);
           setDatasetError(
-            cause instanceof Error ? cause.message : "The store could not be opened.",
+            cause instanceof Error
+              ? cause.message
+              : "The store could not be opened.",
           );
         });
     },
@@ -319,7 +378,10 @@ export function useCellSeries() {
       savePatchWindow(size);
       // Cached entries are cut to the old window and cannot be reused.
       setCachedYears(new Set());
-      readerRef.current?.setWindowSize(size, cacheBytesFor(size, deviceCacheBytes()));
+      readerRef.current?.setWindowSize(
+        size,
+        cacheBytesFor(size, deviceCacheBytes()),
+      );
       if (selection) void load(selection, selectedYears);
     },
     [load, selectedYears, selection],
@@ -331,14 +393,17 @@ export function useCellSeries() {
     if (!dataset) return null;
     // A store with its own hour axis holds a day's slots in each time sample.
     const perSample = dataset.time.hourAxis ? dataset.time.slotsPerDay : 1;
-    return perSample * selectedYears.reduce(
-      (sum, year) =>
-        sum +
-        samplesInDays(
-          dataset.time,
-          yearToDateRange(year, dataset.time.totalDays),
-        ),
-      0,
+    return (
+      perSample *
+      selectedYears.reduce(
+        (sum, year) =>
+          sum +
+          samplesInDays(
+            dataset.time,
+            yearToDateRange(year, dataset.time.totalDays),
+          ),
+        0,
+      )
     );
   }, [dataset, selectedYears]);
 

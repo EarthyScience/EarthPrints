@@ -10,7 +10,7 @@ import type { Map as MapLibreMap, MapLibreEvent } from "maplibre-gl";
 import { ArrowLeft, Maximize2, X } from "lucide-react";
 import "maplibre-gl/dist/maplibre-gl.css";
 import "@/lib/map/initMaplibre";
-import { geoPointToZarrGrid } from "@/lib/map/geogrid";
+import { geoPointToZarrGrid, regionalExtent } from "@/lib/map/geogrid";
 import {
   readConnectionHint,
   shouldWarmCache,
@@ -128,6 +128,25 @@ export function ReliefMap() {
   );
 
   useEffect(() => () => detachWheelZoomRef.current?.(), []);
+
+  // A regional store opens framed on its area, so the first click lands in it.
+  const framedStoreRef = useRef<string | null>(null);
+  useEffect(() => {
+    const dataset = series.dataset;
+    const map = mapRef.current;
+    if (!dataset || !map || framedStoreRef.current === dataset.url) return;
+    framedStoreRef.current = dataset.url;
+    const extent = regionalExtent(dataset.grid);
+    if (!extent || series.selection) return;
+    const shift = extent.west >= 180 ? -360 : 0;
+    map.fitBounds(
+      [
+        [extent.west + shift, extent.south],
+        [extent.east + shift, extent.north],
+      ],
+      { padding: 64, duration: SELECTION_FOCUS_TRANSITION_MS },
+    );
+  }, [series.dataset, series.selection]);
 
   const flyToCell = useCallback(
     (cell: GridCell) => {

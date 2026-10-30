@@ -54,11 +54,28 @@ export function axisCoordinate(
 }
 
 /** The store's lon range, edge to edge, in its own convention (-180..180 or 0..360). */
-function lonExtent(spec: GridSpec): { west: number; east: number } {
+export function lonExtent(spec: GridSpec): { west: number; east: number } {
   const first = axisCoordinate(spec, "lon", 0);
   const last = axisCoordinate(spec, "lon", spec.dimensions.lon - 1);
   const half = Math.abs(spec.grid.lonStep) / 2;
   return { west: Math.min(first, last) - half, east: Math.max(first, last) + half };
+}
+
+/**
+ * The area a store covers, edge to edge, or null for a global grid, which
+ * needs no outline or framing.
+ */
+export function regionalExtent(
+  spec: GridSpec,
+): { west: number; east: number; south: number; north: number } | null {
+  const { west, east } = lonExtent(spec);
+  const first = axisCoordinate(spec, "lat", 0);
+  const last = axisCoordinate(spec, "lat", spec.dimensions.lat - 1);
+  const half = Math.abs(spec.grid.latStep) / 2;
+  const south = Math.max(-90, Math.min(first, last) - half);
+  const north = Math.min(90, Math.max(first, last) + half);
+  const global = east - west >= 355 && north - south >= 150;
+  return global ? null : { west, east, south, north };
 }
 
 /**
