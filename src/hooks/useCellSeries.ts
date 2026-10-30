@@ -322,7 +322,9 @@ export function useCellSeries() {
   // says nothing about how many values the store holds for these years.
   const stepCount = useMemo(() => {
     if (!dataset) return null;
-    return selectedYears.reduce(
+    // A store with its own hour axis holds a day's slots in each time sample.
+    const perSample = dataset.time.hourAxis ? dataset.time.slotsPerDay : 1;
+    return perSample * selectedYears.reduce(
       (sum, year) =>
         sum +
         samplesInDays(

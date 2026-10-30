@@ -95,7 +95,7 @@ export function DataView({
         aria-hidden="true"
         className="pointer-events-none fixed inset-x-0 top-0 z-10 h-25 bg-linear-to-b from-editor-bg-depth from-55% to-transparent opacity-0 max-md:hidden"
       />
-      <div className="mx-auto grid max-w-7xl gap-6 px-3 pt-28 pb-40 md:px-6 md:pt-20 md:pb-60">
+      <div className="mx-auto grid max-w-7xl gap-6 px-3 pt-28 pb-40 md:px-6 md:pt-20 md:pb-60 lg:pr-[max(1.5rem,calc(14rem_-_max(0px,(100vw_-_80rem)/2)))]">
         {selection ? (
           <div className="grid items-start gap-6 lg:grid-cols-[340px_minmax(0,1fr)] lg:grid-rows-[auto_1fr] lg:gap-y-3">
             <Card className="lg:col-start-1 lg:row-start-1">
