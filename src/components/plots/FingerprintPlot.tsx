@@ -14,7 +14,9 @@ import {
 } from "@/lib/plots/chartTheme";
 import {
   drawFingerprint,
+  columnLabel,
   fingerprintGrid,
+  rowLabel,
   type FingerprintLayout,
   FINGERPRINT_STRIP,
   FINGERPRINT_STRIP_MAX,
@@ -28,10 +30,9 @@ import {
 import {
   binCountLabel,
   type BinUnit,
-  formatBinLabel,
   formatBinShortLabel,
 } from "@/lib/plots/timeBins";
-import { formatSlotTime, shortTimeBasis } from "@/lib/zarr/localTime";
+import { shortTimeBasis } from "@/lib/zarr/localTime";
 import { useTheme } from "@/providers/ThemeProvider";
 import {
   anchorBesidePanel,
@@ -279,6 +280,11 @@ export function FingerprintPlot({
     setHover(target ? { target, left, top, flip, anchor } : null);
   };
 
+  const rows = grid.hoursPerDay;
+  const seasonal = grid.seasonal !== undefined;
+  const suffix =
+    timeBasisLabel && !seasonal ? ` ${shortTimeBasis(timeBasisLabel)}` : "";
+
   const stripPointAt = (
     kind: "column" | "hour",
     index: number,
@@ -290,21 +296,22 @@ export function FingerprintPlot({
     const std = formatSeriesValue(stats.std[index] as number);
     if (kind === "column") {
       const bin = grid.bins[index]!;
+      const across = seasonal
+        ? binCountLabel(count, "year")
+        : `${count} ${rows === 1 ? "day" : "step"}${count === 1 ? "" : "s"}`;
       return {
-        label: formatBinLabel(bin, scale),
-        shortLabel: formatBinShortLabel(bin, scale),
+        label: columnLabel(grid, index),
+        shortLabel: seasonal
+          ? columnLabel(grid, index)
+          : formatBinShortLabel(bin, scale),
         value: stats.mean[index] as number,
-        spread:
-          count > 0
-            ? `Std ${std} across ${count} ${hoursPerDay === 1 ? "day" : "step"}${count === 1 ? "" : "s"}`
-            : undefined,
+        spread: count > 0 ? `Std ${std} across ${across}` : undefined,
       };
     }
-    const time = formatSlotTime(index, hoursPerDay);
-    const suffix = timeBasisLabel ? ` ${shortTimeBasis(timeBasisLabel)}` : "";
+    const row = rowLabel(grid, index);
     return {
-      label: `${time}${suffix}`,
-      shortLabel: time,
+      label: `${row}${suffix}`,
+      shortLabel: row,
       value: stats.mean[index] as number,
       spread:
         count > 0 ? `Std ${std} across ${binCountLabel(count, scale)}` : undefined,
@@ -318,14 +325,15 @@ export function FingerprintPlot({
   ): TooltipPoint | undefined => {
     const bin = grid.bins[col];
     if (!bin || hour < 0) return undefined;
-    const at = col * hoursPerDay + hour;
+    const at = col * rows + hour;
     const count = grid.count[at] ?? 0;
-    const time = formatSlotTime(hour, hoursPerDay);
-    const suffix = timeBasisLabel ? ` ${shortTimeBasis(timeBasisLabel)}` : "";
+    const row = rowLabel(grid, hour);
+    const column = columnLabel(grid, col);
+    const columnShort = seasonal ? column : formatBinShortLabel(bin, scale);
     return {
-      label: `${formatBinLabel(bin, scale)} · ${time}${suffix}`,
+      label: seasonal ? `${column} ${row}` : `${column} · ${row}${suffix}`,
       shortLabel:
-        short === "time" ? time : `${formatBinShortLabel(bin, scale)} ${time}`,
+        short === "time" ? row : seasonal ? `${column} ${row}` : `${columnShort} ${row}`,
       value: grid.mean[at] as number,
       spread:
         scale !== "day" && count > 0
@@ -344,7 +352,7 @@ export function FingerprintPlot({
     if (target.kind === "hour") return stripPointAt("hour", target.hour - 1);
     return target.hour > 0
       ? pointAt(target.col, target.hour - 1, "time")
-      : pointAt(target.col - 1, hoursPerDay - 1, "full");
+      : pointAt(target.col - 1, rows - 1, "full");
   };
   // A change against a pin only reads sensibly between like targets.
   const comparable = (a: Hover, b: Hover) => a.target.kind === b.target.kind;
@@ -501,13 +509,12 @@ export function FingerprintPlot({
         </div>
       </div>
       <p className="text-muted-foreground">
-        {binCountLabel(nCols, scale)} × {hoursPerDay}{" "}
-        {hoursPerDay === 24
-          ? "hours"
-          : hoursPerDay === 1
-            ? "step a day"
-            : "steps a day"}
-        {timeBasisLabel ? ` · ${timeBasisLabel}` : ""}
+        {grid.seasonal
+          ? `${binCountLabel(grid.seasonal.years.length, "year")} × ${binCountLabel(nCols, scale)} of the year`
+          : `${binCountLabel(nCols, scale)} × ${rows} ${
+              rows === 24 ? "hours" : rows === 1 ? "step a day" : "steps a day"
+            }`}
+        {timeBasisLabel && !grid.seasonal ? ` · ${timeBasisLabel}` : ""}
         {units ? ` · ${units}` : ""}
         {margins ? " · strips show the mean ±1 std of each row and column" : ""}
       </p>

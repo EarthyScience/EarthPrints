@@ -15,11 +15,15 @@ import {
 import {
   binHourGrid,
   type BinStats,
+  emptyStats,
+  formatBinLabel,
   monthStartTicks,
   type BinUnit,
   type TimeBin,
   timeBins,
+  WEEKS_PER_YEAR,
 } from "@/lib/plots/timeBins";
+import { formatSlotTime } from "@/lib/zarr/localTime";
 
 const AXIS_LEFT_DEFAULT = 34;
 const AXIS_LEFT_TRANSPOSED = 54;
@@ -44,8 +48,21 @@ export type FingerprintExtents = { negMax: number; posMax: number; pivot?: numbe
 export type FingerprintGrid = BinStats & {
   unit: BinUnit;
   bins: TimeBin[];
+  /** Rows: slots of the day, or the selected years for a seasonal grid. */
   hoursPerDay: number;
   margins: FingerprintMargins;
+  /**
+   * With one value a day or fewer there is no daily cycle to show, so the
+   * rows are the selected years and each column is one position in the year
+   * (a day, week or month), the usual year by season heatmap.
+   */
+  seasonal?: { years: number[] };
+};
+
+const SEASON_COLUMNS: Record<Exclude<BinUnit, "year">, number> = {
+  day: 366,
+  week: WEEKS_PER_YEAR,
+  month: 12,
 };
 
 export function fingerprintGrid(
@@ -53,6 +70,7 @@ export function fingerprintGrid(
   hoursPerDay: number,
   selectedYears: number[] | null,
   unit: BinUnit = "day",
+  layout: "auto" | "hours" = "auto",
 ): FingerprintGrid {
   const nDays = Math.floor(values.length / hoursPerDay);
   const { absoluteDays } = getSelectedYearsDayMapping(
@@ -61,6 +79,9 @@ export function fingerprintGrid(
     nDays,
   );
   const bins = timeBins(absoluteDays.slice(0, nDays), unit);
+  if (hoursPerDay === 1 && unit !== "year" && layout === "auto") {
+    return seasonGrid(values, bins, unit);
+  }
   const stats = binHourGrid(values, hoursPerDay, bins);
   return {
     ...stats,
@@ -69,6 +90,85 @@ export function fingerprintGrid(
     hoursPerDay,
     margins: fingerprintMargins(stats.mean, bins.length, hoursPerDay),
   };
+}
+
+function seasonGrid(
+  values: Float32Array,
+  bins: TimeBin[],
+  unit: Exclude<BinUnit, "year">,
+): FingerprintGrid {
+  const means = binHourGrid(values, 1, bins);
+  const years = [...new Set(bins.map((bin) => bin.year))];
+  const nRows = years.length;
+  const nCols = SEASON_COLUMNS[unit];
+  const stats = emptyStats(nCols * nRows);
+  stats.mean.fill(NaN);
+  stats.std.fill(NaN);
+  const columns: TimeBin[] = Array.from({ length: nCols }, (_, index) => ({
+    year: years[0]!,
+    index,
+    startLocal: -1,
+    endLocal: -1,
+    firstDay: NaN,
+    lastDay: NaN,
+  }));
+  bins.forEach((bin, b) => {
+    const at = bin.index * nRows + years.indexOf(bin.year);
+    stats.mean[at] = means.mean[b]!;
+    stats.std[at] = means.std[b]!;
+    stats.count[at] = means.count[b]!;
+    const column = columns[bin.index]!;
+    if (!Number.isFinite(column.firstDay)) {
+      column.firstDay = bin.firstDay;
+      column.lastDay = bin.lastDay;
+    }
+  });
+  return {
+    ...stats,
+    unit,
+    bins: columns,
+    hoursPerDay: nRows,
+    margins: fingerprintMargins(stats.mean, nCols, nRows),
+    seasonal: { years },
+  };
+}
+
+const SHORT_MONTHS = [
+  "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+  "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+] as const;
+
+/** A position in the year, without the year: "Jun", "week 23", "13 Jun". */
+function seasonLabel(index: number, unit: BinUnit): string {
+  if (unit === "month") return SHORT_MONTHS[index] ?? "";
+  if (unit === "week") return `week ${index + 1}`;
+  // Day of year in a leap year, so all 366 positions have a date.
+  const date = new Date(Date.UTC(2000, 0, 1 + index));
+  return `${date.getUTCDate()} ${SHORT_MONTHS[date.getUTCMonth()]}`;
+}
+
+/** The label of one column, for tooltips. */
+export function columnLabel(grid: FingerprintGrid, col: number): string {
+  const bin = grid.bins[col];
+  if (!bin) return "";
+  return grid.seasonal ? seasonLabel(col, grid.unit) : formatBinLabel(bin, grid.unit);
+}
+
+/** The label of one row: a time of day, or a year in a seasonal grid. */
+export function rowLabel(grid: FingerprintGrid, row: number): string {
+  return grid.seasonal
+    ? String(grid.seasonal.years[row] ?? "")
+    : formatSlotTime(row, grid.hoursPerDay);
+}
+
+/** Rows worth a label on the row axis. */
+function rowTicks(grid: FingerprintGrid): { slot: number; label: string }[] {
+  if (!grid.seasonal) return fingerprintSlotTicks(grid.hoursPerDay);
+  const { years } = grid.seasonal;
+  const step = Math.max(1, Math.ceil(years.length / 6));
+  return years.flatMap((year, slot) =>
+    slot % step === 0 ? [{ slot, label: String(year) }] : [],
+  );
 }
 
 export type FingerprintLayout = {
@@ -129,6 +229,19 @@ function yearBreaks(bins: readonly TimeBin[]): number[] {
 /** Tick positions in columns, measured from the plot's leading edge. */
 function columnAxisTicks({ grid }: FingerprintLayout) {
   const { bins } = grid;
+  if (grid.seasonal) {
+    // Every other month start, as a column position in this grid's unit.
+    return [0, 2, 4, 6, 8, 10].map((month) => {
+      const dayOfYear = (Date.UTC(2000, month, 1) - Date.UTC(2000, 0, 1)) / 86_400_000;
+      const at =
+        grid.unit === "month"
+          ? month + 0.5
+          : grid.unit === "week"
+            ? dayOfYear / 7
+            : dayOfYear;
+      return { at, label: SHORT_MONTHS[month]! };
+    });
+  }
   const breaks = yearBreaks(bins);
   if (breaks.length > 0 || grid.unit === "year") {
     const starts = [0, ...breaks];
@@ -470,7 +583,7 @@ export function drawFingerprint(
       top + (fromTop * plotH) / hoursPerDay;
     ctx.textAlign = "right";
     ctx.textBaseline = "middle";
-    for (const { slot, label } of fingerprintSlotTicks(hoursPerDay)) {
+    for (const { slot, label } of rowTicks(grid)) {
       const fromTop = hoursPerDay - 1 - slot;
       ctx.fillText(
         label,
@@ -501,7 +614,7 @@ export function drawFingerprint(
     }
     ctx.textAlign = "center";
     ctx.textBaseline = "top";
-    for (const { slot, label } of fingerprintSlotTicks(hoursPerDay)) {
+    for (const { slot, label } of rowTicks(grid)) {
       const x = axisLeft + ((slot + 0.5) * plotW) / hoursPerDay;
       ctx.fillText(label, x, top + plotH + 4);
     }

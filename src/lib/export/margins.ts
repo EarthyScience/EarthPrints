@@ -40,7 +40,7 @@ export function buildMarginTables(
   values: Float32Array,
   prov: ExportProvenance,
 ): MarginTables {
-  const grid = fingerprintGrid(values, prov.hoursPerDay, prov.selectedYears);
+  const grid = fingerprintGrid(values, prov.hoursPerDay, prov.selectedYears, "day", "hours");
   return {
     dailyCycle: rowsOf(grid.margins.byHour, (hour) => hour),
     seasonalCourse: rowsOf(grid.margins.byColumn, (col) =>
