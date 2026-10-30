@@ -27,4 +27,16 @@ describe("canonicalizeChunk", () => {
       NaN,
     ]);
   });
+
+  it("reads stored values outside the CF valid range as missing", () => {
+    const out = canonicalizeChunk(
+      Int16Array.from([100, 32000, -32000, 200]),
+      [4, 1, 1],
+      [1, 1, 1],
+      { time: 0, hour: -1, lat: 1, lon: 2, fixed: [] },
+      { localLatStart: 0, localLatCount: 1, localLonStart: 0, localLonCount: 1 },
+      { scale: 0.01, offset: 300, fill: [], validMin: -30000, validMax: 30000 },
+    );
+    expect(Array.from(out.data)).toEqual([301, NaN, NaN, 302]);
+  });
 });

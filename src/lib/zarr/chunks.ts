@@ -325,6 +325,9 @@ export type ChunkDecode = {
   scale: number;
   offset: number;
   fill: number[];
+  /** CF valid range, in the stored (packed) units; values outside are missing. */
+  validMin?: number;
+  validMax?: number;
 };
 
 /**
@@ -353,7 +356,14 @@ export function canonicalizeChunk(
   const latStride = stride[plan.lat] ?? 0;
   const lonStride = stride[plan.lon] ?? 0;
   const fill = decode.fill;
-  const plain = decode.scale === 1 && decode.offset === 0 && fill.length === 0;
+  const validMin = decode.validMin ?? -Infinity;
+  const validMax = decode.validMax ?? Infinity;
+  const plain =
+    decode.scale === 1 &&
+    decode.offset === 0 &&
+    fill.length === 0 &&
+    validMin === -Infinity &&
+    validMax === Infinity;
 
   let cursor = 0;
   for (let t = 0; t < timeCount; t++) {
@@ -365,7 +375,10 @@ export function canonicalizeChunk(
           const raw = Number(data[index]);
           out[cursor++] = plain
             ? raw
-            : Number.isNaN(raw) || fill.includes(raw)
+            : Number.isNaN(raw) ||
+                fill.includes(raw) ||
+                raw < validMin ||
+                raw > validMax
               ? NaN
               : raw * decode.scale + decode.offset;
           index += lonStride;

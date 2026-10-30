@@ -24,11 +24,16 @@ export type DatasetLayout = {
   extras: ExtraDim[];
 };
 
-/** CF packing: `value = raw * scale + offset`, with `fill` read as missing. */
+/**
+ * CF packing: `value = raw * scale + offset`, with `fill` and anything outside
+ * `validMin`..`validMax` read as missing.
+ */
 export type DatasetDecode = {
   scale: number;
   offset: number;
   fill: number[];
+  validMin?: number;
+  validMax?: number;
 };
 
 export type VariableInfo = {
@@ -180,19 +185,60 @@ async function readCoordinate(
   const group = parentPath(variablePath);
   const candidates = [group ? `${group}/${name}` : name, name];
   for (const path of [...new Set(candidates)]) {
+    let array: OpenedArray;
     try {
-      const array = await openArray(ds, path);
-      if (array.shape.length !== 1) continue;
-      const result = await zarr.get(array);
+      array = await openArray(ds, path);
+    } catch {
+      continue;
+    }
+    if (array.shape.length !== 1) continue;
+    try {
+      const result = await zarr.get(array, null, {
+        createQueue: () => limitedQueue(COORDINATE_FETCHES),
+      });
       return {
         values: toNumbers(result.data as ArrayLike<unknown>),
         attrs: array.attrs as Record<string, unknown>,
       };
-    } catch {
-      // Not there; try the next place.
+    } catch (cause) {
+      throw new DatasetError(
+        `The "${name}" coordinate could not be read: ${cause instanceof Error ? cause.message : String(cause)}`,
+      );
     }
   }
   return null;
+}
+
+/**
+ * Parallel chunk reads for one coordinate. Some stores split a time axis into
+ * a thousand tiny chunks, and starting them all at once runs the browser out
+ * of connections.
+ */
+const COORDINATE_FETCHES = 8;
+
+function limitedQueue(limit: number) {
+  const results: Promise<void>[] = [];
+  const waiting: (() => void)[] = [];
+  let running = 0;
+  const next = () => {
+    running--;
+    waiting.shift()?.();
+  };
+  return {
+    add(fn: () => Promise<void>) {
+      results.push(
+        new Promise<void>((resolve, reject) => {
+          const start = () => {
+            running++;
+            fn().then(resolve, reject).finally(next);
+          };
+          if (running < limit) start();
+          else waiting.push(start);
+        }),
+      );
+    },
+    onIdle: () => Promise.all(results),
+  };
 }
 
 type Axis1D = { start: number; step: number; values: Float64Array | null };
@@ -225,10 +271,18 @@ function decodeFor(array: OpenedArray): DatasetDecode {
   if (Array.isArray(missing)) missing.forEach(add);
   else add(missing);
 
+  const range = Array.isArray(attrs.valid_range) ? attrs.valid_range : null;
+  const validMin =
+    numberAttr(attrs, "valid_min") ?? (typeof range?.[0] === "number" ? range[0] : null);
+  const validMax =
+    numberAttr(attrs, "valid_max") ?? (typeof range?.[1] === "number" ? range[1] : null);
+
   return {
     scale: numberAttr(attrs, "scale_factor") ?? 1,
     offset: numberAttr(attrs, "add_offset") ?? 0,
     fill: [...fill],
+    ...(validMin !== null && { validMin }),
+    ...(validMax !== null && { validMax }),
   };
 }
 
