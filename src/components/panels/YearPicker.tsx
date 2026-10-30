@@ -25,10 +25,13 @@ export function YearPicker({
   const selected = new Set(selectedYears);
   const years = availableYears();
   // Two digits only while every year shares a century, or 1950 and 2050
-  // collide, and only for a full grid: a lone "20" does not read as a year.
+  // collide, and only for a short full grid: a lone "20", a "00" or a long
+  // run of two-digit buttons does not read as years.
   const oneCentury =
     years.length > 7 &&
+    years.length <= 25 &&
     years[0]! >= 1000 &&
+    years[0]! % 100 !== 0 &&
     Math.floor(years[0]! / 100) === Math.floor(years[years.length - 1]! / 100);
 
   // Long records scroll; keep the first selected year in view.

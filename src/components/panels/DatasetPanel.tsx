@@ -96,7 +96,10 @@ export function DatasetPanel({ series, onClose }: DatasetPanelProps) {
   const [prevDataset, setPrevDataset] = useState(dataset);
   if (requestedSource !== prevRequest) {
     setPrevRequest(requestedSource);
-    if (requestedSource) setUrl(requestedSource.url);
+    if (requestedSource) {
+      setUrl(requestedSource.url);
+      setVariable(requestedSource.variable ?? "");
+    }
   }
   // Typing since the last Open wins over a store that finishes opening late.
   const [edited, setEdited] = useState(false);
