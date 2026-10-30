@@ -232,14 +232,43 @@ export async function openZarrStore(url: string = ZARR_STORE.url) {
   const raw = new zarr.FetchStore(url, { fetch: progressFetch });
   // Stores without consolidated metadata still open; they just cannot list
   // their arrays.
-  const consolidated = await zarr.withMaybeConsolidatedMetadata(raw);
+  // Asking for the format up front saves a v3 store the round of v2 probes
+  // (.zmetadata, .zgroup, .zarray) that each log a 404 in the console.
+  const isV3 = (await raw.get("/zarr.json")) !== undefined;
+  const consolidated = await zarr.withMaybeConsolidatedMetadata(raw, {
+    format: isV3 ? "v3" : "v2",
+  });
   const store = zarr.withByteCaching(consolidated, { keyFor: metadataOnlyKey });
   return {
     store,
     root: zarr.root(store),
     // The decode worker opens its own store against the same dataset.
     url,
+    version: (isV3 ? "v3" : "v2") as "v2" | "v3",
   };
+}
+
+type VersionedRoot<S extends zarr.Readable> = {
+  root: zarr.Location<S>;
+  version: "v2" | "v3";
+};
+
+/**
+ * Open nodes in the store's own format. Left to guess, zarrita probes the
+ * other format first and each miss logs a 404 in the console.
+ */
+export function openArrayNode<S extends zarr.Readable>(
+  ds: VersionedRoot<S>,
+  path: string,
+) {
+  const location = ds.root.resolve(path);
+  return ds.version === "v3"
+    ? zarr.open.v3(location, { kind: "array" })
+    : zarr.open.v2(location, { kind: "array" });
+}
+
+export function openRootNode<S extends zarr.Readable>(ds: VersionedRoot<S>) {
+  return ds.version === "v3" ? zarr.open.v3(ds.root) : zarr.open.v2(ds.root);
 }
 
 /**

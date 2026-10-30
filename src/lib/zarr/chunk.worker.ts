@@ -1,10 +1,10 @@
 /// <reference lib="webworker" />
-import * as zarr from "zarrita";
 import type { LocalBlock } from "@/lib/zarr/chunks";
 import { readPatch, type ChunkSource, type PatchRequest } from "@/lib/zarr/patch";
 import {
   createByteProgressSink,
   isAbortError,
+  openArrayNode,
   openZarrStore,
   withRequestContext,
   type ZarrStore,
@@ -84,7 +84,7 @@ function getArray(url: string, variable: string): Promise<ChunkSource> {
   if (existing) return existing;
 
   const promise = getStore(url)
-    .then((ds) => zarr.open(ds.root.resolve(variable), { kind: "array" }))
+    .then((ds) => openArrayNode(ds, variable))
     .then((array) => array as unknown as ChunkSource)
     .catch((error) => {
       arrayPromises.delete(key);

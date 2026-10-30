@@ -1,7 +1,12 @@
 import * as zarr from "zarrita";
 import { ZARR_STORE } from "@/lib/constants/store";
 import { decodeCfTimes } from "@/lib/zarr/cfTime";
-import { openZarrStore, type ZarrStore } from "@/lib/zarr/store";
+import {
+  openArrayNode,
+  openRootNode,
+  openZarrStore,
+  type ZarrStore,
+} from "@/lib/zarr/store";
 import { buildTimeAxis, type TimeAxis } from "@/lib/zarr/timeAxis";
 import type { GridSpec } from "@/types/map";
 
@@ -131,7 +136,7 @@ function baseName(path: string): string {
 }
 
 async function openArray(ds: ZarrStore, path: string): Promise<OpenedArray> {
-  return zarr.open(ds.root.resolve(path), { kind: "array" });
+  return openArrayNode(ds, path);
 }
 
 function dimensionNames(array: OpenedArray): string[] | null {
@@ -535,9 +540,13 @@ export async function openDataset(
 
   let target = variable?.trim().replace(/^\/+|\/+$/g, "") || null;
 
-  // A link straight to an array: open its parent and pick the array.
+  // A link straight to an array: open its parent and pick the array. A store
+  // that lists its root as a group needs no probe.
+  const listing = (ds.store as { contents?: () => { path: string; kind: string }[] })
+    .contents?.();
+  const rootIsGroup = listing?.some((node) => node.path === "/" && node.kind === "group");
   try {
-    const node = await zarr.open(ds.root);
+    const node = rootIsGroup ? { kind: "group" } : await openRootNode(ds);
     if (node.kind === "array") {
       const parent = url.slice(0, url.lastIndexOf("/"));
       target = target ?? baseName(url);
