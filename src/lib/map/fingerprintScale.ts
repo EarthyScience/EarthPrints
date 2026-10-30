@@ -318,6 +318,17 @@ export type ColorExtents = {
  * `negMax` and `posMax` are both positive: a half with no data gets a tiny
  * sentinel (1e-10) to avoid a division-by-zero degenerate state.
  */
+/**
+ * An extent for a half of the ramp with no data. It keeps the scale away from
+ * dividing by zero, but labels must print it as nothing.
+ */
+export const EMPTY_HALF = 1e-10;
+
+/** An extent as a label should use it: an empty half reads as zero. */
+export function labelExtent(extent: number): number {
+  return extent <= EMPTY_HALF ? 0 : extent;
+}
+
 /** Share of the data range below which values of the other sign count as noise. */
 const ONE_SIDED_NOISE = 0.02;
 
@@ -334,15 +345,15 @@ export function asymmetricExtents(values: ArrayLike<number>): ColorExtents {
     sum += v;
     count++;
   }
-  if (count === 0) return { negMax: 1e-10, posMax: 1e-10, pivot: 0 };
+  if (count === 0) return { negMax: EMPTY_HALF, posMax: EMPTY_HALF, pivot: 0 };
 
   const width = max - min;
   const farFromZero = min > 0 ? min > width : max < 0 ? -max > width : false;
   if (farFromZero) {
     const pivot = sum / count;
     return {
-      negMax: Math.max(1e-10, pivot - min),
-      posMax: Math.max(1e-10, max - pivot),
+      negMax: Math.max(EMPTY_HALF, pivot - min),
+      posMax: Math.max(EMPTY_HALF, max - pivot),
       pivot,
     };
   }
@@ -351,8 +362,8 @@ export function asymmetricExtents(values: ArrayLike<number>): ColorExtents {
   // uses one half only, with the noise clamped to the neutral centre.
   const noise = ONE_SIDED_NOISE * width;
   return {
-    negMax: -min <= noise ? 1e-10 : -min,
-    posMax: max <= noise ? 1e-10 : max,
+    negMax: -min <= noise ? EMPTY_HALF : -min,
+    posMax: max <= noise ? EMPTY_HALF : max,
     pivot: 0,
   };
 }

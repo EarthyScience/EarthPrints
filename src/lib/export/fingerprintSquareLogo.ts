@@ -6,6 +6,7 @@ import {
   dayIndexTicks,
   formatDayTick,
   fingerprintSlotTicks,
+  labelExtent,
 } from "@/lib/map/fingerprintScale";
 import { formatSeriesValue } from "@/lib/plots/chartTheme";
 import {
@@ -404,8 +405,8 @@ export function buildSquareFingerprintCanvas(
   const legendNumFontSize = standardFontSize;
   // Both extents are real data values, so the two ends of the bar carry
   // different magnitudes whenever uptake and release do.
-  const maxVal = extents.posMax;
-  const minVal = -extents.negMax;
+  const maxVal = labelExtent(extents.posMax);
+  const minVal = -labelExtent(extents.negMax);
   const maxLabel =
     extents.pivot === 0
       ? `+${formatSeriesValue(maxVal)}`

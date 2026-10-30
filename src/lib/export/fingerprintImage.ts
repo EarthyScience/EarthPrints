@@ -2,6 +2,7 @@ import {
   type ColormapId,
   fingerprintRampSamples,
   zeroFrac,
+  labelExtent,
 } from "@/lib/map/fingerprintScale";
 import { chartTickColor, formatSeriesValue } from "@/lib/plots/chartTheme";
 import type { CapturedImage } from "./capture";
@@ -52,8 +53,8 @@ function drawLegend(
 
   // Units ride on the upper end. The on-screen legend leaves them to the
   // caption below it, which a standalone image does not have.
-  const min = formatSeriesValue(centre - negMax);
-  const max = `${formatSeriesValue(centre + posMax)}${units ? ` ${units}` : ""}`;
+  const min = formatSeriesValue(centre - labelExtent(negMax));
+  const max = `${formatSeriesValue(centre + labelExtent(posMax))}${units ? ` ${units}` : ""}`;
   const minW = ctx.measureText(min).width;
   const maxW = ctx.measureText(max).width;
   const middle = top + BAR_H / 2;

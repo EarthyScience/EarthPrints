@@ -5,6 +5,7 @@ import {
   type ColorExtents,
   defaultColormapId,
   zeroFrac,
+  labelExtent,
 } from "@/lib/map/fingerprintScale";
 import { formatSeriesValue } from "@/lib/plots/chartTheme";
 import { formatSelectedYearsLabel } from "@/lib/zarr/timeRange";
@@ -247,8 +248,8 @@ function drawLegend(
   doc.setFont("courier", "normal");
   doc.setFontSize(7.5);
   doc.setTextColor(...INK_SOFT);
-  doc.text(formatSeriesValue(centre - negMax), MARGIN, y + barH - 0.3);
-  doc.text(formatSeriesValue(centre + posMax), barX + barW + 3, y + barH - 0.3);
+  doc.text(formatSeriesValue(centre - labelExtent(negMax)), MARGIN, y + barH - 0.3);
+  doc.text(formatSeriesValue(centre + labelExtent(posMax)), barX + barW + 3, y + barH - 0.3);
 
   return y + barH + 4;
 }

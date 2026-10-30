@@ -6,6 +6,7 @@ import {
   COLORMAPS,
   type ColormapId,
   fingerprintColorScale,
+  labelExtent,
 } from "@/lib/map/fingerprintScale";
 import {
   formatSeriesValue,
@@ -484,7 +485,7 @@ export function FingerprintPlot({
         />
         <div className="relative h-4 text-xs text-muted-foreground tabular-nums">
           <span className="absolute left-0">
-            {formatSeriesValue(extents.pivot - extents.negMax)}
+            {formatSeriesValue(extents.pivot - labelExtent(extents.negMax))}
           </span>
           {legend.zeroPct > 12 && legend.zeroPct < 88 ? (
             <span
@@ -495,7 +496,7 @@ export function FingerprintPlot({
             </span>
           ) : null}
           <span className="absolute right-0">
-            {formatSeriesValue(extents.pivot + extents.posMax)}
+            {formatSeriesValue(extents.pivot + labelExtent(extents.posMax))}
           </span>
         </div>
       </div>
