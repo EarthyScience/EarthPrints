@@ -12,6 +12,8 @@
  * spread through the year instead of piling up on the 31sts.
  */
 
+import { utcMs } from "@/lib/zarr/utc";
+
 const MS_PER_DAY = 86_400_000;
 
 export type CalendarName =
@@ -41,11 +43,8 @@ export function normalizeCalendar(calendar: unknown): CalendarName | null {
 
 type Civil = { year: number; month: number; day: number };
 
-/** `Date.UTC` reads years 0 to 99 as 1900 to 1999; model runs start at year 1. */
 function utcMidnight(year: number, month: number, day: number): number {
-  const date = new Date(0);
-  date.setUTCFullYear(year, month - 1, day);
-  return date.getTime();
+  return utcMs(year, month - 1, day);
 }
 
 function isGregorianLeap(year: number): boolean {

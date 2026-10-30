@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   availableYears,
   formatSelectedYearsLabel,
@@ -24,10 +24,28 @@ export function YearPicker({
   const [lastClickedYear, setLastClickedYear] = useState<number | null>(null);
   const selected = new Set(selectedYears);
   const years = availableYears();
-  // Two digits only while every year shares a century, or 1950 and 2050 collide.
+  // Two digits only while every year shares a century, or 1950 and 2050
+  // collide, and only for a full grid: a lone "20" does not read as a year.
   const oneCentury =
-    years.length > 0 &&
+    years.length > 7 &&
+    years[0]! >= 1000 &&
     Math.floor(years[0]! / 100) === Math.floor(years[years.length - 1]! / 100);
+
+  // Long records scroll; keep the first selected year in view.
+  const gridRef = useRef<HTMLDivElement>(null);
+  const firstSelected = selectedYears.length > 0 ? Math.min(...selectedYears) : null;
+  useEffect(() => {
+    const grid = gridRef.current;
+    if (!grid || firstSelected === null) return;
+    const button = grid.querySelector<HTMLElement>(
+      `[aria-label="${firstSelected}"]`,
+    );
+    if (!button) return;
+    const top = button.offsetTop;
+    if (top < grid.scrollTop || top + button.offsetHeight > grid.scrollTop + grid.clientHeight) {
+      grid.scrollTop = top - grid.clientHeight / 2;
+    }
+  }, [firstSelected, years.length]);
 
   const handleClick = (year: number, event: React.MouseEvent) => {
     if (event.shiftKey && lastClickedYear !== null) {
@@ -56,7 +74,8 @@ export function YearPicker({
         {cachedYears.size > 0 ? ` (${cachedYears.size})` : ""}.
       </FieldDescription>
       <div
-        className={`grid gap-1 ${oneCentury ? "grid-cols-7" : "grid-cols-5"} ${years.length > 42 ? "max-h-48 overflow-y-auto pr-1" : ""}`}
+        ref={gridRef}
+        className={`relative grid gap-1 ${oneCentury ? "grid-cols-7" : "grid-cols-5"} ${years.length > 42 ? "max-h-48 overflow-y-auto pr-1" : ""}`}
       >
         {years.map((year) => {
           const isSelected = selected.has(year);

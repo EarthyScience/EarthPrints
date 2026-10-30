@@ -1,4 +1,5 @@
 import type { AxisSlice } from "@/lib/zarr/chunks";
+import { utcMs } from "@/lib/zarr/utc";
 
 const MS_PER_DAY = 86_400_000;
 const EPSILON = 1e-6;
@@ -76,15 +77,15 @@ function originFor(
 ): number {
   const date = new Date(firstMs);
   if (span === "days") {
-    const yearStart = Date.UTC(date.getUTCFullYear(), 0, 1);
+    const yearStart = utcMs(date.getUTCFullYear(), 0, 1);
     return startOfUtcDay(
       Math.max(yearStart, firstMs - (stepDays / 2) * MS_PER_DAY),
     );
   }
   if (span === "month") {
-    return Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), 1);
+    return utcMs(date.getUTCFullYear(), date.getUTCMonth(), 1);
   }
-  if (span === "year") return Date.UTC(date.getUTCFullYear(), 0, 1);
+  if (span === "year") return utcMs(date.getUTCFullYear(), 0, 1);
   return startOfUtcDay(firstMs);
 }
 
@@ -128,12 +129,12 @@ export function buildTimeAxis(
     const last = new Date(lastMs);
     const coveredUntil =
       span === "month"
-        ? Date.UTC(last.getUTCFullYear(), last.getUTCMonth() + 1, 1)
+        ? utcMs(last.getUTCFullYear(), last.getUTCMonth() + 1, 1)
         : span === "year"
-          ? Date.UTC(last.getUTCFullYear() + 1, 0, 1)
+          ? utcMs(last.getUTCFullYear() + 1, 0, 1)
           : Math.min(
               lastMs + (stepDays / 2) * MS_PER_DAY,
-              Date.UTC(last.getUTCFullYear() + 1, 0, 1),
+              utcMs(last.getUTCFullYear() + 1, 0, 1),
             );
     totalDays = Math.max(1, Math.ceil((coveredUntil - originMs) / MS_PER_DAY - EPSILON));
   }
@@ -178,8 +179,8 @@ export function sampleRangeForDays(axis: TimeAxis, [d0, d1]: AxisSlice): AxisSli
 function yearBounds(axis: TimeAxis, pos: number): [number, number] {
   const year = new Date(axis.originMs + pos * MS_PER_DAY).getUTCFullYear();
   return [
-    (Date.UTC(year, 0, 1) - axis.originMs) / MS_PER_DAY,
-    (Date.UTC(year + 1, 0, 1) - axis.originMs) / MS_PER_DAY,
+    (utcMs(year, 0, 1) - axis.originMs) / MS_PER_DAY,
+    (utcMs(year + 1, 0, 1) - axis.originMs) / MS_PER_DAY,
   ];
 }
 
@@ -198,8 +199,8 @@ function coverRange(axis: TimeAxis, index: number): [number, number] {
     const m = date.getUTCMonth();
     const [from, to] =
       axis.span === "month"
-        ? [Date.UTC(y, m, 1), Date.UTC(y, m + 1, 1)]
-        : [Date.UTC(y, 0, 1), Date.UTC(y + 1, 0, 1)];
+        ? [utcMs(y, m, 1), utcMs(y, m + 1, 1)]
+        : [utcMs(y, 0, 1), utcMs(y + 1, 0, 1)];
     return [(from - axis.originMs) / MS_PER_DAY, (to - axis.originMs) / MS_PER_DAY];
   }
   const half = axis.stepDays / 2;

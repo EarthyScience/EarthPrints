@@ -1,5 +1,6 @@
 import { ZARR_STORE } from "@/lib/constants/store";
 import type { AxisSlice } from "@/lib/zarr/chunks";
+import { utcMs } from "@/lib/zarr/utc";
 
 export const DEFAULT_HISTORY_YEARS = 1;
 
@@ -7,7 +8,7 @@ export const DEFAULT_HISTORY_YEARS = 1;
  * Calendar origin of the FLUXCOM-X time axis (`units: "days since
  * 2001-01-01"`), and the default until another store is opened.
  */
-export const ZARR_TIME_ORIGIN_UTC = Date.UTC(2001, 0, 1);
+export const ZARR_TIME_ORIGIN_UTC = utcMs(2001, 0, 1);
 
 const MS_PER_DAY = 86_400_000;
 
@@ -95,11 +96,11 @@ export function yearToDateRange(
 ): AxisSlice {
   const start = Math.max(
     0,
-    Math.round((Date.UTC(year, 0, 1) - active.originMs) / MS_PER_DAY),
+    Math.round((utcMs(year, 0, 1) - active.originMs) / MS_PER_DAY),
   );
   const stop = Math.min(
     totalDays,
-    Math.round((Date.UTC(year + 1, 0, 1) - active.originMs) / MS_PER_DAY),
+    Math.round((utcMs(year + 1, 0, 1) - active.originMs) / MS_PER_DAY),
   );
   return [start, stop];
 }

@@ -86,3 +86,14 @@ describe("samplesInDays", () => {
     expect(axis.years).toEqual([2001]);
   });
 });
+
+describe("records before year 100", () => {
+  it("keeps year 1 as year 1", async () => {
+    const { decodeCfTimes } = await import("@/lib/zarr/cfTime");
+    const times = decodeCfTimes([0, 31, 59], "days since 0001-01-15", "noleap")!;
+    const axis = buildTimeAxis(times);
+    expect(axis.span).toBe("month");
+    expect(axis.years).toEqual([1]);
+    expect(new Date(axis.originMs).getUTCFullYear()).toBe(1);
+  });
+});

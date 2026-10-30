@@ -532,9 +532,25 @@ export async function openDataset(
     dataset: {
       ...described,
       url,
-      title: stringAttr(rootAttrs, "title") ?? baseName(url).replace(/\.zarr$/i, ""),
+      title: storeTitle(rootAttrs, url),
     },
   };
+}
+
+/**
+ * The store's own title, else the CMIP facets ("CESM2 · piControl ·
+ * r1i1p1f1"), else the last part of the address that is not a version tag.
+ */
+function storeTitle(attrs: Record<string, unknown>, url: string): string {
+  const title = stringAttr(attrs, "title");
+  if (title) return title;
+  const facets = ["source_id", "experiment_id", "variant_label"]
+    .map((key) => stringAttr(attrs, key))
+    .filter((value): value is string => Boolean(value));
+  if (facets.length >= 2) return facets.join(" · ");
+  const parts = url.split("/").filter(Boolean);
+  const named = parts.reverse().find((part) => !/^v\d{6,}$/.test(part)) ?? url;
+  return named.replace(/\.zarr$/i, "");
 }
 
 function storeErrorMessage(cause: unknown): string {

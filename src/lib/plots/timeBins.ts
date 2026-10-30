@@ -1,4 +1,5 @@
 import { dayIndexToUTCDate } from "@/lib/zarr/timeRange";
+import { utcMs } from "@/lib/zarr/utc";
 
 export type BinUnit = "day" | "week" | "month" | "year";
 
@@ -38,7 +39,7 @@ function binKey(absoluteDay: number, unit: BinUnit) {
   if (unit === "year") return { year, index: 0 };
   if (unit === "month") return { year, index: date.getUTCMonth() };
   const dayOfYear = Math.round(
-    (date.getTime() - Date.UTC(year, 0, 1)) / MS_PER_DAY,
+    (date.getTime() - utcMs(year, 0, 1)) / MS_PER_DAY,
   );
   if (unit === "day") return { year, index: dayOfYear };
   // The last week also takes day 365 (and 366 in leap years).
