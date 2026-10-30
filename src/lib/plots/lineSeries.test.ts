@@ -32,7 +32,7 @@ describe("lineSeries", () => {
     expect(points).toHaveLength(365);
     expect(points[0]).toMatchObject({ label: "2019-01-01", x: 0.5 });
     expect(points[0]!.value).toBeCloseTo(11.5);
-    expect(points[0]!.band![1] - points[0]!.value).toBeCloseTo(
+    expect(points[0]!.band![1] - points[0]!.value!).toBeCloseTo(
       Math.sqrt((24 * 24 - 1) / 12),
     );
   });
@@ -59,5 +59,15 @@ describe("lineSeries", () => {
     const { ticks, yearBreaks } = lineSeries(twoYears, 24, [2003, 2010], "day");
     expect(yearBreaks).toEqual([365]);
     expect(ticks.map((tick) => tick.label)).toEqual(["2003", "2010"]);
+  });
+});
+
+describe("lineSeries gaps", () => {
+  it("breaks the line over missing days instead of bridging them", () => {
+    const values = Float32Array.from({ length: 10 }, (_, day) => (day >= 3 && day < 6 ? NaN : day));
+    const { points } = lineSeries(values, 1, [2019], "day");
+    const gaps = points.filter((point) => point.value === null);
+    expect(gaps).toHaveLength(1);
+    expect(points.filter((point) => point.value !== null)).toHaveLength(7);
   });
 });

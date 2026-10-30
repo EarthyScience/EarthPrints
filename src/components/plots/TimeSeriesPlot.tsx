@@ -61,7 +61,7 @@ type Readout = TooltipAnchor & PinPosition & { index: number };
 const sameDay = (a: Readout, b: Readout) => a.index === b.index;
 
 function tooltipPoint(point: LinePoint | undefined): TooltipPoint | undefined {
-  if (!point) return undefined;
+  if (!point || point.value === null) return undefined;
   const { label, shortLabel, value, spread } = point;
   return { label, shortLabel, value, spread };
 }
@@ -110,6 +110,7 @@ export function TimeSeriesPlot({
     let lo = Infinity;
     let hi = -Infinity;
     for (const point of data) {
+      if (point.value === null) continue;
       const [bandLo, bandHi] = point.band ?? [point.value, point.value];
       lo = Math.min(lo, point.value, bandLo);
       hi = Math.max(hi, point.value, bandHi);

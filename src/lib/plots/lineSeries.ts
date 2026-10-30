@@ -21,7 +21,8 @@ export const MAX_LINE_POINTS = 4000;
 export type LinePoint = {
   /** Position in days from the start of the selection, at the bin's centre. */
   x: number;
-  value: number;
+  /** Null marks a run of empty bins, so the line breaks instead of bridging it. */
+  value: number | null;
   band?: [number, number];
   label: string;
   shortLabel: string;
@@ -41,7 +42,7 @@ export type LineSeries = {
 
 
 /** Keep the lowest and highest point of each slice, in time order. */
-export function keepExtremes<T extends { value: number }>(
+export function keepExtremes<T extends { value: number | null }>(
   points: readonly T[],
   maxPoints: number,
 ): T[] {
@@ -56,9 +57,9 @@ export function keepExtremes<T extends { value: number }>(
     let hi = -1;
     for (let i = start; i < end; i++) {
       const value = points[i]!.value;
-      if (!Number.isFinite(value)) continue;
-      if (lo < 0 || value < points[lo]!.value) lo = i;
-      if (hi < 0 || value > points[hi]!.value) hi = i;
+      if (value === null || !Number.isFinite(value)) continue;
+      if (lo < 0 || value < points[lo]!.value!) lo = i;
+      if (hi < 0 || value > points[hi]!.value!) hi = i;
     }
     if (lo < 0) continue;
     kept.push(points[Math.min(lo, hi)]!);
@@ -105,7 +106,12 @@ export function lineSeries(
       const date = formatIsoDate(absoluteDays[day] ?? 0);
       for (let hour = 0; hour < hoursPerDay; hour++) {
         const value = values[day * hoursPerDay + hour] as number;
-        if (!Number.isFinite(value)) continue;
+        if (!Number.isFinite(value)) {
+          if (points.length > 0 && points.at(-1)!.value !== null) {
+            points.push({ x: day + (hour + 0.5) / hoursPerDay, value: null, label: "", shortLabel: "" });
+          }
+          continue;
+        }
         points.push({
           x: day + (hour + 0.5) / hoursPerDay,
           value,
@@ -120,9 +126,22 @@ export function lineSeries(
     const bins = timeBins(absoluteDays, resolution);
     const stats = binLineStats(values, hoursPerDay, bins, resolution);
     binCount = bins.length;
+    let gapOpen = false;
     bins.forEach((bin, b) => {
       const count = stats.count[b] ?? 0;
-      if (count === 0) return;
+      if (count === 0) {
+        if (!gapOpen && points.length > 0) {
+          points.push({
+            x: (bin.startLocal + bin.endLocal + 1) / 2,
+            value: null,
+            label: "",
+            shortLabel: "",
+          });
+        }
+        gapOpen = true;
+        return;
+      }
+      gapOpen = false;
       const mean = stats.mean[b] as number;
       const std = stats.std[b] as number;
       const across =
