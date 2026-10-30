@@ -13,9 +13,12 @@ import {
 } from "recharts";
 import {
   formatSeriesValue,
+  formatTickValue,
   TIME_SERIES_CHART_MARGIN,
   TIME_SERIES_PLOT_HEIGHT,
+  valueDomain,
 } from "@/lib/plots/chartTheme";
+import { niceTicks } from "@/lib/plots/fingerprintMargins";
 import {
   lineSeries,
   type LinePoint,
@@ -96,6 +99,19 @@ export function TimeSeriesPlot({
     [values, hoursPerDay, selectedYears, resolution, timeBasisSuffix],
   );
   const data = series.points;
+  const yAxis = useMemo(() => {
+    let lo = Infinity;
+    let hi = -Infinity;
+    for (const point of data) {
+      const [bandLo, bandHi] = point.band ?? [point.value, point.value];
+      lo = Math.min(lo, point.value, bandLo);
+      hi = Math.max(hi, point.value, bandHi);
+    }
+    const domain = valueDomain(lo, hi);
+    const ticks = niceTicks(domain[0], domain[1], 5);
+    const longest = Math.max(...ticks.map((t) => formatTickValue(t).length));
+    return { domain, ticks, width: Math.max(32, longest * 7 + 10) };
+  }, [data]);
 
   const desktop = useDesktop();
   const wrapperRef = useRef<HTMLDivElement>(null);
@@ -168,10 +184,14 @@ export function TimeSeriesPlot({
             axisLine={false}
           />
           <YAxis
+            type="number"
+            domain={yAxis.domain}
+            ticks={yAxis.ticks}
+            allowDataOverflow
             tickLine={false}
             axisLine={false}
-            width={48}
-            tickFormatter={formatSeriesValue}
+            width={yAxis.width}
+            tickFormatter={formatTickValue}
           />
           {series.yearBreaks.map((x) => (
             <ReferenceLine

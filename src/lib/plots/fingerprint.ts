@@ -5,7 +5,7 @@ import {
   formatDayTick,
 } from "@/lib/map/fingerprintScale";
 import { getSelectedYearsDayMapping } from "@/lib/zarr/timeRange";
-import { chartTickColor } from "@/lib/plots/chartTheme";
+import { chartTickColor, formatTickValue } from "@/lib/plots/chartTheme";
 import {
   bandRange,
   type FingerprintMargins,
@@ -194,10 +194,6 @@ function stripValuePos(stats: BinStats, box: StripBox, alongX: boolean) {
       : box.x + ((value - lo) / (hi - lo)) * box.w;
 }
 
-function formatTick(value: number): string {
-  return String(Number(value.toFixed(2)));
-}
-
 /**
  * One mean line with a ±std band. `alongX` strips run with the columns and
  * grow upwards; the others run with the rows and grow to the right.
@@ -279,7 +275,7 @@ function drawStrip(
   }
   ctx.restore();
 
-  return ticks.map((tick) => ({ label: formatTick(tick), at: valuePos(tick) }));
+  return ticks.map((tick) => ({ label: formatTickValue(tick), at: valuePos(tick) }));
 }
 
 function clampLabelX(x: number, plotW: number, axisLeft: number): number {

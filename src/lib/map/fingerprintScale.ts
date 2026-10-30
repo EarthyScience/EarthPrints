@@ -318,6 +318,9 @@ export type ColorExtents = {
  * `negMax` and `posMax` are both positive: a half with no data gets a tiny
  * sentinel (1e-10) to avoid a division-by-zero degenerate state.
  */
+/** Share of the data range below which values of the other sign count as noise. */
+const ONE_SIDED_NOISE = 0.02;
+
 export function asymmetricExtents(values: ArrayLike<number>): ColorExtents {
   let min = Infinity;
   let max = -Infinity;
@@ -335,11 +338,22 @@ export function asymmetricExtents(values: ArrayLike<number>): ColorExtents {
 
   const width = max - min;
   const farFromZero = min > 0 ? min > width : max < 0 ? -max > width : false;
-  const pivot = farFromZero ? sum / count : 0;
+  if (farFromZero) {
+    const pivot = sum / count;
+    return {
+      negMax: Math.max(1e-10, pivot - min),
+      posMax: Math.max(1e-10, max - pivot),
+      pivot,
+    };
+  }
+  // Rainfall or wind speed carry tiny negative noise around zero; spreading
+  // that over a whole half of the ramp paints it as strong stripes. Such data
+  // uses one half only, with the noise clamped to the neutral centre.
+  const noise = ONE_SIDED_NOISE * width;
   return {
-    negMax: Math.max(1e-10, pivot - min),
-    posMax: Math.max(1e-10, max - pivot),
-    pivot,
+    negMax: -min <= noise ? 1e-10 : -min,
+    posMax: max <= noise ? 1e-10 : max,
+    pivot: 0,
   };
 }
 

@@ -486,12 +486,14 @@ export function FingerprintPlot({
           <span className="absolute left-0">
             {formatSeriesValue(extents.pivot - extents.negMax)}
           </span>
-          <span
-            className="absolute -translate-x-1/2"
-            style={{ left: `${legend.zeroPct.toFixed(1)}%` }}
-          >
-            {extents.pivot === 0 ? "0" : formatSeriesValue(extents.pivot)}
-          </span>
+          {legend.zeroPct > 12 && legend.zeroPct < 88 ? (
+            <span
+              className="absolute -translate-x-1/2"
+              style={{ left: `${legend.zeroPct.toFixed(1)}%` }}
+            >
+              {extents.pivot === 0 ? "0" : formatSeriesValue(extents.pivot)}
+            </span>
+          ) : null}
           <span className="absolute right-0">
             {formatSeriesValue(extents.pivot + extents.posMax)}
           </span>

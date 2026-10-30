@@ -63,6 +63,13 @@ describe("asymmetricExtents", () => {
     expect(asymmetricExtents([0.1, 4, 9]).pivot).toBe(0);
   });
 
+  it("treats tiny negative noise in one-sided data as zero", () => {
+    const { negMax, posMax, pivot } = asymmetricExtents([-1e-7, 0, 5e-6, 2e-5]);
+    expect(pivot).toBe(0);
+    expect(negMax).toBeLessThan(1e-9);
+    expect(posMax).toBeCloseTo(2e-5);
+  });
+
   it("centres data far from zero on its mean", () => {
     const { pivot, negMax, posMax } = asymmetricExtents([1000, 1010, 1020, 1030]);
     expect(pivot).toBeCloseTo(1015);
