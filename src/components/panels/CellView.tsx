@@ -113,8 +113,9 @@ export function CellView({
 /** "Hourly net ecosystem exchange for this 0.05° cell." */
 export function describeRecord(series: CellSeries): string {
   const { dataset } = series;
-  const name = dataset ? (dataset.longName ?? dataset.variable) : "net ecosystem exchange";
-  const step = dataset?.time.stepLabel ?? "hourly";
+  if (!dataset) return series.datasetError ? "No store is open." : "Opening the store.";
+  const name = dataset.longName ?? dataset.variable;
+  const step = dataset.time.stepLabel;
   const resolution = formatResolution(series.gridSpec.spatialResolutionDeg);
   // Lowercase a sentence-case name ("Net ecosystem exchange"), but leave
   // acronyms ("NEE") and title case ("Gross Primary Productivity") alone.

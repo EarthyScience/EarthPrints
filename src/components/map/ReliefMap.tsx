@@ -137,7 +137,7 @@ export function ReliefMap() {
     if (!dataset || !map || framedStoreRef.current === dataset.url) return;
     framedStoreRef.current = dataset.url;
     const extent = regionalExtent(dataset.grid);
-    if (!extent || series.selection) return;
+    if (!extent || extent.allLongitudes || series.selection) return;
     const shift = extent.west >= 180 ? -360 : 0;
     map.fitBounds(
       [

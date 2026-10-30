@@ -67,15 +67,22 @@ export function lonExtent(spec: GridSpec): { west: number; east: number } {
  */
 export function regionalExtent(
   spec: GridSpec,
-): { west: number; east: number; south: number; north: number } | null {
+): {
+  west: number;
+  east: number;
+  south: number;
+  north: number;
+  allLongitudes: boolean;
+} | null {
   const { west, east } = lonExtent(spec);
   const first = axisCoordinate(spec, "lat", 0);
   const last = axisCoordinate(spec, "lat", spec.dimensions.lat - 1);
   const half = Math.abs(spec.grid.latStep) / 2;
   const south = Math.max(-90, Math.min(first, last) - half);
   const north = Math.min(90, Math.max(first, last) + half);
-  const global = east - west >= 355 && north - south >= 150;
-  return global ? null : { west, east, south, north };
+  const allLongitudes = east - west >= 355;
+  if (allLongitudes && north - south >= 150) return null;
+  return { west, east, south, north, allLongitudes };
 }
 
 /**

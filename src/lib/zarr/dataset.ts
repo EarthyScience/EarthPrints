@@ -1,4 +1,5 @@
 import * as zarr from "zarrita";
+import { ZARR_STORE } from "@/lib/constants/store";
 import { decodeCfTimes } from "@/lib/zarr/cfTime";
 import { openZarrStore, type ZarrStore } from "@/lib/zarr/store";
 import { buildTimeAxis, type TimeAxis } from "@/lib/zarr/timeAxis";
@@ -193,6 +194,10 @@ async function readCoordinate(
     }
     if (array.shape.length !== 1) continue;
     try {
+      const regular = await readRegularCoordinate(array);
+      if (regular) {
+        return { values: regular, attrs: array.attrs as Record<string, unknown> };
+      }
       const result = await zarr.get(array, null, {
         createQueue: () => limitedQueue(COORDINATE_FETCHES),
       });
@@ -207,6 +212,37 @@ async function readCoordinate(
     }
   }
   return null;
+}
+
+/** Above this many chunks a coordinate is first tried as a regular axis. */
+const MANY_COORDINATE_CHUNKS = 64;
+
+/**
+ * A finely chunked coordinate (MUR SST splits its time into 1289 chunks of 5)
+ * takes minutes to read in full. When its first chunk is evenly spaced and
+ * the last value lands where that spacing predicts, the axis is regular and
+ * is rebuilt from those two reads instead.
+ */
+async function readRegularCoordinate(
+  array: OpenedArray,
+): Promise<Float64Array | null> {
+  const n = array.shape[0]!;
+  const chunk = array.chunks[0]!;
+  if (Math.ceil(n / chunk) <= MANY_COORDINATE_CHUNKS || chunk < 2) return null;
+  const head = toNumbers(
+    (await zarr.get(array, [zarr.slice(0, chunk)])).data as ArrayLike<unknown>,
+  );
+  const tail = toNumbers(
+    (await zarr.get(array, [zarr.slice(n - 1, n)])).data as ArrayLike<unknown>,
+  );
+  const step = head[1]! - head[0]!;
+  if (!Number.isFinite(step) || step === 0) return null;
+  for (let i = 2; i < head.length; i++) {
+    if (Math.abs(head[i]! - head[i - 1]! - step) > Math.abs(step) * 1e-9) return null;
+  }
+  const predicted = head[0]! + (n - 1) * step;
+  if (Math.abs(tail[0]! - predicted) > Math.abs(step) * 1e-6) return null;
+  return Float64Array.from({ length: n }, (_, i) => head[0]! + i * step);
 }
 
 /**
@@ -447,7 +483,8 @@ async function describeVariable(
       lat: array.chunks[inferred.lat]!,
       lon: array.chunks[inferred.lon]!,
     },
-    spatialResolutionDeg: Math.abs(lon.step),
+    // The step comes out of float coordinates (0.049999999999999996).
+    spatialResolutionDeg: Number(Math.abs(lon.step).toPrecision(6)),
     latValues: lat.values ?? undefined,
     lonValues: lon.values ?? undefined,
   };
@@ -533,6 +570,7 @@ export async function openDataset(
       ...described,
       url,
       title: storeTitle(rootAttrs, url),
+      ...(url === ZARR_STORE.url && FLUXCOM_NAMES),
     },
   };
 }
@@ -553,6 +591,12 @@ function storeTitle(attrs: Record<string, unknown>, url: string): string {
   const named = parts.reverse().find((part) => !/^v\d{6,}$/.test(part)) ?? url;
   return named.replace(/\.zarr$/i, "");
 }
+
+/** The default store carries no title or long name of its own. */
+const FLUXCOM_NAMES = {
+  title: ZARR_STORE.kicker,
+  longName: "Net ecosystem exchange",
+};
 
 function storeErrorMessage(cause: unknown): string {
   const message = cause instanceof Error ? cause.message : String(cause);

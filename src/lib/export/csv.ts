@@ -22,8 +22,8 @@ function buildHeader(rowCount: number, prov: ExportProvenance): string[] {
     `units: ${prov.units ?? "unspecified"}`,
     `click_lat: ${prov.click.lat}`,
     `click_lon: ${prov.click.lon}`,
-    `cell_lat: ${prov.cell.lat}`,
-    `cell_lon: ${prov.cell.lon}`,
+    `cell_lat: ${Number(prov.cell.lat.toPrecision(8))}`,
+    `cell_lon: ${Number(prov.cell.lon.toPrecision(8))}`,
     `lat_index: ${prov.cell.latIndex}`,
     `lon_index: ${prov.cell.lonIndex}`,
     // The store's hour axis is UTC. The local columns are that axis moved by the

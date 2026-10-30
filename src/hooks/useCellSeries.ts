@@ -85,6 +85,10 @@ export function useCellSeries() {
   const [dataset, setDataset] = useState<Dataset | null>(null);
   const [datasetLoading, setDatasetLoading] = useState(true);
   const [datasetError, setDatasetError] = useState<string | null>(null);
+  const datasetErrorRef = useRef<string | null>(null);
+  useEffect(() => {
+    datasetErrorRef.current = datasetError;
+  }, [datasetError]);
   /** The store last asked for, so a failed or slow open can still show it. */
   const [requestedSource, setRequestedSource] = useState<SourceRequest | null>(
     null,
@@ -141,7 +145,9 @@ export function useCellSeries() {
         const reader = await readerPromiseRef.current;
         if (requestId !== requestIdRef.current) return;
         if (!reader) {
-          setError("No dataset is open. Open one from the Data panel.");
+          setError(
+            `${datasetErrorRef.current ?? "No store is open."} Open one from the Data panel.`,
+          );
           return;
         }
         if (nextSelection.outside) {

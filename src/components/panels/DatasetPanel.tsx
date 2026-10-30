@@ -52,7 +52,11 @@ function Facts({ dataset }: { dataset: Dataset }) {
   if (extent) {
     rows.push([
       "Coverage",
-      `${formatLatitude(extent.south, 1)} to ${formatLatitude(extent.north, 1)}, ${formatLongitude(extent.west > 180 ? extent.west - 360 : extent.west, 1)} to ${formatLongitude(extent.east > 180 ? extent.east - 360 : extent.east, 1)}`,
+      `${formatLatitude(extent.south, 1)} to ${formatLatitude(extent.north, 1)}, ${
+        extent.allLongitudes
+          ? "all longitudes"
+          : `${formatLongitude(extent.west > 180 ? extent.west - 360 : extent.west, 1)} to ${formatLongitude(extent.east > 180 ? extent.east - 360 : extent.east, 1)}`
+      }`,
     ]);
   }
   rows.push(["Units", dataset.units ?? "not given in the store"]);
@@ -86,9 +90,11 @@ export function DatasetPanel({ series, onClose }: DatasetPanelProps) {
     setPrevRequest(requestedSource);
     if (requestedSource) setUrl(requestedSource.url);
   }
+  // Typing since the last Open wins over a store that finishes opening late.
+  const [edited, setEdited] = useState(false);
   if (dataset !== prevDataset) {
     setPrevDataset(dataset);
-    if (dataset) setUrl(dataset.url);
+    if (dataset && !edited) setUrl(dataset.url);
   }
   const [askedForVariable, setAskedForVariable] = useState(false);
   const promptsForVariable = Boolean(
@@ -104,7 +110,14 @@ export function DatasetPanel({ series, onClose }: DatasetPanelProps) {
   const submit = (event: React.FormEvent) => {
     event.preventDefault();
     if (!url.trim()) return;
-    openSource({ url: url.trim(), variable: needsVariable ? variable : null });
+    // The variable field belongs to the store that asked for it; a different
+    // address starts without one.
+    const sameStore = url.trim() === (requestedSource?.url ?? dataset?.url);
+    setEdited(false);
+    openSource({
+      url: url.trim(),
+      variable: needsVariable && sameStore ? variable : null,
+    });
   };
 
   return (
@@ -121,7 +134,10 @@ export function DatasetPanel({ series, onClose }: DatasetPanelProps) {
               <Input
                 id="dataset-url"
                 value={url}
-                onChange={(event) => setUrl(event.target.value)}
+                onChange={(event) => {
+                  setUrl(event.target.value);
+                  setEdited(true);
+                }}
                 placeholder="https://…/store.zarr"
                 spellCheck={false}
                 autoComplete="off"
