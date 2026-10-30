@@ -399,6 +399,12 @@ export function useCellSeries() {
     if (!dataset) return null;
     // A store with its own hour axis holds a day's slots in each time sample.
     const perSample = dataset.time.hourAxis ? dataset.time.slotsPerDay : 1;
+    // A partial load covers only its first days, counted from the start of
+    // the earliest selected year.
+    if (coveredDays !== null && selectedYears.length > 0) {
+      const start = yearToDateRange(Math.min(...selectedYears), dataset.time.totalDays)[0];
+      return perSample * samplesInDays(dataset.time, [start, start + coveredDays]);
+    }
     return (
       perSample *
       selectedYears.reduce(
@@ -411,7 +417,7 @@ export function useCellSeries() {
         0,
       )
     );
-  }, [dataset, selectedYears]);
+  }, [dataset, selectedYears, coveredDays]);
 
   return {
     dataset,
