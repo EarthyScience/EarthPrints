@@ -146,7 +146,7 @@ export function lineSeries(
       const std = stats.std[b] as number;
       const across =
         resolution === "day"
-          ? `${count.toLocaleString()} step${count === 1 ? "" : "s"}`
+          ? `${count.toLocaleString()} ${hoursPerDay === 24 ? "hour" : "step"}${count === 1 ? "" : "s"}`
           : binCountLabel(count, "day");
       points.push({
         x: (bin.startLocal + bin.endLocal + 1) / 2,
