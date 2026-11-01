@@ -125,6 +125,22 @@ function delay(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+const lastAnswerByOrigin = new Map<string, number>();
+
+function originOf(url: string): string | null {
+  try {
+    return new URL(url).origin;
+  } catch {
+    return null;
+  }
+}
+
+/** When the host serving `url` last answered a request, in ms since epoch. */
+export function lastAnswerFrom(url: string): number {
+  const origin = originOf(url);
+  return (origin && lastAnswerByOrigin.get(origin)) || 0;
+}
+
 /**
  * `fetch` with a couple of retries for the errors that clear on their own:
  * dropped connections, and the throttling and gateway statuses the store
@@ -137,6 +153,8 @@ export async function fetchWithRetry(request: Request): Promise<Response> {
     try {
       // A Request can only be sent once, so each attempt gets its own copy.
       const response = await fetch(last ? request : request.clone());
+      const origin = originOf(request.url);
+      if (origin) lastAnswerByOrigin.set(origin, Date.now());
       if (last || !isRetryableStatus(response.status)) return response;
       // Nothing will read this body; release the connection before retrying.
       await response.body?.cancel();

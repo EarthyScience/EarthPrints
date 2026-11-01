@@ -3,7 +3,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { geoPointToZarrGrid, isPointInGrid } from "@/lib/map/geogrid";
 import { SeriesBudgetError, ZarrChunkReader } from "@/lib/zarr/ZarrChunkReader";
-import { openDataset, type Dataset } from "@/lib/zarr/dataset";
+import {
+  normalizeStoreUrl,
+  openDataset,
+  type Dataset,
+} from "@/lib/zarr/dataset";
+import { lastAnswerFrom } from "@/lib/zarr/store";
 import { setActiveSource } from "@/lib/zarr/activeSource";
 import { setActiveTime, yearToDateRange } from "@/lib/zarr/timeRange";
 import { samplesInDays } from "@/lib/zarr/timeAxis";
@@ -32,20 +37,30 @@ const OPEN_TIMEOUT_MS = 30_000;
 /** Empty default years tried before reporting a cell as empty. */
 const MAX_STEPS_BACK = 2;
 
-function withTimeout<T>(
+/**
+ * Rejects once the host has gone `ms` without answering any request, so a
+ * slow host that keeps answering is not cut off, only a silent one.
+ */
+function withIdleTimeout<T>(
   promise: Promise<T>,
+  url: string,
   ms: number,
   message: string,
 ): Promise<T> {
+  const started = Date.now();
   return new Promise<T>((resolve, reject) => {
-    const timer = setTimeout(() => reject(new Error(message)), ms);
+    const timer = setInterval(() => {
+      if (Date.now() - Math.max(started, lastAnswerFrom(url)) < ms) return;
+      clearInterval(timer);
+      reject(new Error(message));
+    }, 1000);
     promise.then(
       (value) => {
-        clearTimeout(timer);
+        clearInterval(timer);
         resolve(value);
       },
       (cause) => {
-        clearTimeout(timer);
+        clearInterval(timer);
         reject(cause);
       },
     );
@@ -114,6 +129,9 @@ export function useCellSeries() {
   const [units, setUnits] = useState<string | null>(null);
 
   const pickedYearsRef = useRef(false);
+  const emptyYearRef = useRef<{ years: number[]; values: Float32Array } | null>(
+    null,
+  );
   const retryRef = useRef<
     (
       selection: MapSelection,
@@ -133,6 +151,7 @@ export function useCellSeries() {
       seriesAbortRef.current?.abort();
       const abort = new AbortController();
       seriesAbortRef.current = abort;
+      if (stepsBack === 0) emptyYearRef.current = null;
       setLoading(true);
       setProgress(null);
       setError(null);
@@ -185,6 +204,7 @@ export function useCellSeries() {
             .filter((year) => year < years[0]!)
             .at(-1);
           if (earlier !== undefined) {
+            emptyYearRef.current = { years, values: result.values };
             setSelectedYears([earlier]);
             retryRef.current(nextSelection, [earlier], partial, stepsBack + 1);
             return;
@@ -198,6 +218,14 @@ export function useCellSeries() {
       } catch (cause) {
         if (requestId !== requestIdRef.current) return;
         if (cause instanceof Error && cause.name === "AbortError") return;
+        // An earlier year too big to load says nothing about this cell; the
+        // empty default year it stepped back from does.
+        const empty = emptyYearRef.current;
+        if (stepsBack > 0 && cause instanceof SeriesBudgetError && empty) {
+          setSelectedYears(empty.years);
+          setValues(empty.values);
+          return;
+        }
         if (cause instanceof SeriesBudgetError && cause.partialDays > 0) {
           setPartialOffer({
             days: cause.partialDays,
@@ -237,10 +265,11 @@ export function useCellSeries() {
   const startOpen = useCallback(
     (request: SourceRequest) => {
       const openId = ++openIdRef.current;
-      const promise = withTimeout(
+      const promise = withIdleTimeout(
         openDataset(request.url, request.variable),
+        normalizeStoreUrl(request.url),
         OPEN_TIMEOUT_MS,
-        "The store did not answer within 30 seconds. It may be offline or very slow.",
+        "The store stopped answering for 30 seconds. It may be offline or very slow.",
       ).then(({ dataset: next, store }) => {
         const reader = new ZarrChunkReader(store, {
           dataset: next,
@@ -331,10 +360,16 @@ export function useCellSeries() {
     (lon: number, lat: number): MapSelection => {
       const nextSelection = selectionAt({ lon, lat }, gridSpec);
       setSelection(nextSelection);
-      void load(nextSelection, selectedYears);
+      // A year stepped back to for an empty cell is not kept for the next one.
+      const years =
+        pickedYearsRef.current || !dataset
+          ? selectedYears
+          : defaultYears(dataset.time.years, []);
+      setSelectedYears(years);
+      void load(nextSelection, years);
       return nextSelection;
     },
-    [gridSpec, load, selectedYears],
+    [dataset, gridSpec, load, selectedYears],
   );
 
   const selectYears = useCallback(
