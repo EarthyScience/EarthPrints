@@ -23,6 +23,12 @@ describe("formatSeriesValue", () => {
     expect(formatSeriesValue(2.5e7)).toBe("2.5e+7");
   });
 
+  it("prints whole values without decimals", () => {
+    expect(formatSeriesValue(90)).toBe("90");
+    expect(formatSeriesValue(130)).toBe("130");
+    expect(formatSeriesValue(104.8)).toBe("104.8");
+  });
+
   it("prints zero plainly", () => {
     expect(formatSeriesValue(0)).toBe("0");
     expect(formatSeriesValue(-1e-13)).toBe("0");

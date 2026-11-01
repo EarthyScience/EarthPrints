@@ -17,7 +17,8 @@ export function formatSeriesValue(value: number): string {
   const abs = Math.abs(value);
   if (abs < 1e-12) return "0";
   if (abs < 1e-3 || abs >= 1e6) return trimZeros(value.toExponential(2));
-  if (abs >= 1000) return value.toFixed(0);
+  // Whole values (integer-typed data, counts, flags) print without decimals.
+  if (abs >= 1000 || Number.isInteger(value)) return value.toFixed(0);
   if (abs >= 100) return value.toFixed(1);
   if (abs >= 1) return value.toFixed(2);
   return value.toFixed(2 - Math.floor(Math.log10(abs)));
