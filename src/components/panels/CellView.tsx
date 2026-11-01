@@ -268,6 +268,7 @@ export function PlotArea({
       resolution={display.lineResolution}
       timeBasisSuffix={shortTimeBasis(display.timeBasisLabel)}
       stepCount={series.stepCount}
+      coveredDays={series.coveredDays}
       height={height}
       pinLimit={pinLimit}
     />

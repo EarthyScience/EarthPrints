@@ -75,6 +75,8 @@ type TimeSeriesPlotProps = {
   timeBasisSuffix?: string;
   /** Values the store holds for the selection; defaults to the grid's length. */
   stepCount?: number | null;
+  /** Days a partial load covered; the axis stops there. */
+  coveredDays?: number | null;
   height?: number;
   width?: number;
   pinLimit?: number;
@@ -89,6 +91,7 @@ export function TimeSeriesPlot({
   resolution = "day",
   timeBasisSuffix,
   stepCount,
+  coveredDays,
   height = TIME_SERIES_PLOT_HEIGHT,
   width,
   pinLimit = 1,
@@ -105,7 +108,18 @@ export function TimeSeriesPlot({
       ),
     [values, hoursPerDay, selectedYears, resolution, timeBasisSuffix],
   );
-  const data = series.points;
+  const xMax = Math.max(
+    1,
+    coveredDays == null ? series.nDays : Math.min(series.nDays, Math.ceil(coveredDays)),
+  );
+  const data = useMemo(
+    () =>
+      xMax < series.nDays
+        ? series.points.filter((point) => point.x <= xMax)
+        : series.points,
+    [series, xMax],
+  );
+  const xTicks = series.ticks.filter((tick) => tick.x <= xMax);
   const yAxis = useMemo(() => {
     let lo = Infinity;
     let hi = -Infinity;
@@ -182,8 +196,8 @@ export function TimeSeriesPlot({
           <XAxis
             type="number"
             dataKey="x"
-            domain={[0, Math.max(1, series.nDays)]}
-            ticks={series.ticks.map((tick) => tick.x)}
+            domain={[0, xMax]}
+            ticks={xTicks.map((tick) => tick.x)}
             tickFormatter={(x: number) =>
               series.ticks.find((tick) => tick.x === x)?.label ?? ""
             }
