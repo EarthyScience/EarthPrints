@@ -3,6 +3,7 @@
 import { useMemo } from "react";
 import { formatIsoDate } from "@/lib/map/fingerprintScale";
 import { formatSeriesValue } from "@/lib/plots/chartTheme";
+import { contiguousDayBlocks } from "@/lib/zarr/localTime";
 import { dailyMeanSeries } from "@/lib/zarr/series";
 import { getSelectedYearsDayMapping } from "@/lib/zarr/timeRange";
 import type { CellSeries } from "@/hooks/useCellSeries";
@@ -20,11 +21,38 @@ type Summary = {
 
 type Period = "day" | "month";
 
+/**
+ * Days the local-time shift leaves only partly filled: the first day of each
+ * run east of Greenwich, the last one west of it. Their means would stand for
+ * a few hours, not a day.
+ */
+function partialLocalDays(
+  values: Float32Array,
+  selectedYears: number[],
+  hoursPerDay: number,
+  utcOffsetHours: number,
+): Set<number> {
+  if (utcOffsetHours === 0) return new Set();
+  const dayCount = Math.floor(values.length / hoursPerDay);
+  const { absoluteDays } = getSelectedYearsDayMapping(
+    selectedYears,
+    undefined,
+    dayCount,
+  );
+  return new Set(
+    contiguousDayBlocks(absoluteDays, dayCount).map((block) =>
+      utcOffsetHours > 0 ? block.start : block.start + block.dayCount - 1,
+    ),
+  );
+}
+
 function summarize(
   values: Float32Array,
   selectedYears: number[],
   hoursPerDay: number,
   period: Period,
+  skipped: Set<number> = new Set(),
+  firstDay = 0,
 ): Summary | null {
   const daily = dailyMeanSeries(values, hoursPerDay);
   if (daily.length === 0) return null;
@@ -41,11 +69,13 @@ function summarize(
   };
   const points: { value: number; label: string }[] = [];
   for (const point of daily) {
+    if (skipped.has(firstDay + point.day - 1)) continue;
     const label = labelOf(point.day);
     if (period === "month" && points.at(-1)?.label === label) continue;
     points.push({ value: point.value, label });
   }
 
+  if (points.length === 0) return null;
   let sum = 0;
   let lowest = points[0]!;
   let highest = points[0]!;
@@ -68,6 +98,7 @@ function summarizeByYear(
   selectedYears: number[],
   hoursPerDay: number,
   period: Period,
+  skipped: Set<number>,
 ): { year: number; summary: Summary }[] {
   const { yearIntervals } = getSelectedYearsDayMapping(
     selectedYears,
@@ -80,6 +111,8 @@ function summarizeByYear(
       [year],
       hoursPerDay,
       period,
+      skipped,
+      startDayLocal,
     );
     return summary ? [{ year, summary }] : [];
   });
@@ -138,20 +171,29 @@ export function SeriesSummary({
   const word = period === "month" ? "month" : "day";
   const Word = period === "month" ? "Month" : "Day";
 
+  const offset = display.timeBasis === "local" ? display.utcOffsetHours : 0;
+  const skipped = useMemo(
+    () =>
+      values
+        ? partialLocalDays(values, selectedYears, slotsPerDay, offset)
+        : new Set<number>(),
+    [values, selectedYears, slotsPerDay, offset],
+  );
+
   const summary = useMemo(
     () =>
       values && !display.isEmptyCell
-        ? summarize(values, selectedYears, slotsPerDay, period)
+        ? summarize(values, selectedYears, slotsPerDay, period, skipped)
         : null,
-    [values, display.isEmptyCell, selectedYears, slotsPerDay, period],
+    [values, display.isEmptyCell, selectedYears, slotsPerDay, period, skipped],
   );
 
   const byYear = useMemo(
     () =>
       values && !display.isEmptyCell && selectedYears.length > 1
-        ? summarizeByYear(values, selectedYears, slotsPerDay, period)
+        ? summarizeByYear(values, selectedYears, slotsPerDay, period, skipped)
         : [],
-    [values, display.isEmptyCell, selectedYears, slotsPerDay, period],
+    [values, display.isEmptyCell, selectedYears, slotsPerDay, period, skipped],
   );
 
   if (!summary) return null;
