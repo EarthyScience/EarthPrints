@@ -54,6 +54,18 @@ export function CellView({
   }
   if (!selection) return null;
 
+  if (!series.dataset) {
+    return (
+      <div className="grid gap-4">
+        <CardTitle>
+          {formatLongitude(selection.grid.lon)},{" "}
+          {formatLatitude(selection.grid.lat)}
+        </CardTitle>
+        <PlotArea series={series} display={display} />
+      </div>
+    );
+  }
+
   return (
     <div className="grid gap-4">
       <Collapsible.Root

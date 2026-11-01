@@ -129,6 +129,15 @@ export function ReliefMap() {
 
   useEffect(() => () => detachWheelZoomRef.current?.(), []);
 
+  // A link to a store that fails to open says so on arrival, not only once a
+  // point is picked.
+  const shownOpenErrorRef = useRef(false);
+  useEffect(() => {
+    if (series.dataset || !series.datasetError || shownOpenErrorRef.current) return;
+    shownOpenErrorRef.current = true;
+    setOpenPanel((current) => current ?? "data");
+  }, [series.dataset, series.datasetError]);
+
   // A regional store opens framed on its area, so the first click lands in it.
   const framedStoreRef = useRef<string | null>(null);
   useEffect(() => {
@@ -340,7 +349,7 @@ export function ReliefMap() {
           attributionControl={false}
           style={{ width: "100%", height: "100%" }}
         >
-          {selection && !selection.outside && mapSize.width > 0 && mapSize.height > 0 ? (
+          {selection && !selection.outside && series.dataset && mapSize.width > 0 && mapSize.height > 0 ? (
             <GlobeSelectionOverlay
               cell={selection.grid}
               gridSpec={series.gridSpec}
