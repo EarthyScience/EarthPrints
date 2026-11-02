@@ -15,6 +15,7 @@ import {
   PlotControls,
 } from "@/components/panels/CellView";
 import { ScaleField } from "@/components/panels/ScaleField";
+import { TemperatureUnitField } from "@/components/panels/TemperatureUnitField";
 import { TimeBasisField } from "@/components/panels/TimeBasisField";
 import { YearPicker } from "@/components/panels/YearPicker";
 import { SeriesSummary } from "@/components/data/SeriesSummary";
@@ -77,7 +78,8 @@ export function DataView({
   const plotHeight = usePlotHeight();
   const wide = useSidebarLayout();
   const [detailsOpen, setDetailsOpen] = useState(false);
-  const { selection, selectedYears, units } = series;
+  const { selection, selectedYears } = series;
+  const { units } = display;
 
   return (
     <div
@@ -120,6 +122,7 @@ export function DataView({
                         onSelectYears={series.selectYears}
                       />
                       <ScaleField display={display} />
+                      <TemperatureUnitField display={display} />
                       {display.canUseLocalTime ? (
                         <TimeBasisField
                           value={timeBasis}

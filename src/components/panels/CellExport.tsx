@@ -43,7 +43,7 @@ const FORMATS: { value: ExportFormat; title: string; description: string }[] = [
   {
     value: "csv",
     title: "Series data (.csv)",
-    description: "The {step} values as stored",
+    description: "Every {step} value in the selection",
   },
   {
     value: "badge",
@@ -65,10 +65,10 @@ export function CellExport({ series, display }: CellExportProps) {
     selection: series.selection,
     gridSpec: series.gridSpec,
     selectedYears: series.selectedYears,
-    values: ready ? series.values : null,
+    values: ready ? display.values : null,
     displayValues: ready ? display.displayValues : null,
     timeBasis: display.timeBasis,
-    units: series.units,
+    units: display.units,
     colormapId: display.colormapId,
   });
   const busy = exporter.busyLabel !== null;

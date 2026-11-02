@@ -15,6 +15,16 @@ import {
   type Palette,
 } from "@/lib/map/fingerprintScale";
 import { loadPalette, savePalette } from "@/lib/settings/colormap";
+import {
+  loadTemperatureUnit,
+  saveTemperatureUnit,
+} from "@/lib/settings/temperatureUnit";
+import {
+  convertTemperatures,
+  temperatureUnitOf,
+  TEMPERATURE_UNITS,
+  type TemperatureUnit,
+} from "@/lib/zarr/temperature";
 import { useTheme } from "@/providers/ThemeProvider";
 import type { BinUnit } from "@/lib/plots/timeBins";
 import type { LineResolution } from "@/lib/plots/lineSeries";
@@ -74,6 +84,7 @@ export function useSeriesDisplay(
     slotsPerDay,
     timeSpan,
     stepLabel,
+    units,
   }: Pick<
     CellSeries,
     | "selection"
@@ -83,6 +94,7 @@ export function useSeriesDisplay(
     | "slotsPerDay"
     | "timeSpan"
     | "stepLabel"
+    | "units"
   >,
   requestedTimeBasis: TimeBasis,
 ) {
@@ -131,6 +143,27 @@ export function useSeriesDisplay(
     savePalette(next);
   };
 
+  // Temperatures can be shown in another scale; everything downstream
+  // (plots, summary, exports) sees the converted values and their unit.
+  const storedTemperature = temperatureUnitOf(units);
+  const [temperatureChoice, setTemperatureChoice] =
+    useState<TemperatureUnit | null>(() => loadTemperatureUnit());
+  const temperatureUnit = storedTemperature
+    ? (temperatureChoice ?? storedTemperature)
+    : null;
+  const setTemperatureUnit = (next: TemperatureUnit) => {
+    setTemperatureChoice(next);
+    saveTemperatureUnit(next);
+  };
+  const shownUnits = temperatureUnit ?? units;
+  const convertedValues = useMemo(
+    () =>
+      values && storedTemperature && temperatureUnit
+        ? convertTemperatures(values, storedTemperature, temperatureUnit)
+        : values,
+    [values, storedTemperature, temperatureUnit],
+  );
+
   // Checked before the local-time shift, which blanks a few edge hours.
   const hasPlottableData = useMemo(
     () => values !== null && hasFiniteValues(values),
@@ -144,18 +177,18 @@ export function useSeriesDisplay(
   const timeBasisLabel = formatTimeBasis(timeBasis, utcOffsetHours);
 
   const displayValues = useMemo(() => {
-    if (!values || timeBasis === "utc") return values;
+    if (!convertedValues || timeBasis === "utc") return convertedValues;
     const { absoluteDays } = getSelectedYearsDayMapping(
       selectedYears,
       undefined,
-      Math.floor(values.length / slotsPerDay),
+      Math.floor(convertedValues.length / slotsPerDay),
     );
-    return shiftSeriesToLocalTime(values, {
+    return shiftSeriesToLocalTime(convertedValues, {
       hoursPerDay: slotsPerDay,
       offsetHours: utcOffsetSlots,
       absoluteDays,
     });
-  }, [values, selectedYears, timeBasis, utcOffsetSlots, slotsPerDay]);
+  }, [convertedValues, selectedYears, timeBasis, utcOffsetSlots, slotsPerDay]);
 
   return {
     plotView,
@@ -178,7 +211,13 @@ export function useSeriesDisplay(
     colormapId,
     hasPlottableData,
     isEmptyCell,
+    /** The series in the shown unit, on the UTC clock. */
+    values: convertedValues,
     displayValues,
+    units: shownUnits,
+    temperatureUnit,
+    temperatureUnits: temperatureUnit ? TEMPERATURE_UNITS : [],
+    setTemperatureUnit,
   };
 }
 

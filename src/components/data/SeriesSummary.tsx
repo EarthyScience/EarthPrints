@@ -164,7 +164,8 @@ export function SeriesSummary({
   display,
   className,
 }: SeriesSummaryProps) {
-  const { selectedYears, units, slotsPerDay } = series;
+  const { selectedYears, slotsPerDay } = series;
+  const { units } = display;
   const values = display.displayValues;
   const period: Period =
     series.timeSpan === "month" || series.timeSpan === "year" ? "month" : "day";

@@ -13,6 +13,7 @@ import type { PlotView, SeriesDisplay } from "@/hooks/useSeriesDisplay";
 import { TimeSeriesPlot } from "@/components/plots/TimeSeriesPlot";
 import { FingerprintPlot } from "@/components/plots/FingerprintPlot";
 import { useDesktop } from "@/components/plots/MapSideTooltip";
+import { TemperatureUnitField } from "@/components/panels/TemperatureUnitField";
 import { TimeBasisField } from "@/components/panels/TimeBasisField";
 import { YearPicker } from "@/components/panels/YearPicker";
 import { SeriesSummary } from "@/components/data/SeriesSummary";
@@ -94,10 +95,10 @@ export function CellView({
         <Collapsible.Panel className="h-(--collapsible-panel-height) overflow-hidden transition-[height] duration-150 ease-out data-ending-style:h-0 data-starting-style:h-0 motion-reduce:transition-none">
           <div className="grid gap-4 pt-3">
             <CardDescription>
-              {describeRecord(series)} The dashed box marks the{" "}
+              {describeRecord(series)} The dashed box shows the{" "}
               {Math.min(patchWindow, series.gridSpec.nativeChunks.lat)}×
               {Math.min(patchWindow, series.gridSpec.nativeChunks.lon)} cells
-              around it kept in memory.
+              downloaded with it, so picks inside it load at once.
             </CardDescription>
             <YearPicker
               selectedYears={series.selectedYears}
@@ -105,6 +106,7 @@ export function CellView({
               loading={series.loading}
               onSelectYears={series.selectYears}
             />
+            <TemperatureUnitField display={display} />
             {desktop || !display.canUseLocalTime ? null : (
               <TimeBasisField value={timeBasis} onChange={onTimeBasisChange} />
             )}
@@ -262,7 +264,7 @@ export function PlotArea({
   const plot = display.plotView === "line" ? (
     <TimeSeriesPlot
       values={display.displayValues}
-      units={series.units}
+      units={display.units}
       hoursPerDay={series.slotsPerDay}
       selectedYears={series.selectedYears}
       resolution={display.lineResolution}
@@ -275,7 +277,7 @@ export function PlotArea({
   ) : (
     <FingerprintPlot
       values={display.displayValues}
-      units={series.units}
+      units={display.units}
       hoursPerDay={series.slotsPerDay}
       selectedYears={series.selectedYears}
       timeBasisLabel={display.timeBasisLabel}
