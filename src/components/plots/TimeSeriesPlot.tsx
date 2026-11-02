@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useRef, useState, type Ref } from "react";
+import { activeSource } from "@/lib/zarr/activeSource";
 import {
   Area,
   CartesianGrid,
@@ -12,9 +13,12 @@ import {
 } from "recharts";
 import {
   formatSeriesValue,
+  formatTickValue,
   TIME_SERIES_CHART_MARGIN,
   TIME_SERIES_PLOT_HEIGHT,
+  valueDomain,
 } from "@/lib/plots/chartTheme";
+import { niceTicks } from "@/lib/plots/fingerprintMargins";
 import {
   lineSeries,
   type LinePoint,
@@ -48,12 +52,16 @@ const MEANS_LABEL: Record<Exclude<LineResolution, "hour">, string> = {
   month: "monthly",
 };
 
+function plural(count: number, noun: string): string {
+  return `${count.toLocaleString()} ${noun}${count === 1 ? "" : "s"}`;
+}
+
 type Readout = TooltipAnchor & PinPosition & { index: number };
 
 const sameDay = (a: Readout, b: Readout) => a.index === b.index;
 
 function tooltipPoint(point: LinePoint | undefined): TooltipPoint | undefined {
-  if (!point) return undefined;
+  if (!point || point.value === null) return undefined;
   const { label, shortLabel, value, spread } = point;
   return { label, shortLabel, value, spread };
 }
@@ -65,6 +73,10 @@ type TimeSeriesPlotProps = {
   selectedYears: number[];
   resolution?: LineResolution;
   timeBasisSuffix?: string;
+  /** Values the store holds for the selection; defaults to the grid's length. */
+  stepCount?: number | null;
+  /** Days a partial load covered; the axis stops there. */
+  coveredDays?: number | null;
   height?: number;
   width?: number;
   pinLimit?: number;
@@ -78,6 +90,8 @@ export function TimeSeriesPlot({
   selectedYears,
   resolution = "day",
   timeBasisSuffix,
+  stepCount,
+  coveredDays,
   height = TIME_SERIES_PLOT_HEIGHT,
   width,
   pinLimit = 1,
@@ -94,7 +108,32 @@ export function TimeSeriesPlot({
       ),
     [values, hoursPerDay, selectedYears, resolution, timeBasisSuffix],
   );
-  const data = series.points;
+  const xMax = Math.max(
+    1,
+    coveredDays == null ? series.nDays : Math.min(series.nDays, Math.ceil(coveredDays)),
+  );
+  const data = useMemo(
+    () =>
+      xMax < series.nDays
+        ? series.points.filter((point) => point.x <= xMax)
+        : series.points,
+    [series, xMax],
+  );
+  const xTicks = series.ticks.filter((tick) => tick.x <= xMax);
+  const yAxis = useMemo(() => {
+    let lo = Infinity;
+    let hi = -Infinity;
+    for (const point of data) {
+      if (point.value === null) continue;
+      const [bandLo, bandHi] = point.band ?? [point.value, point.value];
+      lo = Math.min(lo, point.value, bandLo);
+      hi = Math.max(hi, point.value, bandHi);
+    }
+    const domain = valueDomain(lo, hi);
+    const ticks = niceTicks(domain[0], domain[1], 5);
+    const longest = Math.max(...ticks.map((t) => formatTickValue(t).length));
+    return { domain, ticks, width: Math.max(32, longest * 7 + 10) };
+  }, [data]);
 
   const desktop = useDesktop();
   const wrapperRef = useRef<HTMLDivElement>(null);
@@ -157,20 +196,25 @@ export function TimeSeriesPlot({
           <XAxis
             type="number"
             dataKey="x"
-            domain={[0, Math.max(1, series.nDays)]}
-            ticks={series.ticks.map((tick) => tick.x)}
+            domain={[0, xMax]}
+            ticks={xTicks.map((tick) => tick.x)}
             tickFormatter={(x: number) =>
               series.ticks.find((tick) => tick.x === x)?.label ?? ""
             }
             interval="preserveStartEnd"
             tickLine={false}
             axisLine={false}
+            tickMargin={8}
           />
           <YAxis
+            type="number"
+            domain={yAxis.domain}
+            ticks={yAxis.ticks}
+            allowDataOverflow
             tickLine={false}
             axisLine={false}
-            width={48}
-            tickFormatter={formatSeriesValue}
+            width={yAxis.width}
+            tickFormatter={formatTickValue}
           />
           {series.yearBreaks.map((x) => (
             <ReferenceLine
@@ -279,10 +323,10 @@ export function TimeSeriesPlot({
         />
       ) : null}
       <p className="text-muted-foreground">
-        {values.length.toLocaleString()} hourly steps
+        {plural(stepCount ?? values.length, `${activeSource().stepLabel} step`)}
         {resolution === "hour"
           ? ""
-          : ` · ${series.binCount.toLocaleString()} ${MEANS_LABEL[resolution]} means, band ±1 std`}
+          : ` · ${plural(series.binCount, `${MEANS_LABEL[resolution]} mean`)}, band ±1 std`}
         {units ? ` · ${units}` : ""}
       </p>
     </div>

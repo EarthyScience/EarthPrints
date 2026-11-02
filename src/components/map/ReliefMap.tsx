@@ -10,7 +10,7 @@ import type { Map as MapLibreMap, MapLibreEvent } from "maplibre-gl";
 import { ArrowLeft, Maximize2, X } from "lucide-react";
 import "maplibre-gl/dist/maplibre-gl.css";
 import "@/lib/map/initMaplibre";
-import { geoPointToZarrGrid } from "@/lib/map/geogrid";
+import { geoPointToZarrGrid, regionalExtent } from "@/lib/map/geogrid";
 import {
   readConnectionHint,
   shouldWarmCache,
@@ -42,6 +42,7 @@ import { MapTour } from "@/components/map/MapTour";
 import { GlobeSelectionOverlay } from "@/components/map/GlobeSelectionOverlay";
 import { UserPositionMarker } from "@/components/map/UserPositionMarker";
 import { CellPanel } from "@/components/panels/CellPanel";
+import { DatasetPanel } from "@/components/panels/DatasetPanel";
 import { HelpPanel } from "@/components/panels/HelpPanel";
 import { SettingsPanel } from "@/components/panels/SettingsPanel";
 import { Alert, AlertAction, AlertDescription } from "@/components/ui/alert";
@@ -128,11 +129,44 @@ export function ReliefMap() {
 
   useEffect(() => () => detachWheelZoomRef.current?.(), []);
 
+  // A link to a store that fails to open says so on arrival, not only once a
+  // point is picked.
+  const shownOpenErrorRef = useRef(false);
+  useEffect(() => {
+    if (series.dataset || !series.datasetError || shownOpenErrorRef.current) return;
+    shownOpenErrorRef.current = true;
+    setOpenPanel((current) => current ?? "data");
+  }, [series.dataset, series.datasetError]);
+
+  // A regional store opens framed on its area, so the first click lands in it.
+  const framedStoreRef = useRef<string | null>(null);
+  useEffect(() => {
+    const dataset = series.dataset;
+    const map = mapRef.current;
+    if (!dataset || !map || framedStoreRef.current === dataset.url) return;
+    framedStoreRef.current = dataset.url;
+    const extent = regionalExtent(dataset.grid);
+    if (!extent || extent.allLongitudes || series.selection) return;
+    const shift = extent.west >= 180 ? -360 : 0;
+    map.fitBounds(
+      [
+        [extent.west + shift, extent.south],
+        [extent.east + shift, extent.north],
+      ],
+      { padding: 64, duration: SELECTION_FOCUS_TRANSITION_MS },
+    );
+  }, [series.dataset, series.selection]);
+
   const flyToCell = useCallback(
     (cell: GridCell) => {
       const map = mapRef.current;
       if (!map) return;
-      const target = viewStateFocusedOnCell(readViewState(map), cell, viewMode);
+      const target = viewStateFocusedOnCell(
+        readViewState(map),
+        cell,
+        viewMode,
+        series.gridSpec.spatialResolutionDeg,
+      );
       map.flyTo({
         center: [target.longitude, target.latitude],
         zoom: target.zoom,
@@ -141,14 +175,16 @@ export function ReliefMap() {
         duration: SELECTION_FOCUS_TRANSITION_MS,
       });
     },
-    [viewMode],
+    [viewMode, series.gridSpec.spatialResolutionDeg],
   );
 
   const pick = useCallback(
     (lon: number, lat: number, options?: { fly?: boolean }) => {
       const selection = series.select(lon, lat);
       if (!showsData) setOpenPanel("chart");
-      if (options?.fly ?? settings.autoZoom) flyToCell(selection.grid);
+      if (!selection.outside && (options?.fly ?? settings.autoZoom)) {
+        flyToCell(selection.grid);
+      }
     },
     [flyToCell, series, settings.autoZoom, showsData],
   );
@@ -313,7 +349,7 @@ export function ReliefMap() {
           attributionControl={false}
           style={{ width: "100%", height: "100%" }}
         >
-          {selection && mapSize.width > 0 && mapSize.height > 0 ? (
+          {selection && !selection.outside && series.dataset && mapSize.width > 0 && mapSize.height > 0 ? (
             <GlobeSelectionOverlay
               cell={selection.grid}
               gridSpec={series.gridSpec}
@@ -386,9 +422,16 @@ export function ReliefMap() {
                 onTimeBasisChange={settings.setTimeBasis}
               />
             ) : null}
+            {openPanel === "data" ? (
+              <DatasetPanel
+                series={series}
+                onClose={() => setOpenPanel(null)}
+              />
+            ) : null}
             {openPanel === "settings" ? (
               <SettingsPanel
                 settings={settings}
+                nativeChunks={series.gridSpec.nativeChunks}
                 patchWindow={series.patchWindow}
                 onPatchWindowChange={series.setPatchWindow}
                 viewMode={viewMode}

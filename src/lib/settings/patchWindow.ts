@@ -1,5 +1,4 @@
-import { ZARR_STORE } from "@/lib/constants/store";
-import { NATIVE_TIME_CHUNK } from "@/lib/zarr/timeRange";
+import { activeTime } from "@/lib/zarr/timeRange";
 
 /**
  * How much of a downloaded patch the reader keeps.
@@ -33,26 +32,10 @@ const STORAGE_KEY = "earthprints:patch-window";
 
 const BYTES_PER_VALUE = 4;
 
-/** Bytes one cached entry costs: a full time chunk of a `size` x `size` tile. */
-export function entryBytesFor(size: number): number {
-  return (
-    NATIVE_TIME_CHUNK *
-    ZARR_STORE.dimensions.hour *
-    size *
-    size *
-    BYTES_PER_VALUE
-  );
-}
-
 /** Bytes the whole archive costs at one spot: every time chunk of one tile. */
 export function allYearsBytesFor(size: number): number {
-  return (
-    ZARR_STORE.dimensions.time *
-    ZARR_STORE.dimensions.hour *
-    size *
-    size *
-    BYTES_PER_VALUE
-  );
+  const { totalDays, slotsPerDay } = activeTime();
+  return totalDays * slotsPerDay * size * size * BYTES_PER_VALUE;
 }
 
 /**

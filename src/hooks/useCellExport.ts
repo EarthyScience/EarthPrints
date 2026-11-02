@@ -144,17 +144,21 @@ export function useCellExport({
             name: `${base}.csv`,
             data: new TextEncoder().encode(buildSeriesCsv(rows, prov)),
           },
-          {
-            name: `${base}_daily_cycle.csv`,
-            data: new TextEncoder().encode(
-              buildMarginCsv(
-                margins.dailyCycle,
-                columns.dailyCycle,
-                "mean daily cycle, each hour across all days",
-                prov,
-              ),
-            ),
-          },
+          ...(margins.dailyCycle.length > 0
+            ? [
+                {
+                  name: `${base}_daily_cycle.csv`,
+                  data: new TextEncoder().encode(
+                    buildMarginCsv(
+                      margins.dailyCycle,
+                      columns.dailyCycle,
+                      "mean daily cycle, each time of day across all days",
+                      prov,
+                    ),
+                  ),
+                },
+              ]
+            : []),
           {
             name: `${base}_seasonal_course.csv`,
             data: new TextEncoder().encode(

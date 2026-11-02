@@ -1,4 +1,5 @@
 import { dayIndexToUTCDate } from "@/lib/zarr/timeRange";
+import { utcMs } from "@/lib/zarr/utc";
 
 export type BinUnit = "day" | "week" | "month" | "year";
 
@@ -38,7 +39,7 @@ function binKey(absoluteDay: number, unit: BinUnit) {
   if (unit === "year") return { year, index: 0 };
   if (unit === "month") return { year, index: date.getUTCMonth() };
   const dayOfYear = Math.round(
-    (date.getTime() - Date.UTC(year, 0, 1)) / MS_PER_DAY,
+    (date.getTime() - utcMs(year, 0, 1)) / MS_PER_DAY,
   );
   if (unit === "day") return { year, index: dayOfYear };
   // The last week also takes day 365 (and 366 in leap years).
@@ -212,4 +213,15 @@ export function binCountLabel(count: number, unit: BinUnit): string {
   if (unit === "month") return plural(count, "month");
   if (unit === "week") return plural(count, "week");
   return plural(count, "day");
+}
+
+/**
+ * Years worth a tick on a long axis: every year for a few, otherwise only
+ * round ones (every 2, 5, 10, 25, 50, ... years) so labels stay evenly spaced.
+ */
+export function roundYearStep(yearCount: number, maxTicks = 8): number {
+  for (const step of [1, 2, 5, 10, 20, 25, 50, 100, 200, 250, 500, 1000]) {
+    if (yearCount / step <= maxTicks) return step;
+  }
+  return Math.ceil(yearCount / maxTicks);
 }

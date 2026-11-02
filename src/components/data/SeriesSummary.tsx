@@ -3,8 +3,9 @@
 import { useMemo } from "react";
 import { formatIsoDate } from "@/lib/map/fingerprintScale";
 import { formatSeriesValue } from "@/lib/plots/chartTheme";
+import { contiguousDayBlocks } from "@/lib/zarr/localTime";
 import { dailyMeanSeries } from "@/lib/zarr/series";
-import { getSelectedYearsDayMapping, ZARR_TIME } from "@/lib/zarr/timeRange";
+import { getSelectedYearsDayMapping } from "@/lib/zarr/timeRange";
 import type { CellSeries } from "@/hooks/useCellSeries";
 import type { SeriesDisplay } from "@/hooks/useSeriesDisplay";
 import { Card, CardContent } from "@/components/ui/card";
@@ -18,11 +19,41 @@ type Summary = {
   days: number;
 };
 
+type Period = "day" | "month";
+
+/**
+ * Days the local-time shift leaves only partly filled: the first day of each
+ * run east of Greenwich, the last one west of it. Their means would stand for
+ * a few hours, not a day.
+ */
+function partialLocalDays(
+  values: Float32Array,
+  selectedYears: number[],
+  hoursPerDay: number,
+  utcOffsetHours: number,
+): Set<number> {
+  if (utcOffsetHours === 0) return new Set();
+  const dayCount = Math.floor(values.length / hoursPerDay);
+  const { absoluteDays } = getSelectedYearsDayMapping(
+    selectedYears,
+    undefined,
+    dayCount,
+  );
+  return new Set(
+    contiguousDayBlocks(absoluteDays, dayCount).map((block) =>
+      utcOffsetHours > 0 ? block.start : block.start + block.dayCount - 1,
+    ),
+  );
+}
+
 function summarize(
   values: Float32Array,
   selectedYears: number[],
+  hoursPerDay: number,
+  period: Period,
+  skipped: Set<number> = new Set(),
+  firstDay = 0,
 ): Summary | null {
-  const hoursPerDay = ZARR_TIME.hoursPerDay;
   const daily = dailyMeanSeries(values, hoursPerDay);
   if (daily.length === 0) return null;
   const { absoluteDays } = getSelectedYearsDayMapping(
@@ -30,22 +61,34 @@ function summarize(
     undefined,
     Math.floor(values.length / hoursPerDay),
   );
-  const dateOf = (day: number) =>
-    formatIsoDate(absoluteDays[day - 1] ?? day - 1);
-
-  let sum = 0;
-  let lowest = daily[0];
-  let highest = daily[0];
+  // A monthly store fills every day of its month with one value, so its
+  // summary counts and dates months rather than those repeated days.
+  const labelOf = (day: number) => {
+    const date = formatIsoDate(absoluteDays[day - 1] ?? day - 1);
+    return period === "month" ? date.slice(0, 7) : date;
+  };
+  const points: { value: number; label: string }[] = [];
   for (const point of daily) {
+    if (skipped.has(firstDay + point.day - 1)) continue;
+    const label = labelOf(point.day);
+    if (period === "month" && points.at(-1)?.label === label) continue;
+    points.push({ value: point.value, label });
+  }
+
+  if (points.length === 0) return null;
+  let sum = 0;
+  let lowest = points[0]!;
+  let highest = points[0]!;
+  for (const point of points) {
     sum += point.value;
     if (point.value < lowest.value) lowest = point;
     if (point.value > highest.value) highest = point;
   }
   return {
-    mean: sum / daily.length,
-    lowest: { value: lowest.value, date: dateOf(lowest.day) },
-    highest: { value: highest.value, date: dateOf(highest.day) },
-    days: daily.length,
+    mean: sum / points.length,
+    lowest: { value: lowest.value, date: lowest.label },
+    highest: { value: highest.value, date: highest.label },
+    days: points.length,
   };
 }
 
@@ -53,8 +96,10 @@ function summarize(
 function summarizeByYear(
   values: Float32Array,
   selectedYears: number[],
+  hoursPerDay: number,
+  period: Period,
+  skipped: Set<number>,
 ): { year: number; summary: Summary }[] {
-  const hoursPerDay = ZARR_TIME.hoursPerDay;
   const { yearIntervals } = getSelectedYearsDayMapping(
     selectedYears,
     undefined,
@@ -64,6 +109,10 @@ function summarizeByYear(
     const summary = summarize(
       values.subarray(startDayLocal * hoursPerDay, (endDayLocal + 1) * hoursPerDay),
       [year],
+      hoursPerDay,
+      period,
+      skipped,
+      startDayLocal,
     );
     return summary ? [{ year, summary }] : [];
   });
@@ -115,21 +164,37 @@ export function SeriesSummary({
   display,
   className,
 }: SeriesSummaryProps) {
-  const { selectedYears, units } = series;
+  const { selectedYears, slotsPerDay } = series;
+  const { units } = display;
   const values = display.displayValues;
+  const period: Period =
+    series.timeSpan === "month" || series.timeSpan === "year" ? "month" : "day";
+  const word = period === "month" ? "month" : "day";
+  const Word = period === "month" ? "Month" : "Day";
+
+  const offset = display.timeBasis === "local" ? display.utcOffsetHours : 0;
+  const skipped = useMemo(
+    () =>
+      values
+        ? partialLocalDays(values, selectedYears, slotsPerDay, offset)
+        : new Set<number>(),
+    [values, selectedYears, slotsPerDay, offset],
+  );
 
   const summary = useMemo(
     () =>
-      values && !display.isEmptyCell ? summarize(values, selectedYears) : null,
-    [values, display.isEmptyCell, selectedYears],
+      values && !display.isEmptyCell
+        ? summarize(values, selectedYears, slotsPerDay, period, skipped)
+        : null,
+    [values, display.isEmptyCell, selectedYears, slotsPerDay, period, skipped],
   );
 
   const byYear = useMemo(
     () =>
       values && !display.isEmptyCell && selectedYears.length > 1
-        ? summarizeByYear(values, selectedYears)
+        ? summarizeByYear(values, selectedYears, slotsPerDay, period, skipped)
         : [],
-    [values, display.isEmptyCell, selectedYears],
+    [values, display.isEmptyCell, selectedYears, slotsPerDay, period, skipped],
   );
 
   if (!summary) return null;
@@ -137,7 +202,7 @@ export function SeriesSummary({
   return (
     <section aria-label="Summary" className="grid gap-3">
       <h2 className="text-xs text-muted-foreground">
-        Daily means over the selected years
+        {period === "month" ? "Monthly" : "Daily"} means over the selected years
       </h2>
       <div className={className ?? "grid grid-cols-2 gap-3"}>
         <StatCard
@@ -146,24 +211,24 @@ export function SeriesSummary({
           units={units}
         />
         <StatCard
-          label="Lowest day"
+          label={`Lowest ${word}`}
           value={formatSeriesValue(summary.lowest.value)}
           units={units}
           note={summary.lowest.date}
         />
         <StatCard
-          label="Highest day"
+          label={`Highest ${word}`}
           value={formatSeriesValue(summary.highest.value)}
           units={units}
           note={summary.highest.date}
         />
         <StatCard
-          label="Days with data"
+          label={`${Word}s with data`}
           value={summary.days.toLocaleString()}
         />
       </div>
       {byYear.length > 0 ? (
-        <YearTable rows={byYear} total={summary} units={units} />
+        <YearTable rows={byYear} total={summary} units={units} word={word} />
       ) : null}
     </section>
   );
@@ -182,10 +247,12 @@ function YearTable({
   rows,
   total,
   units,
+  word,
 }: {
   rows: { year: number; summary: Summary }[];
   total: Summary;
   units?: string | null;
+  word: string;
 }) {
   const row = (label: string, summary: Summary, isTotal = false) => (
     <tr
@@ -222,13 +289,13 @@ function YearTable({
                 Mean
               </th>
               <th scope="col" className="px-3 py-2 text-right font-normal">
-                Lowest day
+                Lowest {word}
               </th>
               <th scope="col" className="px-3 py-2 text-right font-normal">
-                Highest day
+                Highest {word}
               </th>
               <th scope="col" className="px-3 py-2 text-right font-normal">
-                Days with data
+                {word === "month" ? "Months" : "Days"} with data
               </th>
             </tr>
           </thead>

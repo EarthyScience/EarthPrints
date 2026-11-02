@@ -1,10 +1,11 @@
 "use client";
 
+import { ZARR_STORE } from "@/lib/constants/store";
 import { useState } from "react";
 import { Collapsible } from "@base-ui/react/collapsible";
 import { ArrowLeftRight, ChevronDown } from "lucide-react";
 import { formatLatitude, formatLongitude } from "@/lib/map/geogrid";
-import { formatSelectedYearsLabel, ZARR_TIME } from "@/lib/zarr/timeRange";
+import { formatSelectedYearsLabel } from "@/lib/zarr/timeRange";
 import { TIME_SERIES_PLOT_HEIGHT } from "@/lib/plots/chartTheme";
 import { shortTimeBasis, type TimeBasis } from "@/lib/zarr/localTime";
 import type { CellSeries, SeriesProgress } from "@/hooks/useCellSeries";
@@ -12,11 +13,13 @@ import type { PlotView, SeriesDisplay } from "@/hooks/useSeriesDisplay";
 import { TimeSeriesPlot } from "@/components/plots/TimeSeriesPlot";
 import { FingerprintPlot } from "@/components/plots/FingerprintPlot";
 import { useDesktop } from "@/components/plots/MapSideTooltip";
+import { TemperatureUnitField } from "@/components/panels/TemperatureUnitField";
 import { TimeBasisField } from "@/components/panels/TimeBasisField";
 import { YearPicker } from "@/components/panels/YearPicker";
 import { SeriesSummary } from "@/components/data/SeriesSummary";
 import { ColormapSelect } from "@/components/panels/ColormapSelect";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Button } from "@/components/ui/button";
 import { CardDescription, CardTitle } from "@/components/ui/card";
 import {
   Progress,
@@ -52,6 +55,18 @@ export function CellView({
   }
   if (!selection) return null;
 
+  if (!series.dataset) {
+    return (
+      <div className="grid gap-4">
+        <CardTitle>
+          {formatLongitude(selection.grid.lon)},{" "}
+          {formatLatitude(selection.grid.lat)}
+        </CardTitle>
+        <PlotArea series={series} display={display} />
+      </div>
+    );
+  }
+
   return (
     <div className="grid gap-4">
       <Collapsible.Root
@@ -80,9 +95,10 @@ export function CellView({
         <Collapsible.Panel className="h-(--collapsible-panel-height) overflow-hidden transition-[height] duration-150 ease-out data-ending-style:h-0 data-starting-style:h-0 motion-reduce:transition-none">
           <div className="grid gap-4 pt-3">
             <CardDescription>
-              Hourly net ecosystem exchange for this 0.05° cell. The dashed box
-              marks the {patchWindow}×{patchWindow} cells around it kept in
-              memory.
+              {describeRecord(series)} The dashed box shows the{" "}
+              {Math.min(patchWindow, series.gridSpec.nativeChunks.lat)}×
+              {Math.min(patchWindow, series.gridSpec.nativeChunks.lon)} cells
+              downloaded with it, so picks inside it load at once.
             </CardDescription>
             <YearPicker
               selectedYears={series.selectedYears}
@@ -90,7 +106,8 @@ export function CellView({
               loading={series.loading}
               onSelectYears={series.selectYears}
             />
-            {desktop ? null : (
+            <TemperatureUnitField display={display} />
+            {desktop || !display.canUseLocalTime ? null : (
               <TimeBasisField value={timeBasis} onChange={onTimeBasisChange} />
             )}
           </div>
@@ -106,6 +123,34 @@ export function CellView({
       {desktop ? null : <SeriesSummary series={series} display={display} />}
     </div>
   );
+}
+
+/** "Hourly net ecosystem exchange for this 0.05° cell." */
+export function describeRecord(series: CellSeries): string {
+  const { dataset } = series;
+  if (!dataset) return series.datasetError ? "No store is open." : "Opening the store.";
+  const name = dataset.longName ?? dataset.variable;
+  const step = dataset.time.stepLabel;
+  const resolution = formatResolution(series.gridSpec.spatialResolutionDeg);
+  // Lowercase a sentence-case name ("Net ecosystem exchange"), but leave
+  // acronyms ("NEE") and title case ("Gross Primary Productivity") alone.
+  const lowered = /^[A-Z][a-z]*(?:[\s-][a-z0-9][^\s]*)*$/.test(name)
+    ? `${name.charAt(0).toLowerCase()}${name.slice(1)}`
+    : name;
+  const repeatsStep = lowered.toLowerCase().includes(step.toLowerCase());
+  const phrase = repeatsStep ? lowered : `${step} ${lowered}`;
+  return `${phrase.charAt(0).toUpperCase()}${phrase.slice(1)} for this ${resolution} cell.`;
+}
+
+export function formatResolution(degrees: number): string {
+  return `${Number(degrees.toPrecision(3))}°`;
+}
+
+function emptyCellMessage(series: CellSeries): string {
+  const isFluxcom = !series.dataset || series.dataset.url === ZARR_STORE.url;
+  return isFluxcom
+    ? "No data at this cell. NEE is estimated over vegetated land, so ocean and bare-ground cells are empty. Pick a cell over land."
+    : "No data at this cell for the selected years. The store leaves it empty, for example outside its land or ocean mask, or the years fall outside its record. Pick another cell or other years.";
 }
 
 const activeTriggerClass =
@@ -188,7 +233,20 @@ export function PlotArea({
   if (series.error) {
     return (
       <Alert>
-        <AlertDescription>{series.error}</AlertDescription>
+        <AlertDescription className="grid gap-3">
+          <span>{series.error}</span>
+          {series.partialOffer ? (
+            <Button
+              variant="outline"
+              size="sm"
+              className="justify-self-start"
+              onClick={series.loadPartial}
+            >
+              Load the first {formatDays(series.partialOffer.days)} (up to{" "}
+              {formatBytes(series.partialOffer.bytes)})
+            </Button>
+          ) : null}
+        </AlertDescription>
       </Alert>
     );
   }
@@ -196,32 +254,31 @@ export function PlotArea({
   if (display.isEmptyCell) {
     return (
       <Alert>
-        <AlertDescription>
-          No data at this cell. NEE is estimated over vegetated land, so ocean
-          and bare-ground cells are empty. Pick a cell over land.
-        </AlertDescription>
+        <AlertDescription>{emptyCellMessage(series)}</AlertDescription>
       </Alert>
     );
   }
 
   if (!display.displayValues) return null;
 
-  return display.plotView === "line" ? (
+  const plot = display.plotView === "line" ? (
     <TimeSeriesPlot
       values={display.displayValues}
-      units={series.units}
-      hoursPerDay={ZARR_TIME.hoursPerDay}
+      units={display.units}
+      hoursPerDay={series.slotsPerDay}
       selectedYears={series.selectedYears}
       resolution={display.lineResolution}
       timeBasisSuffix={shortTimeBasis(display.timeBasisLabel)}
+      stepCount={series.stepCount}
+      coveredDays={series.coveredDays}
       height={height}
       pinLimit={pinLimit}
     />
   ) : (
     <FingerprintPlot
       values={display.displayValues}
-      units={series.units}
-      hoursPerDay={ZARR_TIME.hoursPerDay}
+      units={display.units}
+      hoursPerDay={series.slotsPerDay}
       selectedYears={series.selectedYears}
       timeBasisLabel={display.timeBasisLabel}
       transposed={display.transposed}
@@ -232,9 +289,26 @@ export function PlotArea({
       pinLimit={pinLimit}
     />
   );
+
+  if (series.coveredDays === null) return plot;
+  return (
+    <div className="grid gap-3">
+      <p className="text-sm text-muted-foreground">
+        Showing the first {formatDays(series.coveredDays)} of the selection. The
+        rest would take more downloads than one load allows.
+      </p>
+      {plot}
+    </div>
+  );
+}
+
+function formatDays(days: number): string {
+  const whole = Math.max(1, Math.round(days));
+  return `${whole.toLocaleString("en-US")} day${whole === 1 ? "" : "s"}`;
 }
 
 function formatBytes(bytes: number): string {
+  if (bytes >= 1024 ** 3) return `${(bytes / 1024 ** 3).toFixed(1)} GB`;
   if (bytes >= 1_048_576) return `${(bytes / 1_048_576).toFixed(1)} MB`;
   if (bytes >= 1024) return `${Math.round(bytes / 1024)} KB`;
   return `${bytes} B`;

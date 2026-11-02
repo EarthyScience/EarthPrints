@@ -45,6 +45,22 @@ export function localHourOffset(lon: number, hoursPerDay = 24): number {
   return Math.round(wrapped / (360 / hoursPerDay));
 }
 
+/** Clock time at the start of slot `slot` of a day split into `slotsPerDay`. */
+export function formatSlotTime(slot: number, slotsPerDay = 24): string {
+  const minutes = Math.round((slot * 24 * 60) / slotsPerDay);
+  const hh = String(Math.floor(minutes / 60)).padStart(2, "0");
+  const mm = String(minutes % 60).padStart(2, "0");
+  return `${hh}:${mm}`;
+}
+
+/** "1 hour", "6 hours", "30 minutes": the length of one slot. */
+export function slotLengthLabel(slotsPerDay = 24): string {
+  const minutes = (24 * 60) / slotsPerDay;
+  if (minutes % 60 !== 0) return `${Math.round(minutes)} minutes`;
+  const hours = minutes / 60;
+  return hours === 1 ? "1 hour" : `${hours} hours`;
+}
+
 /** `UTC+10`, `UTC-4`, `UTC`. */
 export function formatUtcOffset(offsetHours: number): string {
   if (offsetHours === 0) return "UTC";
@@ -54,7 +70,7 @@ export function formatUtcOffset(offsetHours: number): string {
 /** Caption and tooltip wording for the basis in force. */
 export function formatTimeBasis(basis: TimeBasis, offsetHours: number): string {
   if (basis === "utc") return "UTC";
-  return `local solar time (${formatUtcOffset(offsetHours)})`;
+  return `local solar time (${offsetHours === 0 ? "UTC±0" : formatUtcOffset(offsetHours)})`;
 }
 
 /** The time basis as a short suffix for an hour readout: "local" or "UTC". */

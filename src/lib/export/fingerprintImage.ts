@@ -2,6 +2,7 @@ import {
   type ColormapId,
   fingerprintRampSamples,
   zeroFrac,
+  labelExtent,
 } from "@/lib/map/fingerprintScale";
 import { chartTickColor, formatSeriesValue } from "@/lib/plots/chartTheme";
 import type { CapturedImage } from "./capture";
@@ -26,6 +27,8 @@ type LegendOptions = {
   /** Extents from `asymmetricExtents`, both non-negative magnitudes. */
   negMax: number;
   posMax: number;
+  /** Value the ramp is centred on; see `asymmetricExtents`. */
+  pivot?: number;
   colormapId: ColormapId;
   units?: string | null;
   /** Backing-store pixels per CSS pixel in the source canvas. */
@@ -39,9 +42,10 @@ function drawLegend(
   {
     negMax,
     posMax,
+    pivot: centre = 0,
     colormapId,
     units,
-  }: Pick<LegendOptions, "negMax" | "posMax" | "colormapId" | "units">,
+  }: Pick<LegendOptions, "negMax" | "posMax" | "pivot" | "colormapId" | "units">,
 ) {
   ctx.font = LABEL_FONT;
   ctx.fillStyle = chartTickColor(true);
@@ -49,8 +53,8 @@ function drawLegend(
 
   // Units ride on the upper end. The on-screen legend leaves them to the
   // caption below it, which a standalone image does not have.
-  const min = formatSeriesValue(-negMax);
-  const max = `${formatSeriesValue(posMax)}${units ? ` ${units}` : ""}`;
+  const min = formatSeriesValue(centre - labelExtent(negMax));
+  const max = `${formatSeriesValue(centre + labelExtent(posMax))}${units ? ` ${units}` : ""}`;
   const minW = ctx.measureText(min).width;
   const maxW = ctx.measureText(max).width;
   const middle = top + BAR_H / 2;
@@ -94,7 +98,7 @@ function drawLegend(
  */
 export function fingerprintPngWithLegend(
   canvas: HTMLCanvasElement,
-  { negMax, posMax, colormapId, units, pixelRatio }: LegendOptions,
+  { negMax, posMax, pivot, colormapId, units, pixelRatio }: LegendOptions,
 ): CapturedImage {
   if (canvas.width === 0 || canvas.height === 0) {
     throw new Error("Canvas has no size to capture");
@@ -121,6 +125,7 @@ export function fingerprintPngWithLegend(
   drawLegend(ctx, plotW, plotH + GAP_TOP, {
     negMax,
     posMax,
+    pivot,
     colormapId,
     units,
   });
