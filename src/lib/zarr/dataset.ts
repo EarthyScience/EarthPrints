@@ -610,7 +610,7 @@ const FLUXCOM_NAMES = {
 function storeErrorMessage(cause: unknown): string {
   const message = cause instanceof Error ? cause.message : String(cause);
   if (/failed to fetch|networkerror|load failed|cors/i.test(message)) {
-    return "The store could not be reached. It may be offline, or its server may not allow requests from other websites (CORS).";
+    return "The store could not be reached. It may be offline or private, or its server may not allow requests from other websites (CORS).";
   }
   if (/not ?found|404/i.test(message)) {
     return "No Zarr metadata was found at this address. Check that it points at the store's root.";

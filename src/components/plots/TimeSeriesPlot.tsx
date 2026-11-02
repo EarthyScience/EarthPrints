@@ -204,6 +204,7 @@ export function TimeSeriesPlot({
             interval="preserveStartEnd"
             tickLine={false}
             axisLine={false}
+            tickMargin={8}
           />
           <YAxis
             type="number"
