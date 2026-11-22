@@ -22,9 +22,20 @@ import {
   type BinUnit,
   type TimeBin,
   timeBins,
-  WEEKS_PER_YEAR,
 } from "@/lib/plots/timeBins";
 import { formatSlotTime } from "@/lib/zarr/localTime";
+import {
+  differenceFromTypical,
+  type FingerprintView,
+  POSITIONS,
+  typicalStats,
+  type TypicalStat,
+  typicalYear,
+  type UnusualYear,
+  unusualYears,
+  yearlyDifference,
+  VALUES_VIEW,
+} from "@/lib/plots/fingerprintAnomaly";
 
 const AXIS_LEFT_DEFAULT = 34;
 const AXIS_LEFT_TRANSPOSED = 54;
@@ -58,12 +69,15 @@ export type FingerprintGrid = BinStats & {
    * (a day, week or month), the usual year by season heatmap.
    */
   seasonal?: { years: number[] };
-};
-
-const SEASON_COLUMNS: Record<Exclude<BinUnit, "year">, number> = {
-  day: 366,
-  week: WEEKS_PER_YEAR,
-  month: 12,
+  /** Columns are positions in the typical year, summarised across `years` years. */
+  typical?: { stat: TypicalStat; years: number };
+  /** Cells hold each year's difference from the typical year. */
+  difference?: {
+    reference: Float32Array;
+    unusual: UnusualYear[];
+    /** Years left out of the ranking for having too few months of data. */
+    partial: number[];
+  };
 };
 
 export function fingerprintGrid(
@@ -72,6 +86,7 @@ export function fingerprintGrid(
   selectedYears: number[] | null,
   unit: BinUnit = "day",
   layout: "auto" | "hours" = "auto",
+  view: FingerprintView = VALUES_VIEW,
 ): FingerprintGrid {
   const nDays = Math.floor(values.length / hoursPerDay);
   const { absoluteDays } = getSelectedYearsDayMapping(
@@ -80,10 +95,58 @@ export function fingerprintGrid(
     nDays,
   );
   const bins = timeBins(absoluteDays.slice(0, nDays), unit);
-  if (hoursPerDay === 1 && unit !== "year" && layout === "auto") {
-    return seasonGrid(values, bins, unit);
+  const seasonal = hoursPerDay === 1 && unit !== "year" && layout === "auto";
+  const binned = binHourGrid(values, hoursPerDay, bins);
+  const lay = (stats: BinStats) =>
+    seasonal
+      ? seasonGrid(stats, bins, unit as Exclude<BinUnit, "year">)
+      : hourGrid(stats, bins, hoursPerDay, unit);
+  if (view.kind === "values") return lay(binned);
+
+  const typical = typicalYear(binned, bins, hoursPerDay, unit);
+  if (view.kind === "typical") {
+    const years = new Set(bins.map((bin) => bin.year)).size;
+    return typicalGrid(typicalStats(typical, view.stat), hoursPerDay, unit, {
+      stat: view.stat,
+      years,
+    });
   }
-  const stats = binHourGrid(values, hoursPerDay, bins);
+  // Ranked on month differences at every scale, so the order does not
+  // change with the scale and part years can be left out by month count.
+  const monthBins = unit === "month" ? bins : timeBins(absoluteDays.slice(0, nDays), "month");
+  const monthBinned = unit === "month" ? binned : binHourGrid(values, hoursPerDay, monthBins);
+  const monthly = differenceFromTypical(
+    monthBinned,
+    monthBins,
+    hoursPerDay,
+    unit === "month" ? typical : typicalYear(monthBinned, monthBins, hoursPerDay, "month"),
+  );
+  const { stats, reference } =
+    unit === "month"
+      ? monthly
+      : unit === "year"
+        ? yearlyDifference(monthly, monthBins, bins, hoursPerDay)
+        : differenceFromTypical(binned, bins, hoursPerDay, typical);
+  const asStats = emptyStats(reference.length);
+  asStats.mean.set(reference);
+  const { ranked, partial } = unusualYears(monthly.stats, monthBins, hoursPerDay);
+  return {
+    ...lay(stats),
+    difference: {
+      // Laid out like the cells, so a seasonal grid moves it the same way.
+      reference: lay(asStats).mean,
+      unusual: ranked,
+      partial,
+    },
+  };
+}
+
+function hourGrid(
+  stats: BinStats,
+  bins: TimeBin[],
+  hoursPerDay: number,
+  unit: BinUnit,
+): FingerprintGrid {
   return {
     ...stats,
     unit,
@@ -93,26 +156,47 @@ export function fingerprintGrid(
   };
 }
 
-function seasonGrid(
-  values: Float32Array,
-  bins: TimeBin[],
-  unit: Exclude<BinUnit, "year">,
-): FingerprintGrid {
-  const means = binHourGrid(values, 1, bins);
-  const years = [...new Set(bins.map((bin) => bin.year))];
-  const nRows = years.length;
-  const nCols = SEASON_COLUMNS[unit];
-  const stats = emptyStats(nCols * nRows);
-  stats.mean.fill(NaN);
-  stats.std.fill(NaN);
-  const columns: TimeBin[] = Array.from({ length: nCols }, (_, index) => ({
-    year: years[0]!,
+/** Placeholder bins for columns that are positions in the year, not dates. */
+function positionColumns(count: number, year: number): TimeBin[] {
+  return Array.from({ length: count }, (_, index) => ({
+    year,
     index,
     startLocal: -1,
     endLocal: -1,
     firstDay: NaN,
     lastDay: NaN,
   }));
+}
+
+function typicalGrid(
+  stats: BinStats,
+  hoursPerDay: number,
+  unit: BinUnit,
+  typical: NonNullable<FingerprintGrid["typical"]>,
+): FingerprintGrid {
+  const nCols = POSITIONS[unit];
+  return {
+    ...stats,
+    unit,
+    bins: positionColumns(nCols, NaN),
+    hoursPerDay,
+    margins: fingerprintMargins(stats.mean, nCols, hoursPerDay),
+    typical,
+  };
+}
+
+function seasonGrid(
+  means: BinStats,
+  bins: TimeBin[],
+  unit: Exclude<BinUnit, "year">,
+): FingerprintGrid {
+  const years = [...new Set(bins.map((bin) => bin.year))];
+  const nRows = years.length;
+  const nCols = POSITIONS[unit];
+  const stats = emptyStats(nCols * nRows);
+  stats.mean.fill(NaN);
+  stats.std.fill(NaN);
+  const columns = positionColumns(nCols, years[0]!);
   bins.forEach((bin, b) => {
     const at = bin.index * nRows + years.indexOf(bin.year);
     stats.mean[at] = means.mean[b]!;
@@ -139,8 +223,20 @@ const SHORT_MONTHS = [
   "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
 ] as const;
 
+const TYPICAL_STAT_LABELS: Record<TypicalStat, string> = {
+  mean: "Mean",
+  median: "Median",
+  spread: "Std",
+};
+
+/** Whether columns are positions in the year rather than dates. */
+export function columnsArePositions(grid: FingerprintGrid): boolean {
+  return grid.seasonal !== undefined || grid.typical !== undefined;
+}
+
 /** A position in the year, without the year: "Jun", "week 23", "13 Jun". */
 function seasonLabel(index: number, unit: BinUnit): string {
+  if (unit === "year") return "Year";
   if (unit === "month") return SHORT_MONTHS[index] ?? "";
   if (unit === "week") return `week ${index + 1}`;
   // Day of year in a leap year, so all 366 positions have a date.
@@ -152,14 +248,18 @@ function seasonLabel(index: number, unit: BinUnit): string {
 export function columnLabel(grid: FingerprintGrid, col: number): string {
   const bin = grid.bins[col];
   if (!bin) return "";
-  return grid.seasonal ? seasonLabel(col, grid.unit) : formatBinLabel(bin, grid.unit);
+  return columnsArePositions(grid)
+    ? seasonLabel(col, grid.unit)
+    : formatBinLabel(bin, grid.unit);
 }
 
 /** The label of one row: a time of day, or a year in a seasonal grid. */
 export function rowLabel(grid: FingerprintGrid, row: number): string {
-  return grid.seasonal
-    ? String(grid.seasonal.years[row] ?? "")
-    : formatSlotTime(row, grid.hoursPerDay);
+  if (grid.seasonal) return String(grid.seasonal.years[row] ?? "");
+  if (grid.typical && grid.hoursPerDay === 1) {
+    return TYPICAL_STAT_LABELS[grid.typical.stat];
+  }
+  return formatSlotTime(row, grid.hoursPerDay);
 }
 
 /** Rows worth a label on the row axis. */
@@ -230,7 +330,8 @@ function yearBreaks(bins: readonly TimeBin[]): number[] {
 /** Tick positions in columns, measured from the plot's leading edge. */
 function columnAxisTicks({ grid }: FingerprintLayout) {
   const { bins } = grid;
-  if (grid.seasonal) {
+  if (grid.unit === "year" && grid.typical) return [{ at: 0.5, label: "Year" }];
+  if (columnsArePositions(grid)) {
     // Every other month start, as a column position in this grid's unit.
     return [0, 2, 4, 6, 8, 10].map((month) => {
       const dayOfYear = (Date.UTC(2000, month, 1) - Date.UTC(2000, 0, 1)) / 86_400_000;

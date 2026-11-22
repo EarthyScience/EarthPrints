@@ -27,6 +27,7 @@ import {
 } from "@/lib/zarr/temperature";
 import { useTheme } from "@/providers/ThemeProvider";
 import type { BinUnit } from "@/lib/plots/timeBins";
+import type { FingerprintView, TypicalStat } from "@/lib/plots/fingerprintAnomaly";
 import type { LineResolution } from "@/lib/plots/lineSeries";
 import type { CellSeries } from "@/hooks/useCellSeries";
 import type { TimeAxis } from "@/lib/zarr/timeAxis";
@@ -34,6 +35,7 @@ import type { TimeAxis } from "@/lib/zarr/timeAxis";
 type TimeSpan = TimeAxis["span"];
 
 export type PlotView = "line" | "fingerprint";
+export type FingerprintShow = FingerprintView["kind"];
 
 const RANK: Record<LineResolution | BinUnit, number> = {
   hour: 0,
@@ -129,6 +131,47 @@ export function useSeriesDisplay(
   const fingerprintScale =
     allowedScale === "year" && !canShowYearly ? finestScale : allowedScale;
 
+  // Both compare years, so they need two or more; a typical year on the
+  // yearly scale would be a single column.
+  const [showChoice, setFingerprintShow] = useState<FingerprintShow>("values");
+  const [typicalStat, setTypicalStat] = useState<TypicalStat>("mean");
+  const typicalBlocked = !canShowYearly
+    ? "Pick two or more years"
+    : fingerprintScale === "year"
+      ? "Pick a daily, weekly or monthly scale"
+      : null;
+  const fingerprintShows: {
+    value: FingerprintShow;
+    label: string;
+    disabled?: boolean;
+    title?: string;
+  }[] = [
+    { value: "values", label: "Values" },
+    {
+      value: "typical",
+      label: "Typical year",
+      disabled: typicalBlocked !== null,
+      title: typicalBlocked ?? undefined,
+    },
+    {
+      value: "difference",
+      label: "Difference",
+      disabled: !canShowYearly,
+      title: canShowYearly ? undefined : "Pick two or more years",
+    },
+  ];
+  const fingerprintShow =
+    fingerprintShows.find((option) => option.value === showChoice)?.disabled
+      ? "values"
+      : showChoice;
+  const fingerprintView = useMemo<FingerprintView>(
+    () =>
+      fingerprintShow === "typical"
+        ? { kind: "typical", stat: typicalStat }
+        : { kind: fingerprintShow },
+    [fingerprintShow, typicalStat],
+  );
+
   // Shifting to local time moves whole slots, so it is only honest when a
   // slot is an hour or less; a 6-hourly store would label Tokyo UTC+12.
   const canUseLocalTime = slotsPerDay >= 24;
@@ -201,6 +244,13 @@ export function useSeriesDisplay(
     fingerprintScale,
     setFingerprintScale,
     fingerprintScales,
+    fingerprintShow,
+    setFingerprintShow,
+    fingerprintShows,
+    typicalStat,
+    setTypicalStat,
+    fingerprintView,
+    hasDailyCycle: slotsPerDay > 1,
     canShowYearly,
     canUseLocalTime,
     timeBasis,

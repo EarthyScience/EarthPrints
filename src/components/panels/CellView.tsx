@@ -284,6 +284,7 @@ export function PlotArea({
       transposed={display.transposed}
       colormapId={display.colormapId}
       scale={display.fingerprintScale}
+      view={display.fingerprintView}
       margins={margins}
       height={height}
       pinLimit={pinLimit}
