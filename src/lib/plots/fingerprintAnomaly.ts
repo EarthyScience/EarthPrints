@@ -158,12 +158,20 @@ export type UnusualYear = {
 
 /** A year enters the ranking with data in at least this many months. */
 export const MIN_RANKED_MONTHS = 9;
+/** A month counts when this share of its days has data. */
+const MIN_MONTH_COVERAGE = 0.8;
+
+function daysInMonth(year: number, month: number): number {
+  return new Date(Date.UTC(year, month + 1, 0)).getUTCDate();
+}
 
 /**
  * Years ordered by the size of their monthly differences from the typical
  * year, either sign. Raw units rather than z scores: dividing by each cell's
  * spread lets quiet cells (winter, night) with tiny anomalies decide the
- * ranking. Years with too few months are returned separately.
+ * ranking. Only months with most of their days count, so one day of a new
+ * month cannot swing a year. Years with too few months are returned
+ * separately.
  */
 export function unusualYears(
   monthly: BinStats,
@@ -173,6 +181,12 @@ export function unusualYears(
   const byYear = new Map<number, { sum: number; count: number; months: number }>();
   monthBins.forEach((bin, b) => {
     const acc = byYear.get(bin.year) ?? { sum: 0, count: 0, months: 0 };
+    byYear.set(bin.year, acc);
+    let days = 0;
+    for (let hour = 0; hour < hoursPerDay; hour++) {
+      days = Math.max(days, monthly.count[b * hoursPerDay + hour]!);
+    }
+    if (days < MIN_MONTH_COVERAGE * daysInMonth(bin.year, bin.index)) return;
     let any = false;
     for (let hour = 0; hour < hoursPerDay; hour++) {
       const value = monthly.mean[b * hoursPerDay + hour]!;
@@ -182,7 +196,6 @@ export function unusualYears(
       any = true;
     }
     if (any) acc.months++;
-    byYear.set(bin.year, acc);
   });
   const entries = [...byYear];
   return {

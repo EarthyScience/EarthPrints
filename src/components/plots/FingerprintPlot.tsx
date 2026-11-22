@@ -360,7 +360,9 @@ export function FingerprintPlot({
     if (count === 0) return undefined;
     if (grid.difference) {
       const reference = grid.difference.reference[at] as number;
-      return `Typical ${formatSeriesValue(reference)}${units ? ` ${units}` : ""}`;
+      const actual = reference + (grid.mean[at] as number);
+      const unit = units ? ` ${units}` : "";
+      return `Typical ${formatSeriesValue(reference)}${unit}, this year ${formatSeriesValue(actual)}${unit}`;
     }
     if (grid.typical) {
       const years = binCountLabel(count, "year");
@@ -566,7 +568,7 @@ export function FingerprintPlot({
   );
 }
 
-const TYPICAL_LABELS = { mean: "Mean", median: "Median", spread: "Std" } as const;
+const TYPICAL_LABELS = { mean: "Mean", median: "Median", spread: "Spread (std)" } as const;
 
 function typicalLabel(typical: NonNullable<FingerprintGrid["typical"]>): string {
   return TYPICAL_LABELS[typical.stat];
@@ -586,28 +588,35 @@ function UnusualYears({
 }) {
   if (!grid.difference) return null;
   const { unusual, partial } = grid.difference;
-  if (unusual.length < UNUSUAL_MIN_YEARS) return null;
+  const left =
+    partial.length > 0
+      ? ` Not ranked, with fewer than ${MIN_RANKED_MONTHS} of 12 months of data: ${partial.join(", ")}.`
+      : "";
+  if (unusual.length < UNUSUAL_MIN_YEARS) {
+    return (
+      <p className="text-sm text-muted-foreground">
+        Ranking the years needs three or more years with data.{left}
+      </p>
+    );
+  }
   const top = unusual.slice(0, UNUSUAL_SHOWN);
   return (
     <div className="grid gap-1 text-sm">
-      <p>
-        <span className="text-muted-foreground">Most unusual years: </span>
+      <p className="tabular-nums">
+        <span className="text-muted-foreground">Furthest from the typical year: </span>
         {top.map((entry, i) => (
-          <span key={entry.year} className="tabular-nums">
+          <span key={entry.year}>
             {i > 0 ? ", " : ""}
             <span className="font-medium">{entry.year}</span> (
-            {formatSeriesValue(entry.rms)}
-            {units ? ` ${units}` : ""})
+            {formatSeriesValue(entry.rms)})
           </span>
         ))}
+        {units ? <span className="text-muted-foreground"> {units}</span> : null}
       </p>
       <p className="text-muted-foreground">
-        Ranked by the typical size of the difference across the year, in
-        either direction. One year always comes first, even when no year is out
-        of the ordinary.
-        {partial.length > 0
-          ? ` Left out for having data in fewer than ${MIN_RANKED_MONTHS} months: ${partial.join(", ")}.`
-          : ""}
+        Ranked by the root mean square of each year&apos;s monthly differences,
+        roughly the average gap from the typical year, above or below. One year
+        always comes first, even when none is far from typical.{left}
       </p>
     </div>
   );

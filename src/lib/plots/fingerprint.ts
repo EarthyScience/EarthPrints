@@ -226,7 +226,7 @@ const SHORT_MONTHS = [
 const TYPICAL_STAT_LABELS: Record<TypicalStat, string> = {
   mean: "Mean",
   median: "Median",
-  spread: "Std",
+  spread: "Spread (std)",
 };
 
 /** Whether columns are positions in the year rather than dates. */

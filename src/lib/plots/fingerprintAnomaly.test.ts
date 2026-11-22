@@ -86,6 +86,45 @@ describe("difference from the typical year", () => {
     expect(yearly.difference?.unusual.map((u) => u.year)).toEqual([2001, 2002]);
   });
 
+  it("ignores a month with only a few days of data", () => {
+    // 2003 has full data to September, then one very different October day.
+    const daily = Float32Array.from(
+      YEARS.flatMap((year) =>
+        Array.from({ length: days(year) }, (_, day) => {
+          const date = new Date(Date.UTC(year, 0, 1 + day));
+          if (year !== 2003) return 0;
+          if (date.getUTCMonth() < 9) return 0;
+          return date.getUTCMonth() === 9 && date.getUTCDate() === 1 ? 50 : NaN;
+        }),
+      ),
+    );
+    const grid = fingerprintGrid(daily, 1, YEARS, "month", "auto", {
+      kind: "difference",
+    });
+    const rms = Object.fromEntries(grid.difference!.unusual.map((u) => [u.year, u.rms]));
+    expect(rms[2003]).toBeCloseTo(0, 5);
+  });
+
+  it("lines up days of the year across leap and other years", () => {
+    // 2004 is a leap year; 1 March must share a column with 1 March 2003.
+    const years = [2003, 2004];
+    const daily = Float32Array.from(
+      years.flatMap((year) =>
+        Array.from({ length: days(year) }, (_, day) => {
+          const date = new Date(Date.UTC(year, 0, 1 + day));
+          return date.getUTCMonth() * 100 + date.getUTCDate();
+        }),
+      ),
+    );
+    const typical = fingerprintGrid(daily, 1, years, "day", "auto", {
+      kind: "typical",
+      stat: "mean",
+    });
+    expect(columnLabel(typical, 60)).toBe("1 Mar");
+    expect(typical.mean[60]).toBe(201);
+    expect(typical.count[59]).toBe(1);
+  });
+
   it("keeps the reference in step with a seasonal layout", () => {
     // One value a day, so years become rows.
     const daily = Float32Array.from(
