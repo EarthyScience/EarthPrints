@@ -82,6 +82,12 @@ export function CellExport({ series, display }: CellExportProps) {
 
   return (
     <div className="grid gap-4">
+      {display.plotView === "fingerprint" && display.fingerprintShow !== "values" ? (
+        <FieldDescription>
+          Exports hold the values, not the typical year or difference shown in
+          the plot.
+        </FieldDescription>
+      ) : null}
       <RadioGroup
         value={format}
         onValueChange={(value) => setFormat(value as ExportFormat)}

@@ -41,12 +41,21 @@ function binKey(absoluteDay: number, unit: BinUnit) {
   const dayOfYear = Math.round(
     (date.getTime() - utcMs(year, 0, 1)) / MS_PER_DAY,
   );
-  if (unit === "day") return { year, index: dayOfYear };
+  // Counted on a leap-year calendar, so 1 March is the same position in
+  // every year and lines up across years in a seasonal grid.
+  if (unit === "day") {
+    const skipsLeapDay = !isLeapYear(year) && dayOfYear >= 59;
+    return { year, index: dayOfYear + (skipsLeapDay ? 1 : 0) };
+  }
   // The last week also takes day 365 (and 366 in leap years).
   return {
     year,
     index: Math.min(WEEKS_PER_YEAR - 1, Math.floor(dayOfYear / 7)),
   };
+}
+
+function isLeapYear(year: number): boolean {
+  return (year % 4 === 0 && year % 100 !== 0) || year % 400 === 0;
 }
 
 /** Group consecutive selected days into calendar bins. */

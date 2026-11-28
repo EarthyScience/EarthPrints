@@ -14,6 +14,7 @@ import {
   PlotArea,
   PlotControls,
 } from "@/components/panels/CellView";
+import { FingerprintShowField } from "@/components/panels/FingerprintShowField";
 import { ScaleField } from "@/components/panels/ScaleField";
 import { TemperatureUnitField } from "@/components/panels/TemperatureUnitField";
 import { TimeBasisField } from "@/components/panels/TimeBasisField";
@@ -122,6 +123,7 @@ export function DataView({
                         onSelectYears={series.selectYears}
                       />
                       <ScaleField display={display} />
+                      <FingerprintShowField display={display} />
                       <TemperatureUnitField display={display} />
                       {display.canUseLocalTime ? (
                         <TimeBasisField
