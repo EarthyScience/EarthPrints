@@ -43,7 +43,7 @@ const FORMATS: { value: ExportFormat; title: string; description: string }[] = [
   {
     value: "csv",
     title: "Series data (.csv)",
-    description: "The hourly values as stored",
+    description: "Every {step} value in the selection",
   },
   {
     value: "badge",
@@ -65,10 +65,10 @@ export function CellExport({ series, display }: CellExportProps) {
     selection: series.selection,
     gridSpec: series.gridSpec,
     selectedYears: series.selectedYears,
-    values: ready ? series.values : null,
+    values: ready ? display.values : null,
     displayValues: ready ? display.displayValues : null,
     timeBasis: display.timeBasis,
-    units: series.units,
+    units: display.units,
     colormapId: display.colormapId,
   });
   const busy = exporter.busyLabel !== null;
@@ -82,6 +82,12 @@ export function CellExport({ series, display }: CellExportProps) {
 
   return (
     <div className="grid gap-4">
+      {display.plotView === "fingerprint" && display.fingerprintShow !== "values" ? (
+        <FieldDescription>
+          Exports hold the values, not the typical year or difference shown in
+          the plot.
+        </FieldDescription>
+      ) : null}
       <RadioGroup
         value={format}
         onValueChange={(value) => setFormat(value as ExportFormat)}
@@ -92,7 +98,9 @@ export function CellExport({ series, display }: CellExportProps) {
             <Field orientation="horizontal">
               <FieldContent>
                 <FieldTitle>{option.title}</FieldTitle>
-                <FieldDescription>{option.description}</FieldDescription>
+                <FieldDescription>
+                  {option.description.replace("{step}", series.stepLabel)}
+                </FieldDescription>
               </FieldContent>
               <RadioGroupItem
                 value={option.value}

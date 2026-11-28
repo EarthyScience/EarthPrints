@@ -51,3 +51,18 @@ describe("viewStateFocusedOnCell", () => {
     expect(SPHERE_SELECTION_FOCUS_ZOOM).toBeGreaterThan(SELECTION_FOCUS_ZOOM);
   });
 });
+
+describe("viewStateFocusedOnCell for coarse grids", () => {
+  const cell = { lon: 0, lat: 51.6, lonIndex: 0, latIndex: 50 };
+
+  it("frames a 2.8° cell instead of flying to street zoom", () => {
+    const next = viewStateFocusedOnCell(DEFAULT_MAP_VIEW, cell, "sphere", 2.8125);
+    expect(next.zoom).toBeGreaterThan(4);
+    expect(next.zoom).toBeLessThan(6);
+  });
+
+  it("keeps the usual focus zoom for a fine grid", () => {
+    const next = viewStateFocusedOnCell(DEFAULT_MAP_VIEW, cell, "sphere", 0.05);
+    expect(next.zoom).toBe(10);
+  });
+});

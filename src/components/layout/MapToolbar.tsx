@@ -5,6 +5,7 @@ import {
   ChartLine,
   CircleQuestionMark,
   Compass,
+  Database,
   type LucideIcon,
   Moon,
   Settings,
@@ -17,9 +18,10 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardTitle } from "@/components/ui/card";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 
-export type ToolbarPanel = "settings" | "chart" | "help";
+export type ToolbarPanel = "data" | "settings" | "chart" | "help";
 
 const PANELS = [
+  { value: "data", label: "Data", Icon: Database },
   { value: "settings", label: "Settings", Icon: Settings },
   { value: "chart", label: "Chart", Icon: ChartLine },
   { value: "help", label: "Help", Icon: CircleQuestionMark },

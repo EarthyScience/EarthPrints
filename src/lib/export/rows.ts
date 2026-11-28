@@ -1,7 +1,4 @@
-import {
-  ZARR_TIME_ORIGIN_UTC,
-  getSelectedYearsDayMapping,
-} from "@/lib/zarr/timeRange";
+import { activeTime, getSelectedYearsDayMapping } from "@/lib/zarr/timeRange";
 import type { ExportProvenance } from "./provenance";
 
 export type SeriesRow = {
@@ -61,13 +58,16 @@ export function buildSeriesRows(
     dayCount,
   );
 
+  const { originMs } = activeTime();
+  const hoursPerSlot = 24 / hoursPerDay;
+
   for (let i = 0; i < count; i += 1) {
-    const hour = i % hoursPerDay;
+    const hour = (i % hoursPerDay) * hoursPerSlot;
     const localDay = Math.floor(i / hoursPerDay);
     const dayIndex = dayMapping.absoluteDays[localDay] ?? baseDay + localDay;
     const raw = values[i];
     const timestamp = new Date(
-      ZARR_TIME_ORIGIN_UTC + dayIndex * MS_PER_DAY + hour * MS_PER_HOUR,
+      originMs + dayIndex * MS_PER_DAY + hour * MS_PER_HOUR,
     );
 
     const timestampLocal = new Date(
@@ -81,7 +81,7 @@ export function buildSeriesRows(
       date: timestamp.toISOString().slice(0, 10),
       dayIndex,
       hour,
-      hourLocal: timestampLocal.getUTCHours(),
+      hourLocal: timestampLocal.getUTCHours() + timestampLocal.getUTCMinutes() / 60,
       dateLocal: timestampLocal.toISOString().slice(0, 10),
       value: Number.isFinite(raw) ? roundFloat32(raw) : null,
     };

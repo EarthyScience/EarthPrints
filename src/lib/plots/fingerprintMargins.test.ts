@@ -25,13 +25,25 @@ describe("fingerprintMargins", () => {
 });
 
 describe("bandRange", () => {
-  it("covers the band and zero", () => {
+  it("covers the band and zero when the data starts near zero", () => {
     const stats = {
       mean: new Float32Array([2, 4, NaN]),
       std: new Float32Array([1, 1, NaN]),
       count: new Uint32Array([1, 1, 0]),
     };
-    expect(bandRange(stats)).toEqual([0, 5]);
+    expect(bandRange(stats)).toEqual([0, 5.25]);
+  });
+
+  it("fits data far from zero without reaching down to it", () => {
+    const stats = {
+      mean: new Float32Array([280, 290]),
+      std: new Float32Array([1, 1]),
+      count: new Uint32Array([1, 1]),
+    };
+    const [lo, hi] = bandRange(stats);
+    expect(lo).toBeGreaterThan(270);
+    expect(lo).toBeLessThan(279);
+    expect(hi).toBeGreaterThan(291);
   });
 
   it("opens up a flat range", () => {

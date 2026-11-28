@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
+import type { GridSpec } from "@/types/map";
 import {
   chunkPatchBounds,
   geoPointToZarrGrid,
+  isPointInGrid,
   gridCellToBounds,
   gridCellToGuidePaths,
   gridCellToPolygon,
@@ -141,5 +143,53 @@ describe("coordinate formatting", () => {
   it("formats geo points in (lon, lat) order with cardinal directions", () => {
     expect(formatGeoPoint({ lon: 11.575, lat: 50.925 })).toBe("11.575°E, 50.925°N");
     expect(formatGeoPoint({ lon: -75.125, lat: -23.475 })).toBe("75.125°W, 23.475°S");
+  });
+});
+
+describe("stores with other longitude conventions", () => {
+  const spec0to360: GridSpec = {
+    grid: { lonStart: 0.5, lonStep: 1, latStart: -89.5, latStep: 1 },
+    dimensions: { time: 1, hour: 1, lat: 180, lon: 360 },
+    nativeChunks: { lat: 180, lon: 360 },
+    spatialResolutionDeg: 1,
+  };
+
+  it("snaps a western click onto a 0..360 grid and keeps it in map space", () => {
+    const cell = geoPointToZarrGrid({ lon: -10.2, lat: 0.2 }, spec0to360);
+    expect(cell.lonIndex).toBe(349);
+    expect(cell.lon).toBeCloseTo(-10.5);
+    expect(cell.latIndex).toBe(90);
+  });
+
+  it("tells a regional grid's outside from its inside", () => {
+    const europe: GridSpec = {
+      ...spec0to360,
+      grid: { lonStart: -10, lonStep: 0.25, latStart: 72, latStep: -0.25 },
+      dimensions: { time: 1, hour: 1, lat: 120, lon: 200 },
+    };
+    expect(isPointInGrid({ lon: 10, lat: 50 }, europe)).toBe(true);
+    expect(isPointInGrid({ lon: 100, lat: 50 }, europe)).toBe(false);
+    expect(isPointInGrid({ lon: 10, lat: 20 }, europe)).toBe(false);
+  });
+
+  it("lets the outermost rows of a global grid reach the poles", () => {
+    // T63 Gaussian rows stop at 87.86 with a mean step of about 2.8.
+    const gaussian: GridSpec = {
+      ...spec0to360,
+      grid: { lonStart: 0, lonStep: 2.8125, latStart: -87.86, latStep: 2.79 },
+      dimensions: { ...spec0to360.dimensions, lat: 64, lon: 128 },
+    };
+    expect(isPointInGrid({ lon: 10, lat: -89.9 }, gaussian)).toBe(true);
+    expect(isPointInGrid({ lon: 10, lat: 89.9 }, gaussian)).toBe(true);
+  });
+
+  it("snaps to the nearest centre of an uneven axis", () => {
+    const gaussian: GridSpec = {
+      ...spec0to360,
+      dimensions: { ...spec0to360.dimensions, lat: 4 },
+      latValues: Float64Array.from([60, 20, -15, -70]),
+    };
+    expect(geoPointToZarrGrid({ lon: 0, lat: 5 }, gaussian).latIndex).toBe(1);
+    expect(geoPointToZarrGrid({ lon: 0, lat: -40 }, gaussian).latIndex).toBe(2);
   });
 });

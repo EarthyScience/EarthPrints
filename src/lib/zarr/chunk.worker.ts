@@ -1,46 +1,37 @@
 /// <reference lib="webworker" />
-import * as zarr from "zarrita";
-import {
-  alignedSubBlock,
-  blockCoversChunk,
-  sliceBlockFromNativeChunk,
-  type LocalBlock,
-} from "@/lib/zarr/chunks";
+import type { LocalBlock } from "@/lib/zarr/chunks";
+import { readPatch, type ChunkSource, type PatchRequest } from "@/lib/zarr/patch";
 import {
   createByteProgressSink,
   isAbortError,
+  openArrayNode,
   openZarrStore,
-  setActiveAbortSignal,
-  setActiveByteSink,
+  withRequestContext,
   type ZarrStore,
 } from "@/lib/zarr/store";
 
 /**
  * Decodes native Zarr chunks off the main thread.
  *
- * One chunk of this dataset is 1461 x 24 x 40 x 40 f4, so decompressing it
+ * One FLUXCOM-X chunk is 1461 x 24 x 40 x 40 f4, so decompressing it
  * allocates ~224 MB. Doing that on the main thread froze the tab for seconds
  * at a time and killed it outright on phones. Here it is decompressed off the
- * main thread, and the window the caller asked to keep is cut out before the
- * handover, so the 224 MB array is dropped here and never reaches the main
- * thread's heap. A caller that wants the whole patch gets the decoded array
- * transferred as-is, with no copy.
+ * main thread, and the window the caller asked to keep is cut out and decoded
+ * to Float32 before the handover, so the raw chunk is dropped here and never
+ * reaches the main thread's heap.
  *
  * Requests are queued and served one at a time, which caps the memory held
  * during decoding at a single chunk no matter how many pixels are pending.
+ * Small chunks skip the queue: they are bound by latency, not memory.
  */
 
-export type ChunkRequest = {
+export type ChunkRequest = PatchRequest & {
   type: "decode";
   id: number;
   storeUrl: string;
   variable: string;
-  chunkCoords: number[];
-  /** Cells kept per side, aligned to a tiling of the chunk. */
-  windowSize: number;
-  /** The pixel that must land inside the kept window. */
-  localLat: number;
-  localLon: number;
+  /** Small enough to skip the one-at-a-time queue. */
+  concurrent?: boolean;
 };
 
 /** Abandon a decode: drop it if queued, abort its download if running. */
@@ -64,16 +55,10 @@ export type ChunkResponse =
     }
   | { id: number; type: "error"; message: string };
 
-type ZarrArray = {
-  getChunk(
-    chunkCoords: number[],
-  ): Promise<{ data: Float32Array; shape: number[] }>;
-};
-
 const scope = self as unknown as DedicatedWorkerGlobalScope;
 
-let storePromise: Promise<ZarrStore> | null = null;
-const arrayPromises = new Map<string, Promise<ZarrArray>>();
+const storePromises = new Map<string, Promise<ZarrStore>>();
+const arrayPromises = new Map<string, Promise<ChunkSource>>();
 // Serialises decoding so only one chunk is ever resident.
 let queue: Promise<unknown> = Promise.resolve();
 // Abort handles for decodes that are running, and ids cancelled before their
@@ -82,28 +67,31 @@ const running = new Map<number, AbortController>();
 const cancelledBeforeStart = new Set<number>();
 
 function getStore(url: string): Promise<ZarrStore> {
-  if (!storePromise) {
-    storePromise = openZarrStore(url).catch((error) => {
-      storePromise = null;
+  let promise = storePromises.get(url);
+  if (!promise) {
+    promise = openZarrStore(url).catch((error) => {
+      storePromises.delete(url);
       throw error;
     });
+    storePromises.set(url, promise);
   }
-  return storePromise;
+  return promise;
 }
 
-function getArray(url: string, variable: string): Promise<ZarrArray> {
-  const existing = arrayPromises.get(variable);
+function getArray(url: string, variable: string): Promise<ChunkSource> {
+  const key = `${url}|${variable}`;
+  const existing = arrayPromises.get(key);
   if (existing) return existing;
 
   const promise = getStore(url)
-    .then((ds) => zarr.open(ds.root.resolve(variable), { kind: "array" }))
-    .then((array) => array as unknown as ZarrArray)
+    .then((ds) => openArrayNode(ds, variable))
+    .then((array) => array as unknown as ChunkSource)
     .catch((error) => {
-      arrayPromises.delete(variable);
+      arrayPromises.delete(key);
       throw error;
     });
 
-  arrayPromises.set(variable, promise);
+  arrayPromises.set(key, promise);
   return promise;
 }
 
@@ -125,26 +113,9 @@ async function handle(request: ChunkRequest): Promise<void> {
       } satisfies ChunkResponse);
     });
 
-    setActiveByteSink(sink);
-    setActiveAbortSignal(controller.signal);
-    let chunk: { data: Float32Array; shape: number[] };
-    try {
-      chunk = await array.getChunk(request.chunkCoords);
-    } finally {
-      setActiveByteSink(null);
-      setActiveAbortSignal(null);
-    }
-
-    const block = alignedSubBlock(
-      { localLat: request.localLat, localLon: request.localLon },
-      request.windowSize,
-      chunk.shape,
+    const kept = await withRequestContext(sink, controller.signal, (init) =>
+      readPatch(array, request, init),
     );
-    // A window that spans the chunk is the chunk: transfer it rather than
-    // copying it into an identical array.
-    const kept = blockCoversChunk(block, chunk.shape)
-      ? { data: chunk.data, shape: chunk.shape }
-      : sliceBlockFromNativeChunk(chunk.data, chunk.shape, block);
 
     scope.postMessage(
       {
@@ -152,7 +123,7 @@ async function handle(request: ChunkRequest): Promise<void> {
         type: "result",
         data: kept.data,
         shape: kept.shape,
-        block,
+        block: kept.block,
       } satisfies ChunkResponse,
       [kept.data.buffer],
     );
@@ -184,5 +155,9 @@ scope.onmessage = (event: MessageEvent<WorkerMessage>) => {
     return;
   }
 
+  if (message.concurrent) {
+    void handle(message);
+    return;
+  }
   queue = queue.then(() => handle(message));
 };

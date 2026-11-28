@@ -5,14 +5,14 @@ import {
   stitchTimeSeriesForRange,
 } from "@/lib/zarr/chunks";
 import {
-  ALL_AVAILABLE_YEARS,
+  availableYears,
+  dayIndexToUTCDate,
   formatSelectedYearsLabel,
-  timeChunkIndexToYears,
+  setActiveTime,
   yearsToContiguousBlocks,
   yearsToDateRange,
   yearsToDayRange,
   yearToDateRange,
-  yearToTimeChunkIndex,
 } from "@/lib/zarr/timeRange";
 
 describe("yearsToDayRange", () => {
@@ -27,26 +27,14 @@ describe("yearsToDayRange", () => {
 
 describe("yearToDateRange and chunk mapping", () => {
   it("covers 2001 to 2021", () => {
-    expect(ALL_AVAILABLE_YEARS).toHaveLength(21);
-    expect(ALL_AVAILABLE_YEARS[0]).toBe(2001);
-    expect(ALL_AVAILABLE_YEARS[20]).toBe(2021);
+    expect(availableYears()).toHaveLength(21);
+    expect(availableYears()[0]).toBe(2001);
+    expect(availableYears()[20]).toBe(2021);
   });
 
   it("correctly calculates day range for 2001 and 2021", () => {
     expect(yearToDateRange(2001)).toEqual([0, 365]);
     expect(yearToDateRange(2021)).toEqual([7305, 7670]);
-  });
-
-  it("maps 4-year chunks to years correctly", () => {
-    expect(yearToTimeChunkIndex(2001)).toBe(0);
-    expect(yearToTimeChunkIndex(2004)).toBe(0);
-    expect(yearToTimeChunkIndex(2005)).toBe(1);
-    expect(yearToTimeChunkIndex(2020)).toBe(4);
-    expect(yearToTimeChunkIndex(2021)).toBe(5);
-
-    expect(timeChunkIndexToYears(0)).toEqual([2001, 2002, 2003, 2004]);
-    expect(timeChunkIndexToYears(4)).toEqual([2017, 2018, 2019, 2020]);
-    expect(timeChunkIndexToYears(5)).toEqual([2021]);
   });
 
   it("calculates contiguous blocks and multi-year range slices", () => {
@@ -60,6 +48,19 @@ describe("yearToDateRange and chunk mapping", () => {
     expect(yearsToDateRange([2001, 2002])).toEqual([0, 730]);
     expect(formatSelectedYearsLabel([2018, 2019, 2020])).toBe("2018–2020");
     expect(formatSelectedYearsLabel([2005, 2018, 2019, 2020])).toBe("2005, 2018–2020");
+  });
+});
+
+describe("another store's time axis", () => {
+  it("indexes days and years from that store's origin", () => {
+    setActiveTime({ originMs: Date.UTC(1979, 0, 1), totalDays: 366 + 365, slotsPerDay: 4 });
+    try {
+      expect(availableYears()).toEqual([1979, 1980]);
+      expect(yearToDateRange(1980)).toEqual([365, 731]);
+      expect(dayIndexToUTCDate(365).toISOString().slice(0, 10)).toBe("1980-01-01");
+    } finally {
+      setActiveTime(null);
+    }
   });
 });
 

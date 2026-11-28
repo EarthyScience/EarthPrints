@@ -3,6 +3,7 @@ import {
   emptyStats,
   RunningStats,
 } from "@/lib/plots/timeBins";
+import { valueDomain } from "@/lib/plots/chartTheme";
 
 export type FingerprintMargins = {
   /** One entry per column, over its hours: the seasonal course. */
@@ -40,8 +41,8 @@ export function fingerprintMargins(
 
 /** Range covering mean ± std, widened to include zero. */
 export function bandRange(stats: BinStats): [number, number] {
-  let lo = 0;
-  let hi = 0;
+  let lo = Infinity;
+  let hi = -Infinity;
   for (let i = 0; i < stats.mean.length; i++) {
     const mean = stats.mean[i]!;
     const std = stats.std[i]!;
@@ -49,10 +50,12 @@ export function bandRange(stats: BinStats): [number, number] {
     lo = Math.min(lo, mean - std);
     hi = Math.max(hi, mean + std);
   }
-  return lo === hi ? [lo - 1, hi + 1] : [lo, hi];
+  if (lo > hi) return [-1, 1];
+  const [from, to] = valueDomain(lo, hi);
+  return from === to ? [from - 1, to + 1] : [from, to];
 }
 
-/** Round tick values inside `[lo, hi]`, at least two, always with zero. */
+/** Round tick values inside `[lo, hi]`, at least two. */
 export function niceTicks(lo: number, hi: number, count = 3): number[] {
   const rough = (hi - lo) / Math.max(1, count - 1);
   const exponent = Math.floor(Math.log10(rough));

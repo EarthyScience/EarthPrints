@@ -5,15 +5,27 @@ import {
   asymmetricExtents,
   COLORMAPS,
   type ColormapId,
+  EMPTY_HALF,
   fingerprintColorScale,
+  labelExtent,
+  symmetricAbsMax,
 } from "@/lib/map/fingerprintScale";
+import {
+  type FingerprintView,
+  MIN_RANKED_MONTHS,
+  VALUES_VIEW,
+} from "@/lib/plots/fingerprintAnomaly";
 import {
   formatSeriesValue,
   TIME_SERIES_PLOT_HEIGHT,
 } from "@/lib/plots/chartTheme";
 import {
   drawFingerprint,
+  columnLabel,
+  columnsArePositions,
   fingerprintGrid,
+  rowLabel,
+  type FingerprintGrid,
   type FingerprintLayout,
   FINGERPRINT_STRIP,
   FINGERPRINT_STRIP_MAX,
@@ -27,7 +39,6 @@ import {
 import {
   binCountLabel,
   type BinUnit,
-  formatBinLabel,
   formatBinShortLabel,
 } from "@/lib/plots/timeBins";
 import { shortTimeBasis } from "@/lib/zarr/localTime";
@@ -62,6 +73,7 @@ type FingerprintPlotProps = {
   transposed: boolean;
   colormapId: ColormapId;
   scale?: BinUnit;
+  view?: FingerprintView;
   margins?: boolean;
   height?: number;
   pinLimit?: number;
@@ -172,6 +184,7 @@ export function FingerprintPlot({
   transposed,
   colormapId,
   scale = "day",
+  view = VALUES_VIEW,
   margins = false,
   height: heightOverride,
   pinLimit = 1,
@@ -187,8 +200,8 @@ export function FingerprintPlot({
     left: FINGERPRINT_STRIP,
   });
   const grid = useMemo(
-    () => fingerprintGrid(values, hoursPerDay, selectedYears, scale),
-    [values, hoursPerDay, selectedYears, scale],
+    () => fingerprintGrid(values, hoursPerDay, selectedYears, scale, "auto", view),
+    [values, hoursPerDay, selectedYears, scale, view],
   );
   const [pinnedGrid, setPinnedGrid] = useState(grid);
   if (pinnedGrid !== grid) {
@@ -223,7 +236,13 @@ export function FingerprintPlot({
     setPins([]);
     setHover(null);
   };
-  const extents = useMemo(() => asymmetricExtents(grid.mean), [grid]);
+  // Differences share one scale on both sides of zero, so equal colours
+  // mean equal distances from the typical year in either direction.
+  const extents = useMemo(() => {
+    if (!grid.difference) return asymmetricExtents(grid.mean);
+    const max = Math.max(EMPTY_HALF, symmetricAbsMax(grid.mean));
+    return { negMax: max, posMax: max, pivot: 0 };
+  }, [grid]);
   const nCols = grid.bins.length;
 
   useEffect(() => {
@@ -278,6 +297,12 @@ export function FingerprintPlot({
     setHover(target ? { target, left, top, flip, anchor } : null);
   };
 
+  const rows = grid.hoursPerDay;
+  const seasonal = grid.seasonal !== undefined;
+  const positional = columnsArePositions(grid);
+  const suffix =
+    timeBasisLabel && !seasonal ? ` ${shortTimeBasis(timeBasisLabel)}` : "";
+
   const stripPointAt = (
     kind: "column" | "hour",
     index: number,
@@ -289,21 +314,22 @@ export function FingerprintPlot({
     const std = formatSeriesValue(stats.std[index] as number);
     if (kind === "column") {
       const bin = grid.bins[index]!;
+      const across = seasonal
+        ? binCountLabel(count, "year")
+        : `${count} ${rows === 1 ? "day" : "step"}${count === 1 ? "" : "s"}`;
       return {
-        label: formatBinLabel(bin, scale),
-        shortLabel: formatBinShortLabel(bin, scale),
+        label: columnLabel(grid, index),
+        shortLabel: positional
+          ? columnLabel(grid, index)
+          : formatBinShortLabel(bin, scale),
         value: stats.mean[index] as number,
-        spread:
-          count > 0
-            ? `Std ${std} across ${count} hour${count === 1 ? "" : "s"}`
-            : undefined,
+        spread: count > 0 ? `Std ${std} across ${across}` : undefined,
       };
     }
-    const time = `${String(index).padStart(2, "0")}:00`;
-    const suffix = timeBasisLabel ? ` ${shortTimeBasis(timeBasisLabel)}` : "";
+    const row = rowLabel(grid, index);
     return {
-      label: `${time}${suffix}`,
-      shortLabel: time,
+      label: `${row}${suffix}`,
+      shortLabel: row,
       value: stats.mean[index] as number,
       spread:
         count > 0 ? `Std ${std} across ${binCountLabel(count, scale)}` : undefined,
@@ -317,21 +343,37 @@ export function FingerprintPlot({
   ): TooltipPoint | undefined => {
     const bin = grid.bins[col];
     if (!bin || hour < 0) return undefined;
-    const at = col * hoursPerDay + hour;
+    const at = col * rows + hour;
     const count = grid.count[at] ?? 0;
-    const time = `${String(hour).padStart(2, "0")}:00`;
-    const suffix = timeBasisLabel ? ` ${shortTimeBasis(timeBasisLabel)}` : "";
+    const row = rowLabel(grid, hour);
+    const column = columnLabel(grid, col);
+    const columnShort = positional ? column : formatBinShortLabel(bin, scale);
     return {
-      label: `${formatBinLabel(bin, scale)} · ${time}${suffix}`,
+      label: seasonal ? `${column} ${row}` : `${column} · ${row}${suffix}`,
       shortLabel:
-        short === "time" ? time : `${formatBinShortLabel(bin, scale)} ${time}`,
+        short === "time" ? row : seasonal ? `${column} ${row}` : `${columnShort} ${row}`,
       value: grid.mean[at] as number,
-      spread:
-        scale !== "day" && count > 0
-          ? `Std ${formatSeriesValue(grid.std[at] as number)} across ${binCountLabel(count, "day")}`
-          : undefined,
+      spread: cellSpread(at, count),
     };
   };
+  function cellSpread(at: number, count: number): string | undefined {
+    if (count === 0) return undefined;
+    if (grid.difference) {
+      const reference = grid.difference.reference[at] as number;
+      const actual = reference + (grid.mean[at] as number);
+      const unit = units ? ` ${units}` : "";
+      return `Typical ${formatSeriesValue(reference)}${unit}, this year ${formatSeriesValue(actual)}${unit}`;
+    }
+    if (grid.typical) {
+      const years = binCountLabel(count, "year");
+      return grid.typical.stat === "spread"
+        ? `Across ${years}`
+        : `Std ${formatSeriesValue(grid.std[at] as number)} across ${years}`;
+    }
+    return scale !== "day"
+      ? `Std ${formatSeriesValue(grid.std[at] as number)} across ${binCountLabel(count, "day")}`
+      : undefined;
+  }
   const pointFor = ({ target }: Hover) =>
     target.kind === "cell"
       ? pointAt(target.col, target.hour, "full")!
@@ -343,7 +385,7 @@ export function FingerprintPlot({
     if (target.kind === "hour") return stripPointAt("hour", target.hour - 1);
     return target.hour > 0
       ? pointAt(target.col, target.hour - 1, "time")
-      : pointAt(target.col - 1, hoursPerDay - 1, "full");
+      : pointAt(target.col - 1, rows - 1, "full");
   };
   // A change against a pin only reads sensibly between like targets.
   const comparable = (a: Hover, b: Hover) => a.target.kind === b.target.kind;
@@ -373,7 +415,13 @@ export function FingerprintPlot({
           ref={canvasRef}
           className="block size-full select-none"
           role="img"
-          aria-label="Diurnal fingerprint heatmap"
+          aria-label={
+            grid.difference
+              ? "Fingerprint of each year's difference from the typical year"
+              : grid.typical
+                ? "Fingerprint of the typical year"
+                : "Diurnal fingerprint heatmap"
+          }
           onMouseMove={handleMove}
           onMouseLeave={() => setHover(null)}
           onClick={() => {
@@ -484,24 +532,91 @@ export function FingerprintPlot({
         />
         <div className="relative h-4 text-xs text-muted-foreground tabular-nums">
           <span className="absolute left-0">
-            {formatSeriesValue(-extents.negMax)}
+            {formatSeriesValue(extents.pivot - labelExtent(extents.negMax))}
           </span>
-          <span
-            className="absolute -translate-x-1/2"
-            style={{ left: `${legend.zeroPct.toFixed(1)}%` }}
-          >
-            0
-          </span>
+          {legend.zeroPct > 12 && legend.zeroPct < 88 ? (
+            <span
+              className="absolute -translate-x-1/2"
+              style={{ left: `${legend.zeroPct.toFixed(1)}%` }}
+            >
+              {extents.pivot === 0 ? "0" : formatSeriesValue(extents.pivot)}
+            </span>
+          ) : null}
           <span className="absolute right-0">
-            {formatSeriesValue(extents.posMax)}
+            {formatSeriesValue(extents.pivot + labelExtent(extents.posMax))}
           </span>
         </div>
       </div>
+      <UnusualYears grid={grid} units={units} />
       <p className="text-muted-foreground">
-        {binCountLabel(nCols, scale)} × {hoursPerDay} hours
-        {timeBasisLabel ? ` · ${timeBasisLabel}` : ""}
+        {grid.typical ? `${typicalLabel(grid.typical)} of ${binCountLabel(grid.typical.years, "year")} · ` : ""}
+        {grid.difference ? "Difference from the typical year · " : ""}
+        {grid.seasonal
+          ? `${binCountLabel(grid.seasonal.years.length, "year")} × ${binCountLabel(nCols, scale)} of the year`
+          : grid.typical && rows === 1
+            ? `${binCountLabel(nCols, scale)} of the year`
+            : `${binCountLabel(nCols, scale)} × ${rows} ${
+              rows === 24 ? "hours" : rows === 1 ? "step a day" : "steps a day"
+            }`}
+        {timeBasisLabel && !grid.seasonal && !(grid.typical && rows === 1)
+          ? ` · ${timeBasisLabel}`
+          : ""}
         {units ? ` · ${units}` : ""}
         {margins ? " · strips show the mean ±1 std of each row and column" : ""}
+      </p>
+    </div>
+  );
+}
+
+const TYPICAL_LABELS = { mean: "Mean", median: "Median", spread: "Spread (std)" } as const;
+
+function typicalLabel(typical: NonNullable<FingerprintGrid["typical"]>): string {
+  return TYPICAL_LABELS[typical.stat];
+}
+
+// With two years the differences mirror each other, so both rank the same.
+const UNUSUAL_MIN_YEARS = 3;
+const UNUSUAL_SHOWN = 3;
+
+/** The years furthest from the typical year, with what the ranking means. */
+function UnusualYears({
+  grid,
+  units,
+}: {
+  grid: FingerprintGrid;
+  units?: string | null;
+}) {
+  if (!grid.difference) return null;
+  const { unusual, partial } = grid.difference;
+  const left =
+    partial.length > 0
+      ? ` Not ranked, with fewer than ${MIN_RANKED_MONTHS} of 12 months of data: ${partial.join(", ")}.`
+      : "";
+  if (unusual.length < UNUSUAL_MIN_YEARS) {
+    return (
+      <p className="text-sm text-muted-foreground">
+        Ranking the years needs three or more years with data.{left}
+      </p>
+    );
+  }
+  const top = unusual.slice(0, UNUSUAL_SHOWN);
+  return (
+    <div className="grid gap-1 text-sm">
+      <p className="tabular-nums">
+        <span className="text-muted-foreground">Furthest from the typical year: </span>
+        {top.map((entry, i) => (
+          <span key={entry.year}>
+            {i > 0 ? ", " : ""}
+            <span className="font-medium">{entry.year}</span> (
+            {formatSeriesValue(entry.rms)})
+          </span>
+        ))}
+        {units ? <span className="text-muted-foreground"> {units}</span> : null}
+      </p>
+      <p className="text-muted-foreground">
+        Ranked by the root mean square of each year&apos;s monthly differences,
+        roughly the average gap from the typical year, above or below. One year
+        always comes first, even when none is far from typical.{left}
       </p>
     </div>
   );

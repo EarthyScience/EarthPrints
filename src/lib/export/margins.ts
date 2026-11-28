@@ -40,9 +40,13 @@ export function buildMarginTables(
   values: Float32Array,
   prov: ExportProvenance,
 ): MarginTables {
-  const grid = fingerprintGrid(values, prov.hoursPerDay, prov.selectedYears);
+  const slots = prov.hoursPerDay;
+  const grid = fingerprintGrid(values, slots, prov.selectedYears, "day", "hours");
   return {
-    dailyCycle: rowsOf(grid.margins.byHour, (hour) => hour),
+    // Keyed by the hour the slot starts, so a 3-hourly store reads 0, 3, 6.
+    // A store with one value a day has no daily cycle to tabulate.
+    dailyCycle:
+      slots > 1 ? rowsOf(grid.margins.byHour, (slot) => (slot * 24) / slots) : [],
     seasonalCourse: rowsOf(grid.margins.byColumn, (col) =>
       formatIsoDate(grid.bins[col]!.firstDay),
     ),

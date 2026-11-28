@@ -54,3 +54,28 @@ describe("fingerprintTargetPoint", () => {
     expect(fingerprintTargetPoint(layout, { kind: "column", col: 4 })).toBeNull();
   });
 });
+
+describe("fingerprintGrid for one value a day", () => {
+  // Daily values for 2001 and 2002 on the default axis: year * 100 + month.
+  const daily = Float32Array.from({ length: 730 }, (_, day) => {
+    const date = new Date(Date.UTC(2001, 0, 1 + day));
+    return (date.getUTCFullYear() - 2001) * 100 + date.getUTCMonth();
+  });
+
+  it("lays years out as rows and months as columns", () => {
+    const season = fingerprintGrid(daily, 1, [2001, 2002], "month");
+    expect(season.seasonal?.years).toEqual([2001, 2002]);
+    expect(season.hoursPerDay).toBe(2);
+    expect(season.bins).toHaveLength(12);
+    const cell = (month: number, row: number) => season.mean[month * 2 + row];
+    expect(cell(0, 0)).toBe(0);
+    expect(cell(0, 1)).toBe(100);
+    expect(cell(11, 1)).toBe(111);
+  });
+
+  it("keeps the day-of-cycle layout when asked to", () => {
+    const flat = fingerprintGrid(daily, 1, [2001, 2002], "month", "hours");
+    expect(flat.seasonal).toBeUndefined();
+    expect(flat.bins).toHaveLength(24);
+  });
+});

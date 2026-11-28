@@ -9,8 +9,14 @@ import type { TimeBasis } from "@/lib/zarr/localTime";
 import type { CellSeries } from "@/hooks/useCellSeries";
 import { useSeriesDisplay } from "@/hooks/useSeriesDisplay";
 import { CellExport } from "@/components/panels/CellExport";
-import { PlotArea, PlotControls } from "@/components/panels/CellView";
+import {
+  describeRecord,
+  PlotArea,
+  PlotControls,
+} from "@/components/panels/CellView";
+import { FingerprintShowField } from "@/components/panels/FingerprintShowField";
 import { ScaleField } from "@/components/panels/ScaleField";
+import { TemperatureUnitField } from "@/components/panels/TemperatureUnitField";
 import { TimeBasisField } from "@/components/panels/TimeBasisField";
 import { YearPicker } from "@/components/panels/YearPicker";
 import { SeriesSummary } from "@/components/data/SeriesSummary";
@@ -73,7 +79,8 @@ export function DataView({
   const plotHeight = usePlotHeight();
   const wide = useSidebarLayout();
   const [detailsOpen, setDetailsOpen] = useState(false);
-  const { selection, selectedYears, units } = series;
+  const { selection, selectedYears } = series;
+  const { units } = display;
 
   return (
     <div
@@ -91,7 +98,7 @@ export function DataView({
         aria-hidden="true"
         className="pointer-events-none fixed inset-x-0 top-0 z-10 h-25 bg-linear-to-b from-editor-bg-depth from-55% to-transparent opacity-0 max-md:hidden"
       />
-      <div className="mx-auto grid max-w-7xl gap-6 px-3 pt-28 pb-40 md:px-6 md:pt-20 md:pb-60">
+      <div className="mx-auto grid max-w-7xl gap-6 px-3 pt-28 pb-40 md:px-6 md:pt-20 md:pb-60 lg:pr-[max(1.5rem,calc(14rem_-_max(0px,(100vw_-_80rem)/2)))]">
         {selection ? (
           <div className="grid items-start gap-6 lg:grid-cols-[340px_minmax(0,1fr)] lg:grid-rows-[auto_1fr] lg:gap-y-3">
             <Card className="lg:col-start-1 lg:row-start-1">
@@ -116,10 +123,14 @@ export function DataView({
                         onSelectYears={series.selectYears}
                       />
                       <ScaleField display={display} />
-                      <TimeBasisField
-                        value={timeBasis}
-                        onChange={onTimeBasisChange}
-                      />
+                      <FingerprintShowField display={display} />
+                      <TemperatureUnitField display={display} />
+                      {display.canUseLocalTime ? (
+                        <TimeBasisField
+                          value={timeBasis}
+                          onChange={onTimeBasisChange}
+                        />
+                      ) : null}
                     </div>
                   </Collapsible.Panel>
                 </Collapsible.Root>
@@ -134,9 +145,7 @@ export function DataView({
                         {formatLongitude(selection.grid.lon)},{" "}
                         {formatLatitude(selection.grid.lat)}
                       </CardTitle>
-                      <CardDescription>
-                        Net ecosystem exchange, 0.05° cell
-                      </CardDescription>
+                      <CardDescription>{describeRecord(series)}</CardDescription>
                       <div className="flex flex-wrap gap-1.5 pt-2">
                         <Chip>
                           Years {formatSelectedYearsLabel(selectedYears)}
